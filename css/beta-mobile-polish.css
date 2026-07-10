@@ -1,0 +1,18 @@
+/* ===== BHIVE-BETA-MOBILE-POLISH:BEGIN — beta-only, CSS-only phone fixes (Phase 1.3).
+   Delete this whole <style> block to restore Phase 1.2 visuals. No logic touched. ===== */
+@media (max-width: 480px){
+  /* Finish Beta pill floated over the Hive Mind content (state chips DRAINED/OVERLOADED/OPTIMAL/STANDBY
+     + the MBTI card) at the resting scroll, hiding them and blocking taps. Dock it in the clear top-right
+     corner so it never overlaps the state chips, command bar, help button, or bottom nav. CSS-only;
+     telemetry/submission behaviour unchanged. */
+  .bhtm-fin{ top: calc(10px + env(safe-area-inset-top, 0px)) !important; bottom: auto !important; right: 12px !important; }
+  /* "Skip, ask me another" rendered as a 10px-tall tap target — give it a real thumb-sized hit area */
+  .hd-ask-skip{ min-height: 40px; padding: 10px 14px; display: inline-flex; align-items: center; }
+  /* dossier sheet: let the last controls scroll clear of the fixed bottom bars (was 24px vs ~140px of overlay) */
+  .hive-detail{ padding-bottom: 148px !important; }
+  /* hint dismiss × was an 18px target */
+  button[aria-label="Dismiss this hint"]{ min-width: 36px; min-height: 36px; }
+  /* feedback + sync textareas: comfortable typing size on phones */
+  textarea{ font-size: 16px !important; }
+}
+/* ===== BHIVE-BETA-MOBILE-POLISH:END ===== */

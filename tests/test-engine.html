@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>B HIVE — Engine Tests (beta10c)</title>
+<style>
+  body { background:#15120c; color:#ece4d2; font:14px/1.6 system-ui,sans-serif; max-width:700px; margin:40px auto; padding:0 20px; }
+  h1 { color:#c9ae78; font-size:20px; border-bottom:1px solid rgba(237,228,210,0.1); padding-bottom:10px; }
+  .suite { margin:20px 0; }
+  .suite h2 { color:#94a06d; font-size:15px; margin:0 0 8px; }
+  .test { padding:6px 10px; margin:2px 0; border-radius:4px; font-family:'SF Mono',monospace; font-size:12px; }
+  .pass { background:rgba(148,160,109,0.15); color:#a3b07f; }
+  .fail { background:rgba(207,140,84,0.2); color:#cf8c54; }
+  .summary { margin-top:24px; padding:12px; border:1px solid #c9ae78; border-radius:8px; }
+  .summary b { color:#e2c890; }
+</style>
+</head>
+<body>
+<h1>B HIVE Engine Tests</h1>
+<div id="results"></div>
+
+<script src="../js/bhive-engine.js"></script>
+<script>
+var B = BHIVE;
+var results = document.getElementById('results');
+var passed = 0, failed = 0, suites = [];
+
+function suite(name, tests) {
+  var html = '<div class="suite"><h2>' + name + '</h2>';
+  var suitePassed = 0, suiteFailed = 0;
+  
+  tests.forEach(function(t) {
+    try {
+      var ok = t.fn();
+      if (ok) {
+        html += '<div class="test pass">✓ ' + t.name + '</div>';
+        passed++; suitePassed++;
+      } else {
+        html += '<div class="test fail">✗ ' + t.name + ' — ' + (t.msg || 'returned false') + '</div>';
+        failed++; suiteFailed++;
+      }
+    } catch(e) {
+      html += '<div class="test fail">✗ ' + t.name + ' — threw: ' + e.message + '</div>';
+      failed++; suiteFailed++;
+    }
+  });
+  
+  html += '<div style="font-size:11px;color:#968a6c;margin-top:4px">' + suitePassed + '/' + (suitePassed+suiteFailed) + ' passed</div></div>';
+  results.innerHTML += html;
+}
+
+/* ────────────────────────────────────────────
+   1. Pure utility functions
+   ──────────────────────────────────────────── */
+suite('Pure utilities', [
+  { name: 'pad(5) → "05"', fn: function(){ return B.pad(5) === '05'; } },
+  { name: 'pad(12) → "12"', fn: function(){ return B.pad(12) === '12'; } },
+  { name: 'pad(0) → "00"', fn: function(){ return B.pad(0) === '00'; } },
+  { name: 'clamp(-5) → 0', fn: function(){ return B.clamp(-5) === 0; } },
+  { name: 'clamp(150) → 100', fn: function(){ return B.clamp(150) === 100; } },
+  { name: 'clamp(50) → 50', fn: function(){ return B.clamp(50) === 50; } },
+  { name: 'clamp(0) → 0', fn: function(){ return B.clamp(0) === 0; } },
+  { name: 'clamp(100) → 100', fn: function(){ return B.clamp(100) === 100; } },
+  { name: 'esc("<script>") escapes HTML', fn: function(){ return B.esc('<script>') === '&lt;script&gt;'; } },
+  { name: 'esc("a & b") escapes ampersand', fn: function(){ return B.esc('a & b') === 'a &amp; b'; } },
+  { name: 'esc(\'hello "world"\') escapes quotes', fn: function(){ return B.esc('hello "world"') === 'hello &quot;world&quot;'; } },
+  { name: 'hsh deterministic', fn: function(){ return B.hsh(42) === B.hsh(42); } },
+  { name: 'hsh different inputs differ', fn: function(){ return B.hsh(42) !== B.hsh(43); } },
+  { name: 'hsh in [0,1] range', fn: function(){ var v=B.hsh(999); return v>=0 && v<=1; } },
+]);
+
+/* ────────────────────────────────────────────
+   2. hexRadius
+   ──────────────────────────────────────────── */
+suite('hexRadius', [
+  { name: 'hexRadius(0) = 8', fn: function(){ return B.hexRadius(0) === 8; } },
+  { name: 'hexRadius(50) = 27', fn: function(){ return B.hexRadius(50) === 27; } },
+  { name: 'hexRadius(100) = 46', fn: function(){ return B.hexRadius(100) === 46; } },
+  { name: 'hexRadius monotonic', fn: function(){ return B.hexRadius(30) < B.hexRadius(70); } },
+]);
+
+/* ────────────────────────────────────────────
+   3. hex geometry
+   ──────────────────────────────────────────── */
+suite('Hex geometry', [
+  { name: 'hex() returns 6 points', fn: function(){ return B.hex(100,100,50).split(' ').length === 6; } },
+  { name: 'clampToHex origin stays', fn: function(){ var r=B.clampToHex(0,0,50); return r[0]===0 && r[1]===0; } },
+  { name: 'clampToHex far point clamped', fn: function(){ var r=B.clampToHex(100,0,10); return Math.abs(r[0])<=10; } },
+]);
+
+/* ────────────────────────────────────────────
+   4. cellVitality
+   ──────────────────────────────────────────── */
+suite('cellVitality', [
+  { name: 'aligned: imp=50 en=50', fn: function(){ return B.cellVitality({imp:50,en:50}) === 'aligned'; } },
+  { name: 'leak: en far exceeds imp', fn: function(){ return B.cellVitality({imp:30,en:70}) === 'leak'; } },
+  { name: 'under: high imp, low en', fn: function(){ return B.cellVitality({imp:80,en:30}) === 'under'; } },
+  { name: 'dormant: low imp, low en', fn: function(){ return B.cellVitality({imp:20,en:10}) === 'dormant'; } },
+  { name: 'leak threshold: gap=14', fn: function(){ return B.cellVitality({imp:50,en:64}) === 'leak'; } },
+  { name: 'under threshold: imp>=50, gap<=-25', fn: function(){ return B.cellVitality({imp:75,en:50}) === 'under'; } },
+]);
+
+/* ────────────────────────────────────────────
+   5. Unlock engine (init first)
+   ──────────────────────────────────────────── */
+B.init();
+
+suite('Unlock engine', [
+  { name: 'init: 3 cells unlocked', fn: function(){ return B.unlocks.length === 3; } },
+  { name: 'init: lw unlocked', fn: function(){ return B.isUnlocked('lw'); } },
+  { name: 'init: health unlocked', fn: function(){ return B.isUnlocked('health'); } },
+  { name: 'init: people unlocked', fn: function(){ return B.isUnlocked('people'); } },
+  { name: 'init: craft dormant', fn: function(){ return !B.isUnlocked('craft'); } },
+  { name: 'init: money dormant', fn: function(){ return !B.isUnlocked('money'); } },
+  { name: 'isTaught false for fresh cell', fn: function(){ return !B.isTaught('lw'); } },
+  { name: 'cellState: lw is open', fn: function(){ return B.cellState('lw') === 'open'; } },
+  { name: 'cellState: craft is dormant', fn: function(){ return B.cellState('craft') === 'dormant'; } },
+]);
+
+/* ────────────────────────────────────────────
+   6. unlockFromAnswer (deterministic)
+   ──────────────────────────────────────────── */
+suite('unlockFromAnswer', [
+  { name: 'stress → free/growth/health (health already open, free first)', fn: function(){ 
+    var wasUnlocked = B.unlocks.length;
+    var result = B.unlockFromAnswer('I am feeling really stressed and overwhelmed');
+    return result !== null && B.unlocks.length > wasUnlocked;
+  }},
+  { name: 'money → money wakes', fn: function(){
+    var result = B.unlockFromAnswer('worried about money and debt');
+    return result === 'money' && B.isUnlocked('money');
+  }},
+  { name: 'build → lw (already unlocked, craft next)', fn: function(){
+    var result = B.unlockFromAnswer('building a new project and making progress');
+    return result !== null;
+  }},
+  { name: 'no signal → UNLOCK_ORDER first dormant', fn: function(){
+    var before = B.unlocks.length;
+    var result = B.unlockFromAnswer('just a normal day nothing special');
+    return result !== null && B.unlocks.length > before;
+  }},
+  { name: 'all cells unlocked → returns null', fn: function(){
+    // Unlock everything
+    B.UNLOCK_ORDER.forEach(function(k){ if(!B.isUnlocked(k)) B.wakeCell(k); });
+    var result = B.unlockFromAnswer('anything');
+    return result === null;
+  }},
+  { name: 'same input always same output', fn: function(){
+    // Reset and test determinism
+    B.init();
+    var r1 = B.unlockFromAnswer('stressed about money');
+    B.init();
+    var r2 = B.unlockFromAnswer('stressed about money');
+    return r1 === r2;
+  }},
+]);
+
+/* ────────────────────────────────────────────
+   7. addLearning
+   ──────────────────────────────────────────── */
+B.init();
+suite('addLearning', [
+  { name: 'adds learning', fn: function(){ 
+    return B.addLearning('lw', 'making good progress on the agency', 'you');
+  }},
+  { name: 'duplicate rejected', fn: function(){
+    return !B.addLearning('lw', 'making good progress on the agency', 'you');
+  }},
+  { name: 'blank rejected', fn: function(){
+    return !B.addLearning('lw', '   ', 'you');
+  }},
+  { name: 'cell becomes taught', fn: function(){
+    B.addLearning('craft', 'learning to design better', 'you');
+    return B.isTaught('craft');
+  }},
+  { name: 'cellState becomes taught', fn: function(){
+    return B.cellState('craft') === 'taught';
+  }},
+  { name: 'truncates >180 chars', fn: function(){
+    var long = 'x'.repeat(200);
+    B.addLearning('lw', long, 'you');
+    var ls = B.learnings['lw'];
+    return ls[ls.length-1].t.length <= 180;
+  }},
+]);
+
+/* ────────────────────────────────────────────
+   8. snapshot / save / load round-trip
+   ──────────────────────────────────────────── */
+suite('Persistence', [
+  { name: 'snapshot returns object with v:3', fn: function(){
+    var s = B.snapshot();
+    return s && s.v === 3 && typeof s.ts === 'number';
+  }},
+  { name: 'save+load round-trip preserves unlocks', fn: function(){
+    B.init();
+    B.addLearning('lw', 'test learning one', 'you');
+    B.unlockFromAnswer('building something new');
+    var before = B.unlocks.slice();
+    var snap = B.snapshot();
+    // Simulate load by re-initing and restoring
+    B.init();
+    // manually inject the snapshot fields
+    var d = snap;
+    B.cells.forEach(function(c) {
+      var s = d.current[c.key];
+      if (s) { if (typeof s.imp==='number') c.imp=B.clamp(s.imp); if (typeof s.en==='number') c.en=B.clamp(s.en); }
+    });
+    if (d.history && d.history.length) B.history = d.history;
+    if (d.learnings) B.learnings = d.learnings;
+    if (d.unlocks && d.unlocks.length) B.unlocks = d.unlocks.slice();
+    // Verify unlock state
+    return B.unlocks.length === before.length;
+  }},
+]);
+
+/* ────────────────────────────────────────────
+   Summary
+   ──────────────────────────────────────────── */
+results.innerHTML += '<div class="summary">' +
+  '<b>' + passed + ' passed</b>, ' + failed + ' failed — ' +
+  Math.round(passed/(passed+failed)*100) + '% pass rate' +
+  '</div>';
+</script>
+</body>
+</html>
