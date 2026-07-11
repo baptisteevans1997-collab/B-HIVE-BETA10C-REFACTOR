@@ -84,9 +84,8 @@
     if(next)next.addEventListener('click',function(){showScreen(curScreen+1);});
   })();
 
-  /* ── pass 5C: mobile touch lockdown + zoom guard (v61) ──
-     Blocks pinch zoom, double-tap zoom, and horizontal page drag.
-     Leaves text typing, vertical scroll, and taps on interactive controls alone.
+  /* ── pass 5C: mobile horizontal page drag guard (v61) ──
+     Leaves native page zoom, text typing, vertical scroll, and taps alone.
      iOS Safari edge-swipe-to-go-back from the very edge of the screen is enforced by
      the browser itself and cannot be fully blocked from page JS — that's a known limit. */
   (function(){
@@ -96,51 +95,6 @@
       if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT')return true;
       return el.isContentEditable===true;
     }
-    function isTapTarget(el){
-      /* walk up to find a tap-essential control so rapid intentional taps aren't blocked */
-      while(el && el!==document.body){
-        var tag=el.tagName;
-        if(tag==='BUTTON'||tag==='A'||tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'||tag==='LABEL')return true;
-        if(el.getAttribute && el.getAttribute('role')==='button')return true;
-        if(el.classList && (
-          el.classList.contains('hive-cell')||
-          el.classList.contains('hive-core')||
-          el.classList.contains('hd-step')||
-          el.classList.contains('cmd')||
-          el.classList.contains('cmd-tile')||
-          el.classList.contains('state-chip')
-        ))return true;
-        el=el.parentNode;
-      }
-      return false;
-    }
-
-    /* pinch zoom — iOS Safari fires gesture* events */
-    ['gesturestart','gesturechange','gestureend'].forEach(function(evt){
-      document.addEventListener(evt,function(e){
-        try{e.preventDefault();}catch(_){}
-      },{passive:false});
-    });
-
-    /* multi-finger touch — block pinch where gesture events aren't available */
-    document.addEventListener('touchmove',function(e){
-      if(e.touches && e.touches.length>1){
-        try{e.preventDefault();}catch(_){}
-      }
-    },{passive:false});
-
-    /* double-tap zoom guard — only block when target is NOT a tap-essential control */
-    var lastTouchEnd=0;
-    document.addEventListener('touchend',function(e){
-      var now=Date.now();
-      if(now-lastTouchEnd<=350){
-        if(!isTapTarget(e.target)){
-          try{e.preventDefault();}catch(_){}
-        }
-      }
-      lastTouchEnd=now;
-    },{passive:false});
-
     /* horizontal page drag guard */
     var sx=0,sy=0,sValid=false;
     document.addEventListener('touchstart',function(e){
@@ -167,7 +121,7 @@
 
   /* ── pass 5D: pinch-zoom on the hive map only (v62) ──
      Custom 2-finger pinch on .hive-card scales the hive SVG's viewBox.
-     All other elements still respect the global no-zoom lockdown from pass 5C.
+     Page zoom remains native outside this component.
      Uses viewBox (native SVG zoom), not CSS transform — no overflow / clipping issues
      with the corner brackets or hive-board frame. */
   (function(){

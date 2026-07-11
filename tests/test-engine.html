@@ -20,8 +20,11 @@
 <div id="results"></div>
 
 <script src="../js/bhive-engine.js"></script>
+<script src="../js/beta-profile-data.js"></script>
+<script src="../js/beta-profile.js?test=beta10c-coderabbit"></script>
 <script>
 var B = BHIVE;
+var BP = window.BHIVE_BETA_PROFILE;
 var results = document.getElementById('results');
 var passed = 0, failed = 0, suites = [];
 
@@ -211,6 +214,30 @@ suite('Persistence', [
     if (d.unlocks && d.unlocks.length) B.unlocks = d.unlocks.slice();
     // Verify unlock state
     return B.unlocks.length === before.length;
+  }},
+]);
+
+/* ────────────────────────────────────────────
+   9. Profile scoring regressions
+   ──────────────────────────────────────────── */
+suite('Profile scoring regressions', [
+  { name: 'inactive momentum follow-up is excluded from scoring', fn: function(){
+    var scored = BP._score({ momentum_1:'a', momentum_1b:'c' });
+    return !scored.tally.momentum_external_dependent && !scored.tally.momentum_accountability;
+  }},
+  { name: 'active momentum follow-up remains in scoring', fn: function(){
+    var scored = BP._score({ momentum_1:'c', momentum_1b:'c' });
+    return scored.tally.momentum_external_dependent === 2 && scored.tally.momentum_accountability === 3;
+  }},
+  { name: 'inactive momentum follow-up is excluded from result payload', fn: function(){
+    var output = BP._answerOutput({ momentum_1:'a', momentum_1b:'c' });
+    return output.length === 1 && output[0].qid === 'momentum_1';
+  }},
+  { name: 'strongest signal uses highest tally', fn: function(){
+    return BP._strongestIn({ momentum_action:2, momentum_accountability:5 }, 'momentum') === 'momentum_accountability';
+  }},
+  { name: 'priority order breaks equal-tally ties', fn: function(){
+    return BP._strongestIn({ momentum_action:2, momentum_accountability:2 }, 'momentum') === 'momentum_action';
   }},
 ]);
 
