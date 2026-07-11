@@ -93,7 +93,17 @@
       return { reads: reads, experiment: experiment, nextMove: move, signalRead: reads[0] };
     }
 
-    /* ---------------- build the send-shape result + store it ---------------- */
+    /* ---------------- build the send-shape result; persist only on finish ---------------- */
+    function answersFromResult(result) {
+      var answers = {};
+      var rows = result && Array.isArray(result.answers) ? result.answers : [];
+      rows.forEach(function(row){
+        if (!row || !row.qid) return;
+        if (row.status === 'skipped') answers[row.qid] = '__skip__';
+        else if (row.optionId) answers[row.qid] = row.optionId;
+      });
+      return answers;
+    }
     function answerOutput(answers) {
       var out = [];
       P.questions.forEach(function(q){
@@ -111,8 +121,12 @@
       var interp = interpret(scored);
       var out = answerOutput(answers);
       var result = { status: status, signalRead: interp.signalRead, answers: out };   // EXACT payload shape (no scores/labels)
-      lset(K.result, JSON.stringify(result));
       return { result: result, interp: interp };
+    }
+    function commitResult(answers, status) {
+      var built = buildResult(answers, status);
+      lset(K.result, JSON.stringify(built.result));
+      return built;
     }
 
     /* ---------------- UI ---------------- */
@@ -248,26 +262,28 @@
           if (q.conditional || q.skippable) return;
           if (!answers[q.id] || answers[q.id] === '__skip__') complete = false;
         });
-        showResult(modal, closeDialog, answers, complete ? 'completed' : 'partial', function(){ pos = 0; step(); });
+        var built = commitResult(answers, complete ? 'completed' : 'partial');
+        showResult(modal, closeDialog, built, function(){ pos = 0; step(); });
       }
       step();
     }
 
     function openResult(onClose){
       injectStyle();
+      var saved = readResult();
+      if (!saved) { openFlow(onClose); return; }
       var ov = el('div', { 'class':'bhpr-ov', id:'bhpr-flow' });
       var modal = el('div', { 'class':'bhpr-modal', role:'dialog', 'aria-modal':'true', 'aria-label':'Profile check-in results', tabindex:'-1' });
       ov.appendChild(modal); document.body.appendChild(ov);
       var closeDialog = dismissable(ov, onClose);
-      var saved = readResult();
-      showResult(modal, closeDialog, readAnswers(), saved && saved.status ? saved.status : 'completed', function(){
+      var built = buildResult(answersFromResult(saved), saved.status || 'completed');
+      showResult(modal, closeDialog, built, function(){
         closeDialog();
         openFlow(onClose);
       });
     }
 
-    function showResult(modal, closeDialog, answers, status, onEdit){
-      var built = buildResult(answers, status);
+    function showResult(modal, closeDialog, built, onEdit){
       var interp = built.interp;
       modal.innerHTML = '';
       modal.setAttribute('aria-label', 'Profile check-in results');
@@ -293,11 +309,16 @@
       modal.focus();
     }
 
-    // expose pure scoring helpers for offline testing only (no data, no side effects)
+    // expose scoring helpers and narrow UI entry points for offline regression tests
     window.BHIVE_BETA_PROFILE._score = score;
     window.BHIVE_BETA_PROFILE._interpret = function(a){ return interpret(score(a)); };
     window.BHIVE_BETA_PROFILE._strongestIn = strongestIn;
     window.BHIVE_BETA_PROFILE._answerOutput = answerOutput;
+    window.BHIVE_BETA_PROFILE._test = {
+      buildResult: buildResult,
+      openFlow: function(){ openFlow(); },
+      openResult: function(){ openResult(); }
+    };
 
     if (document.getElementById('energy')) mountCard();
     else document.addEventListener('DOMContentLoaded', mountCard);
