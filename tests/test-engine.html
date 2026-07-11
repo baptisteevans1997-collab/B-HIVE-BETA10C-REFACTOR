@@ -20,8 +20,11 @@
 <div id="results"></div>
 
 <script src="../js/bhive-engine.js"></script>
+<script src="../js/beta-profile-data.js"></script>
+<script src="../js/beta-profile.js?test=beta10c-coderabbit"></script>
 <script>
 var B = BHIVE;
+var BP = window.BHIVE_BETA_PROFILE;
 var results = document.getElementById('results');
 var passed = 0, failed = 0, suites = [];
 
@@ -47,6 +50,32 @@ function suite(name, tests) {
   
   html += '<div style="font-size:11px;color:#968a6c;margin-top:4px">' + suitePassed + '/' + (suitePassed+suiteFailed) + ' passed</div></div>';
   results.innerHTML += html;
+}
+
+var PROFILE_ANSWERS_KEY = 'bhive_beta_profile_answers';
+var PROFILE_RESULT_KEY = 'bhive_beta_profile_result';
+function completeProfileAnswers() {
+  var answers = {};
+  BP.questions.forEach(function(q){ if (!q.conditional) answers[q.id] = 'a'; });
+  return answers;
+}
+function closeProfileOverlay() {
+  if (document.querySelector('.bhpr-ov')) {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key:'Escape', bubbles:true }));
+  }
+}
+function restoreProfileStorage(key, value) {
+  if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, value);
+}
+function withProfileStorage(test) {
+  var oldAnswers = localStorage.getItem(PROFILE_ANSWERS_KEY);
+  var oldResult = localStorage.getItem(PROFILE_RESULT_KEY);
+  try { return test(); }
+  finally {
+    closeProfileOverlay();
+    restoreProfileStorage(PROFILE_ANSWERS_KEY, oldAnswers);
+    restoreProfileStorage(PROFILE_RESULT_KEY, oldResult);
+  }
 }
 
 /* ────────────────────────────────────────────
@@ -211,6 +240,97 @@ suite('Persistence', [
     if (d.unlocks && d.unlocks.length) B.unlocks = d.unlocks.slice();
     // Verify unlock state
     return B.unlocks.length === before.length;
+  }},
+]);
+
+/* ────────────────────────────────────────────
+   9. Profile scoring regressions
+   ──────────────────────────────────────────── */
+suite('Profile scoring regressions', [
+  { name: 'inactive momentum follow-up is excluded from scoring', fn: function(){
+    var scored = BP._score({ momentum_1:'a', momentum_1b:'c' });
+    return !scored.tally.momentum_external_dependent && !scored.tally.momentum_accountability;
+  }},
+  { name: 'active momentum follow-up remains in scoring', fn: function(){
+    var scored = BP._score({ momentum_1:'c', momentum_1b:'c' });
+    return scored.tally.momentum_external_dependent === 2 && scored.tally.momentum_accountability === 3;
+  }},
+  { name: 'inactive momentum follow-up is excluded from result payload', fn: function(){
+    var output = BP._answerOutput({ momentum_1:'a', momentum_1b:'c' });
+    return output.length === 1 && output[0].qid === 'momentum_1';
+  }},
+  { name: 'strongest signal uses highest tally', fn: function(){
+    return BP._strongestIn({ momentum_action:2, momentum_accountability:5 }, 'momentum') === 'momentum_accountability';
+  }},
+  { name: 'priority order breaks equal-tally ties', fn: function(){
+    return BP._strongestIn({ momentum_action:2, momentum_accountability:2 }, 'momentum') === 'momentum_action';
+  }},
+  { name: 'opening a completed result does not overwrite it from draft answers', fn: function(){
+    return withProfileStorage(function(){
+      var committedAnswers = completeProfileAnswers();
+      var draftAnswers = completeProfileAnswers();
+      draftAnswers.momentum_1 = 'b';
+      var committed = BP._test.buildResult(committedAnswers, 'completed').result;
+      var before = JSON.stringify(committed);
+      localStorage.setItem(PROFILE_ANSWERS_KEY, JSON.stringify(draftAnswers));
+      localStorage.setItem(PROFILE_RESULT_KEY, before);
+
+      BP._test.openResult();
+      var move = document.querySelector('.bhpr-move');
+      var after = localStorage.getItem(PROFILE_RESULT_KEY);
+      var done = document.querySelector('.bhpr-next');
+      if (done) done.click();
+      return after === before && move && move.textContent.indexOf(BP.nextMove.momentum_action) >= 0;
+    });
+  }},
+  { name: 'dismissing Change answers preserves the completed result', fn: function(){
+    return withProfileStorage(function(){
+      var committedAnswers = completeProfileAnswers();
+      var committed = BP._test.buildResult(committedAnswers, 'completed').result;
+      var before = JSON.stringify(committed);
+      localStorage.setItem(PROFILE_ANSWERS_KEY, JSON.stringify(committedAnswers));
+      localStorage.setItem(PROFILE_RESULT_KEY, before);
+
+      BP._test.openResult();
+      document.querySelector('.bhpr-skip').click();
+      document.querySelectorAll('.bhpr-opt')[1].click();
+      closeProfileOverlay();
+      var draftChanged = JSON.parse(localStorage.getItem(PROFILE_ANSWERS_KEY)).rhythm_1 === 'b';
+      var afterDismiss = localStorage.getItem(PROFILE_RESULT_KEY);
+
+      BP._test.openResult();
+      var afterReopen = localStorage.getItem(PROFILE_RESULT_KEY);
+      var done = document.querySelector('.bhpr-next');
+      if (done) done.click();
+      return draftChanged && afterDismiss === before && afterReopen === before;
+    });
+  }},
+  { name: 'finishing after edits updates the completed result', fn: function(){
+    return withProfileStorage(function(){
+      var committedAnswers = completeProfileAnswers();
+      var draftAnswers = completeProfileAnswers();
+      draftAnswers.momentum_1 = 'b';
+      var committed = BP._test.buildResult(committedAnswers, 'completed').result;
+      var before = JSON.stringify(committed);
+      localStorage.setItem(PROFILE_ANSWERS_KEY, JSON.stringify(draftAnswers));
+      localStorage.setItem(PROFILE_RESULT_KEY, before);
+
+      BP._test.openFlow();
+      var steps = 0;
+      while (document.querySelector('.bhpr-q') && steps < 20) {
+        var next = document.querySelector('.bhpr-next');
+        if (!next || next.disabled) return false;
+        next.click();
+        steps++;
+      }
+      var after = localStorage.getItem(PROFILE_RESULT_KEY);
+      var updated = JSON.parse(after);
+      var momentum = updated.answers.filter(function(a){ return a.qid === 'momentum_1'; })[0];
+      var done = document.querySelector('.bhpr-next');
+      if (done) done.click();
+      return steps === 14 && after !== before && updated.status === 'completed' &&
+        momentum && momentum.optionId === 'b';
+    });
   }},
 ]);
 

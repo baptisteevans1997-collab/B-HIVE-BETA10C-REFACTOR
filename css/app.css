@@ -748,6 +748,7 @@ em{font-style:italic}
 /* ── the Core (queen cell) ── */
 .hive-core{cursor:pointer}
 .hive-core:focus{outline:none}
+.hive-core:focus-visible .hc-glow{stroke:var(--gold-2);stroke-width:3;opacity:.8}
 .hc-label{
   font-family:var(--mono);font-size:8.6px;letter-spacing:.16em;
   fill:var(--gold);pointer-events:none;text-transform:uppercase;
@@ -2487,12 +2488,12 @@ em{font-style:italic}
 html{
   overflow-x:hidden;
   overscroll-behavior-x:none;
-  touch-action:pan-y;
+  touch-action:pan-y pinch-zoom;
   -webkit-text-size-adjust:100%;
 }
 body{
   overscroll-behavior-x:none;
-  touch-action:pan-y;
+  touch-action:pan-y pinch-zoom;
   max-width:100%;
 }
 /* App shell: never wider than viewport */
@@ -2524,7 +2525,7 @@ body{
 .hive-sheet .hive-detail,
 .hive-cmdmenu,
 .navmenu{
-  touch-action:pan-y;
+  touch-action:pan-y pinch-zoom;
   overscroll-behavior:contain;
 }
 /* pass B2: unified keyboard focus ring (additive, :focus-visible only, outline = zero layout impact) */
