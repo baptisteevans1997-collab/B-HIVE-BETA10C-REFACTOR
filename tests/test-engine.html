@@ -19,7 +19,8 @@
 <h1>B HIVE Engine Tests</h1>
 <div id="results"></div>
 
-<script src="../js/bhive-engine.js"></script>
+<script src="../js/bhive-engine.js?test=beta10c-v4"></script>
+<script src="../js/bhive-learning.js?test=beta10c-v4"></script>
 <script src="../js/beta-profile-data.js"></script>
 <script src="../js/beta-profile.js?test=beta10c-coderabbit"></script>
 <script>
@@ -217,9 +218,9 @@ suite('addLearning', [
    8. snapshot / save / load round-trip
    ──────────────────────────────────────────── */
 suite('Persistence', [
-  { name: 'snapshot returns object with v:3', fn: function(){
+  { name: 'snapshot returns object with v:4 learning state', fn: function(){
     var s = B.snapshot();
-    return s && s.v === 3 && typeof s.ts === 'number';
+    return s && s.v === 4 && typeof s.ts === 'number' && s.learning && Array.isArray(s.learning.events);
   }},
   { name: 'save+load round-trip preserves unlocks', fn: function(){
     B.init();

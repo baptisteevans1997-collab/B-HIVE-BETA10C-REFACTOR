@@ -2320,6 +2320,7 @@
       var inEl=document.getElementById('queen-in');
       var text=inEl?inEl.value.replace(/\s+/g,' ').trim():'';
       if(!text){queenSay('queen-chat-msg','Type something to ask her.');return;}
+      var askedAt=Date.now();
       queenSay('queen-chat-msg','');
       queenChat.push({role:'user',content:text});
       if(inEl)inEl.value='';
@@ -2332,7 +2333,10 @@
           if(inEl)inEl.value=text;
           return;
         }
-        queenChat.push({role:'assistant',content:reply});queenSave();renderQueen();
+        queenChat.push({role:'assistant',content:reply});
+        BHIVE.recordEvent('queen_message',{ts:askedAt,payload:{role:'user',content:text}});
+        BHIVE.recordEvent('queen_message',{payload:{role:'assistant',content:reply}});
+        queenSave();save();renderQueen();
       });
     }
     if(detail)detail.addEventListener('click',function(ev){
@@ -2463,6 +2467,9 @@
       if(history.length&&history[history.length-1].date===dstr)history[history.length-1]=entry;
       else history.push(entry);
       if(history.length>40)history=history.slice(-40);
+      BHIVE.recordEvent('checkin_completed',{ts:entry.ts,payload:{
+        cells:snap,under:u,aligned:a,dormant:d,leak:l,source:'daily_checkin'
+      }});
       tickSwarms(1);lastTick=Date.now();
       save();renderLast();renderLog();renderHive(false);showCell(sel);
     }
@@ -3028,7 +3035,11 @@
       if(b.classList.contains('hd-step')){
         var f=b.getAttribute('data-f'),dd=parseInt(b.getAttribute('data-d'),10)||0;
         var c=cells[sel];
+        var before=c[f];
         c[f]=B.clamp(c[f]+dd*5);
+        if(c[f]!==before)BHIVE.recordEvent('cell_value_changed',{
+          cellKey:c.key,payload:{field:f,from:before,to:c[f],source:'cell_control'}
+        });
         patchHiveCell(sel);patchCellPanel(sel);updateEnv();
         renderMismatch();renderReadout();save();
       }else if(b.classList.contains('hd-evolve')){

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>B HIVE Learning Tests (beta10c)</title>
+<style>
+  body{background:#15120c;color:#ece4d2;font:14px/1.6 system-ui,sans-serif;max-width:760px;margin:40px auto;padding:0 20px}
+  h1{color:#c9ae78;font-size:20px;border-bottom:1px solid rgba(237,228,210,.1);padding-bottom:10px}
+  .test{padding:6px 10px;margin:3px 0;border-radius:4px;font:12px/1.5 monospace}
+  .pass{background:rgba(148,160,109,.15);color:#a3b07f}.fail{background:rgba(207,140,84,.2);color:#cf8c54}
+  .summary{margin-top:24px;padding:12px;border:1px solid #c9ae78;border-radius:8px}.summary b{color:#e2c890}
+</style>
+</head>
+<body>
+<h1>B HIVE Learning Foundation Tests</h1>
+<div id="results"></div>
+<script src="../js/bhive-engine.js?test=beta10c-v4"></script>
+<script src="../js/bhive-learning.js?test=beta10c-v4"></script>
+<script>
+(function(){
+  'use strict';
+  var B=window.BHIVE,T=B.learningTools,out=document.getElementById('results');
+  var passed=0,failed=0;
+  function test(name,fn){
+    var ok=false,msg='';
+    try{ok=!!fn();}catch(e){msg=' - threw: '+e.message;}
+    out.innerHTML+='<div class="test '+(ok?'pass':'fail')+'">'+(ok?'PASS ':'FAIL ')+name+msg+'</div>';
+    if(ok)passed++;else failed++;
+  }
+  function ts(day,hour){return new Date(2026,0,day,hour||12,0,0,0).getTime();}
+  function v3Fixture(){
+    return {
+      v:3,ts:ts(4),
+      current:{lw:{imp:70,en:45}},
+      history:[
+        {date:'1 Jan 26',ts:ts(1),cells:{lw:{imp:70,en:30}},under:1,aligned:0,dormant:0,leak:0},
+        {date:'2 Jan 26',ts:ts(2),cells:{lw:{imp:70,en:40}},under:1,aligned:0,dormant:0,leak:0}
+      ],
+      learnings:{lw:[{t:'Protected mornings help me focus',s:'you'}],health:[{t:'Sleep has been uneven',s:'you',q:'What drains you?'}]},
+      unlocks:['lw','health','people']
+    };
+  }
+
+  test('empty state has all v4 collections',function(){
+    var s=T.emptyState();
+    return s.modelVersion===1&&Array.isArray(s.events)&&Array.isArray(s.hypotheses)&&Array.isArray(s.experiments);
+  });
+  test('unknown event types are rejected',function(){return T.createEvent('made_up',{ts:ts(1)})===null;});
+  test('append-only store rejects duplicate event IDs',function(){
+    var s=T.emptyState(),e=T.createEvent('checkin_completed',{ts:ts(1),payload:{source:'test'}});
+    return !!T.appendEvent(s,e)&&T.appendEvent(s,e)===false&&s.events.length===1;
+  });
+  test('event selectors return defensive copies',function(){
+    var s=T.emptyState(),e=T.createEvent('learning_added',{ts:ts(1),cellKey:'lw',payload:{text:'one'}});
+    T.appendEvent(s,e);var selected=T.selectEvents(s,{type:'learning_added'});selected[0].payload.text='changed';
+    return s.events[0].payload.text==='one';
+  });
+  test('active days count distinct days, not event volume',function(){
+    var s=T.emptyState();
+    T.appendEvent(s,T.createEvent('checkin_completed',{ts:ts(1,9)}));
+    T.appendEvent(s,T.createEvent('checkin_completed',{ts:ts(1,18),payload:{second:true}}));
+    T.appendEvent(s,T.createEvent('checkin_completed',{ts:ts(2,9)}));
+    return T.activeDays(s,'checkin_completed').length===2;
+  });
+  test('v3 migration preserves every check-in as evidence',function(){
+    return T.selectEvents(T.migrateV3(v3Fixture()),{type:'checkin_completed'}).length===2;
+  });
+  test('v3 learnings migrate without inventing timestamps',function(){
+    var events=T.selectEvents(T.migrateV3(v3Fixture()),{type:'learning_added'});
+    return events.length===2&&events.every(function(e){return e.payload.migrated&&e.payload.timestampKnown===false;});
+  });
+  test('v3 unlock trail migrates as evidence',function(){
+    return T.selectEvents(T.migrateV3(v3Fixture()),{type:'cell_unlocked'}).length===3;
+  });
+  test('corrupt v4 learning block falls back to v3 migration',function(){
+    var d=v3Fixture();d.learning={events:'broken'};
+    return T.ensureState(d.learning,d).events.length===7;
+  });
+  test('new user learning emits a structured event',function(){
+    B.init();B.addLearning('lw','A quiet morning helped me focus','you');
+    var events=T.selectEvents(B.learning,{type:'learning_added',cellKey:'lw'});
+    return events.length===1&&events[0].payload.text==='A quiet morning helped me focus';
+  });
+  test('schema v4 snapshot includes learning evidence',function(){
+    B.init();B.addLearning('health','I slept well','you');var snap=B.snapshot();
+    return snap.v===4&&snap.learning&&T.selectEvents(snap.learning,{type:'learning_added'}).length===1;
+  });
+  test('v4 save and load preserve event IDs',function(){
+    var key='bhive_learning_test_v4',before,after;
+    try{
+      B.init();B.recordEvent('checkin_completed',{ts:ts(3),payload:{source:'test'}});
+      before=B.learning.events[0].id;B.save(key);B.init();
+      if(!B.load(key))return false;
+      after=B.learning.events[0]&&B.learning.events[0].id;
+      return before===after;
+    }finally{localStorage.removeItem(key);}
+  });
+  test('engine load migrates an existing v3 snapshot',function(){
+    var key='bhive_learning_test_v3';
+    try{
+      localStorage.setItem(key,JSON.stringify(v3Fixture()));B.init();
+      return B.load(key)&&B.learning.events.length===7&&B.cells[0].imp===70;
+    }finally{localStorage.removeItem(key);}
+  });
+
+  out.innerHTML+='<div class="summary"><b>'+passed+' passed</b>, '+failed+' failed - '+
+    Math.round(passed/(passed+failed)*100)+'% pass rate</div>';
+})();
+</script>
+</body>
+</html>

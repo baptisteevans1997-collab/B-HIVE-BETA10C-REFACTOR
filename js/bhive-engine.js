@@ -249,6 +249,9 @@ BHIVE.init = function() {
   /* ── check-in history ── */
   B.history = [];
 
+  /* ── append-only learning evidence (schema v4) ── */
+  B.learning = B.learningTools ? B.learningTools.emptyState() : null;
+
   /* ── UI state (leaf — not persisted) ── */
   B.sel = 0;
   B.coreOn = false;
@@ -336,7 +339,17 @@ BHIVE.wakeCell = function(key) {
   B.unlocks.push(key);
   delete B.swarms[key];
   B.seedSwarms();
+  B.recordEvent('cell_unlocked', { cellKey: key, payload: { source: 'runtime' } });
   return key;
+};
+
+/* ── recordEvent: append immutable evidence when the v4 learning layer is loaded ── */
+BHIVE.recordEvent = function(type, details) {
+  var B = BHIVE;
+  if (!B.learningTools) return false;
+  if (!B.learning) B.learning = B.learningTools.emptyState();
+  var event = B.learningTools.createEvent(type, details || {});
+  return event ? B.learningTools.appendEvent(B.learning, event) : false;
 };
 
 /* ── unlockFromAnswer: one teach = at most ONE new cell wakes ── */
@@ -371,6 +384,10 @@ BHIVE.addLearning = function(key, text, src, q) {
   var ent = { t: text, s: src || 'you' };
   if (q) ent.q = q;
   B.learnings[key].push(ent);
+  B.recordEvent('learning_added', {
+    cellKey: key,
+    payload: { text: text, source: ent.s, question: q || null }
+  });
   if (B.swarms[key] && B.swarms[key].length < 24) B.swarms[key].push({ age: 0, b: 0.5 + Math.random() * 0.5, p: 0.4 + Math.random() * 0.6 });
   if (ent.s === 'you') {
     B.unlockFromAnswer(text);
@@ -384,7 +401,7 @@ BHIVE.snapshot = function() {
   var cur = {};
   B.cells.forEach(function(c) { cur[c.key] = { imp: c.imp, en: c.en }; });
   return {
-    v: 3,
+    v: 4,
     ts: Date.now(),
     current: cur,
     history: B.history,
@@ -397,7 +414,8 @@ BHIVE.snapshot = function() {
     agents: B.agents,
     swarms: B.swarms,
     lastTick: B.lastTick,
-    unlocks: B.unlocks
+    unlocks: B.unlocks,
+    learning: B.learningTools ? B.learningTools.normalizeState(B.learning) : B.learning
   };
 };
 
@@ -451,6 +469,7 @@ BHIVE.load = function(storageKey) {
         if (!B.isUnlocked(c.key) && B.isTaught(c.key)) B.unlocks.push(c.key);
       });
     }
+    if (B.learningTools) B.learning = B.learningTools.ensureState(d && d.learning, d || {});
     /* dormant cells: sleeping pair only */
     B.cells.forEach(function(c) {
       if (!B.isUnlocked(c.key) && B.swarms[c.key]) B.swarms[c.key] = [{ age: 0 }, { age: 2 }];
