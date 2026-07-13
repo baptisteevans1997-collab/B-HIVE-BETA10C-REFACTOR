@@ -1,5 +1,5 @@
 /* Claude Brain Map — service worker · offline app shell */
-var CACHE = 'brainmap-v88-beta10c-refactor-fix5';
+var CACHE = 'brainmap-v88-beta10c-refactor-fix7';
 var CORE = [
   './', './index.html',
   './css/app.css', './css/beta-mobile-polish.css',

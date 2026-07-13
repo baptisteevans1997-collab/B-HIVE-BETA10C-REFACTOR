@@ -232,27 +232,7 @@ em{font-style:italic}
   box-shadow:0 16px 40px -22px rgba(0,0,0,.8),0 0 0 1px rgba(201,174,120,.05);
 }
 
-/* ── meters ── */
-.meter{height:5px;border-radius:3px;background:rgba(237,228,210,0.07);overflow:hidden}
-.meter > i{
-  display:block;height:100%;border-radius:3px;width:var(--val,0%);
-  background:linear-gradient(90deg,var(--gold),var(--gold-2));
-}
-.meter.warm > i{background:linear-gradient(90deg,var(--ember),var(--clay))}
-.meter-row{
-  display:flex;justify-content:space-between;
-  font-family:var(--mono);font-size:9px;letter-spacing:.12em;
-  text-transform:uppercase;color:var(--ink-3);margin-top:8px;
-}
-.meter-row b{color:var(--ink-2);font-weight:400}
-
-/* ── 01 MISSION CONTROL ── */
-.theme-grid{
-  display:grid;gap:14px;
-  grid-template-columns:repeat(auto-fill,minmax(248px,1fr));
-}
-.theme-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:14px}
-.theme-name{font-family:var(--serif);font-size:23px;color:var(--ink);line-height:1.1}
+/* ── badges ── */
 .pill{
   font-family:var(--mono);font-size:8.4px;letter-spacing:.12em;
   text-transform:uppercase;padding:4px 8px;border-radius:20px;
@@ -262,10 +242,7 @@ em{font-style:italic}
 .pill.steady{color:var(--sage);border-color:rgba(148,160,109,.34)}
 .pill.soft{color:var(--ink-3)}
 .pill.warn{color:var(--clay);border-color:rgba(189,108,82,.34)}
-.theme-read{margin-top:14px;color:var(--ink-2);font-size:13.5px;line-height:1.62}
-.theme-foot{margin-top:14px;display:flex;justify-content:space-between;align-items:center;gap:8px}
-
-/* ── 02 HIVE MIND ── */
+/* ── 01 HIVE MIND ── */
 .hive-wrap{display:grid;grid-template-columns:1.32fr .68fr;gap:22px;align-items:stretch}
 .hive-card{
   padding:16px;border-radius:14px;border:1px solid var(--line);
@@ -957,7 +934,7 @@ em{font-style:italic}
 .callout p{color:var(--ink);font-size:14px;line-height:1.62}
 .callout p em{color:var(--gold-2);font-style:italic}
 
-/* ── 03 PROJECT UNIVERSE ── */
+/* ── 02 PROJECT UNIVERSE ── */
 .planet-list{display:flex;flex-direction:column;gap:13px}
 .planet{
   background:linear-gradient(170deg,var(--card),var(--bg-2));
@@ -1021,7 +998,7 @@ em{font-style:italic}
   border:1px solid var(--line);background:rgba(21,18,12,.6);
 }
 
-/* ── 04 STRENGTH SYSTEM ── */
+/* ── 03 STRENGTH SYSTEM ── */
 .char-banner{
   display:flex;gap:22px;align-items:center;flex-wrap:wrap;
   padding:22px 24px;margin-bottom:22px;border-radius:13px;
@@ -1086,7 +1063,7 @@ em{font-style:italic}
 .bar.t-c > i,.bar.t-d > i{background:linear-gradient(90deg,#9a5c46,var(--ember))}
 .stat-note{margin-top:7px;font-size:12.4px;color:var(--ink-3);line-height:1.5}
 
-/* ── 05 RISK RADAR ── */
+/* ── 04 RISK RADAR ── */
 .risk-grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(310px,1fr))}
 .risk-head{display:flex;align-items:center;gap:10px;margin-bottom:13px}
 .risk-rank{
@@ -1116,7 +1093,7 @@ em{font-style:italic}
 .risk-see b{color:var(--clay)}
 .risk-fix b{color:var(--gold)}
 
-/* ── 06 OPPORTUNITY RADAR ── */
+/* ── 05 OPPORTUNITY RADAR ── */
 .opp-map-card{padding:16px;margin-bottom:18px}
 .opp-svg{width:100%;height:auto;display:block;max-width:680px;margin:0 auto}
 .opp-grid{display:grid;gap:13px;grid-template-columns:repeat(auto-fill,minmax(296px,1fr))}
@@ -1145,7 +1122,7 @@ em{font-style:italic}
   text-transform:uppercase;color:var(--gold);font-weight:400;
 }
 
-/* ── 07 OPERATING SYSTEM ── */
+/* ── 06 OPERATING SYSTEM ── */
 .os-grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(232px,1fr))}
 .os-card .os-h{display:flex;align-items:center;gap:9px;margin-bottom:14px}
 .os-card .os-h .dot{width:8px;height:8px;border-radius:50%;flex:none}
@@ -1191,7 +1168,7 @@ em{font-style:italic}
 .finish-body p{color:var(--ink-2);font-size:13.6px;line-height:1.6}
 .finish-body p em{color:var(--gold-2);font-style:italic}
 
-/* ── 08 BRAIN MAP ── */
+/* ── 07 BRAIN MAP ── */
 .brain-wrap{display:grid;grid-template-columns:1.2fr .8fr;gap:24px;align-items:center}
 .brain-stage{
   padding:8px;border-radius:16px;
@@ -1239,7 +1216,7 @@ em{font-style:italic}
   letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);
 }
 
-/* ── 09 HONEST SUMMARY ── */
+/* ── 08 HONEST SUMMARY ── */
 .summary-card{
   border:1px solid var(--line-2);border-radius:16px;
   padding:clamp(28px,5vw,52px);
@@ -1460,13 +1437,6 @@ em{font-style:italic}
   background:repeating-linear-gradient(90deg,
     transparent 0,transparent 22px,rgba(18,14,8,.6) 22px,rgba(18,14,8,.6) 24px);
 }
-/* ── corner-bracket framing on the Mission Control cards ── */
-.card.theme::before,.card.theme::after{
-  content:"";position:absolute;width:12px;height:12px;pointer-events:none;
-  border:1.5px solid rgba(201,174,120,.42);
-}
-.card.theme::before{top:-1px;left:-1px;border-right:0;border-bottom:0;border-top-left-radius:12px}
-.card.theme::after{right:-1px;bottom:-1px;border-left:0;border-top:0;border-bottom-right-radius:12px}
 /* ── mobile section menu ── */
 .navbar{
   display:none;position:fixed;left:10px;right:10px;bottom:10px;z-index:130;

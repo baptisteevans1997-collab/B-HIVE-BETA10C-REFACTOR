@@ -28,7 +28,7 @@ window.BHIVE_DATA.MBTI_CLASS = {
 /* Screen id → display name for the navbar label. Pure UI lookup (read once in showScreen()).
    Moved verbatim out of index.html at E3; keys/labels unchanged. */
 window.BHIVE_DATA.SCREEN_NAMES = {
-  home:'Home', mission:'Mission Control', energy:'Hive Mind',
+  home:'Home', energy:'Hive Mind',
   projects:'Project Universe', strengths:'Strength System', risks:'Risk Radar',
   opportunities:'Opportunity Radar', system:'Operating System', brainmap:'Brain Map',
   summary:'Honest Read', bestiary:'The Bestiary', manual:'Field Manual',
@@ -101,7 +101,7 @@ window.BHIVE_DATA.TOUR = [
       {t:'Read the cells',
        d:'Each cell’s frame is how much that area matters to you; its glow is the energy you actually give it. The bees inside are what the hive has learned about you there.'},
       {t:'Hive Mind is base camp',
-       d:'Screen 02, Hive Mind, is the one screen you actually work. Tap any cell to read it and teach it. The other read screens are switched off in this beta.'},
+       d:'Screen 01, Hive Mind, is the one screen you actually work. Tap any cell to read it and teach it. The other read screens are switched off in this beta.'},
       {t:'Your daily loop',
        d:'Each day: 1 Check In, 2 answer the bees or teach a cell, 3 follow the Next move on the Today card. Come back tomorrow and watch the hive shift.'},
       {t:'It learns as you teach',
