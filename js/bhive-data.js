@@ -42,6 +42,19 @@ window.BHIVE_DATA.SCREEN_NAMES = {
 window.BHIVE_DATA.DAYS = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
 window.BHIVE_DATA.MON = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
 
+/* Stage 2 inference themes. Terms are deliberately explicit; inference counts a
+   theme only across separate days and only from the user's own words. */
+window.BHIVE_DATA.INFERENCE_THEMES = [
+  {id:'stress_overload',label:'Stress or overload',terms:['stress','stressed','pressure','overwhelmed','overwhelm','burnout','burned out','drained','exhausted','swamped','too much']},
+  {id:'money_pressure',label:'Money pressure',terms:['money stress','money worry','debt','bills','cash flow','broke','income pressure']},
+  {id:'sleep_health',label:'Sleep or health',terms:['sleep','slept','insomnia','sick','health','training','gym','body']},
+  {id:'unfinished_work',label:'Unfinished work',terms:['unfinished','half done','half finished','open tabs','not finished','still sitting','backlog']},
+  {id:'social_support',label:'Support from people',terms:['support','family','friend','partner','lonely','alone','relationship']},
+  {id:'momentum_shipping',label:'Momentum and shipping',terms:['shipped','finished','launched','progress','moving','built','completed','done'],excludeTerms:['unfinished','not finished','half finished','not completed','not done']},
+  {id:'avoidance',label:'Avoidance',terms:['avoiding','avoidance','putting off','procrastinating','dreading','dodging']},
+  {id:'rest_recovery',label:'Rest and recovery',terms:['rested','resting','recovered','recovering','break','time off','downtime']}
+];
+
 /* ===== D3 PLANNING ONLY — DISPLAY-ONLY BLUEPRINT DATA ===== */
 /* D3D1 (D3 expansion track). Display-only planning data inside a load-bearing file.
    Read only by the D3D2 Blueprints screen for planning display. Not mapped to the live hive.

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>B HIVE Inference Tests (beta10c)</title>
+<style>
+  body{background:#15120c;color:#ece4d2;font:14px/1.6 system-ui,sans-serif;max-width:780px;margin:40px auto;padding:0 20px}
+  h1{color:#c9ae78;font-size:20px;border-bottom:1px solid rgba(237,228,210,.1);padding-bottom:10px}
+  .test{padding:6px 10px;margin:3px 0;border-radius:4px;font:12px/1.5 monospace}
+  .pass{background:rgba(148,160,109,.15);color:#a3b07f}.fail{background:rgba(207,140,84,.2);color:#cf8c54}
+  .summary{margin-top:24px;padding:12px;border:1px solid #c9ae78;border-radius:8px}.summary b{color:#e2c890}
+</style>
+</head>
+<body>
+<h1>B HIVE Deterministic Inference Tests</h1>
+<div id="results"></div>
+<script src="../js/bhive-data.js?test=beta10c-stage2"></script>
+<script src="../js/bhive-engine.js?test=beta10c-stage2"></script>
+<script src="../js/bhive-learning.js?test=beta10c-stage2"></script>
+<script src="../js/bhive-inference.js?test=beta10c-stage2"></script>
+<script src="./fixtures/learning-fixtures.js?test=beta10c-stage2"></script>
+<script>
+(function(){
+  'use strict';
+  var I=BHIVE.inference,F=BHIVE_TEST_FIXTURES,THEMES=BHIVE_DATA.INFERENCE_THEMES;
+  var out=document.getElementById('results'),passed=0,failed=0;
+  function test(name,fn){
+    var ok=false,msg='';
+    try{ok=!!fn();}catch(e){msg=' - threw: '+e.message;}
+    out.innerHTML+='<div class="test '+(ok?'pass':'fail')+'">'+(ok?'PASS ':'FAIL ')+name+msg+'</div>';
+    if(ok)passed++;else failed++;
+  }
+  function cell(key){return F.cells.filter(function(c){return c.key===key;})[0];}
+
+  test('daily aggregation keeps one latest sample per day',function(){
+    var samples=I.dailyCellSamples(F.sameDayBurst(),'lw',7,F.NOW);
+    return samples.length===3&&samples[0].en===40;
+  });
+  test('daily aggregation ignores future events',function(){
+    var events=F.rising().concat([F.checkin(-1,99,80,'lw')]);
+    return I.dailyCellSamples(events,'lw',7,F.NOW).length===3;
+  });
+  test('rising trend requires distinct-day evidence',function(){
+    var o=I.trendObservation(F.rising(),cell('lw'),7,F.NOW);
+    return o.status==='ready'&&o.classification==='rising'&&o.value===32&&o.evidenceEventIds.length===3;
+  });
+  test('falling trend is detected',function(){
+    var o=I.trendObservation(F.falling(),cell('health'),7,F.NOW);
+    return o.classification==='falling'&&o.value===-32;
+  });
+  test('flat trend is detected without inventing movement',function(){
+    var o=I.trendObservation(F.flat(),cell('lw'),7,F.NOW);
+    return o.classification==='flat'&&Math.abs(o.value)<=5;
+  });
+  test('volatile trend requires range and direction changes',function(){
+    var o=I.trendObservation(F.volatile(),cell('lw'),7,F.NOW);
+    return o.classification==='volatile'&&o.range===58;
+  });
+  test('two days are insufficient for a trend claim',function(){
+    return I.trendObservation(F.insufficient(),cell('lw'),7,F.NOW).status==='insufficient';
+  });
+  test('trend calculation is deterministic for a fixed now',function(){
+    var events=F.rising();
+    return JSON.stringify(I.trendObservation(events,cell('lw'),7,F.NOW))===
+      JSON.stringify(I.trendObservation(events,cell('lw'),7,F.NOW));
+  });
+  test('trend calculation does not mutate source events',function(){
+    var events=F.rising(),before=JSON.stringify(events);
+    I.trendObservation(events,cell('lw'),7,F.NOW);
+    return JSON.stringify(events)===before;
+  });
+  test('high-importance untouched cell becomes a neglect observation',function(){
+    var o=I.neglectObservation(F.neglect(),cell('health'),F.NOW);
+    return o.status==='ready'&&o.days===12&&o.evidenceEventIds.length===1;
+  });
+  test('low-importance cell is not called neglected',function(){
+    var events=[F.checkin(12,35,45,'people')];
+    return I.neglectObservation(events,cell('people'),F.NOW).status==='insufficient';
+  });
+  test('recent meaningful interaction suppresses neglect',function(){
+    return I.neglectObservation(F.recentlyTouched(),cell('health'),F.NOW).status==='insufficient';
+  });
+  test('repeated user theme needs three separate days',function(){
+    var list=I.themeObservations(F.repeatedStress(),THEMES,F.NOW);
+    return list.some(function(o){return o.themeId==='stress_overload'&&o.distinctDays===3;});
+  });
+  test('same-day repetitions count as one theme day',function(){
+    return I.themeObservations(F.sameDayStress(),THEMES,F.NOW).length===0;
+  });
+  test('unfinished wording is not mistaken for shipping momentum',function(){
+    var shipping=THEMES.filter(function(t){return t.id==='momentum_shipping';})[0];
+    return !I.matchesTheme('This is still not finished',shipping);
+  });
+  test('Claude and assistant text are not treated as user evidence',function(){
+    return I.themeObservations(F.nonUserStress(),THEMES,F.NOW).length===0;
+  });
+  test('migrated learning with unknown timestamp cannot form a theme',function(){
+    var events=[0,1,2].map(function(i){return {
+      id:'migrated_'+i,type:'learning_added',ts:F.NOW-i*F.DAY,cellKey:'lw',
+      payload:{text:'I feel stressed',source:'you',timestampKnown:false}
+    };});
+    return I.themeObservations(events,THEMES,F.NOW).length===0;
+  });
+  test('theme observation cites every supporting day',function(){
+    var list=I.themeObservations(F.repeatedStress(),THEMES,F.NOW);
+    var o=list.filter(function(x){return x.themeId==='stress_overload';})[0];
+    return o&&o.evidenceEventIds.length===3;
+  });
+  test('confidence labels stay plain-language',function(){
+    return I.confidenceLabel(.4)==='early signal'&&I.confidenceLabel(.6)==='growing pattern'&&
+      I.confidenceLabel(.8)==='strong pattern';
+  });
+  test('observations without evidence cannot rank',function(){
+    return I.scoreObservation({status:'ready',confidence:1,evidenceEventIds:[]})===-1;
+  });
+  test('ranking returns at most one primary and one secondary',function(){
+    var observations=[
+      I.trendObservation(F.rising(),cell('lw'),7,F.NOW),
+      I.trendObservation(F.falling(),cell('health'),7,F.NOW)
+    ].concat(I.themeObservations(F.repeatedStress(),THEMES,F.NOW));
+    var ranked=I.rankInsights(observations);
+    return !!ranked.primary&&!!ranked.secondary&&ranked.count===observations.length;
+  });
+  test('recently shown insight receives a repetition penalty',function(){
+    var a=I.trendObservation(F.rising(),cell('lw'),7,F.NOW);
+    var b=I.trendObservation(F.falling(),cell('health'),7,F.NOW);
+    var ranked=I.rankInsights([a,b],{recentInsightIds:[a.id]});
+    return ranked.primary&&ranked.primary.observation.id===b.id;
+  });
+  test('ranking does not mutate observations',function(){
+    var observations=[I.trendObservation(F.rising(),cell('lw'),7,F.NOW)];
+    var before=JSON.stringify(observations);I.rankInsights(observations);
+    return JSON.stringify(observations)===before;
+  });
+  test('generator returns only evidence-backed displayable observations',function(){
+    var events=F.rising().concat(F.repeatedStress());
+    var result=I.generate(events,F.cells,F.NOW);
+    return result.observations.length>=2&&result.observations.every(function(o){
+      return o.status==='ready'&&o.evidenceEventIds.length>0;
+    })&&!!result.insights.primary;
+  });
+  test('generator stays quiet when evidence is insufficient',function(){
+    var result=I.generate(F.insufficient(),F.cells,F.NOW);
+    return result.observations.length===0&&result.insights.primary===null;
+  });
+
+  out.innerHTML+='<div class="summary"><b>'+passed+' passed</b>, '+failed+' failed - '+
+    Math.round(passed/(passed+failed)*100)+'% pass rate</div>';
+})();
+</script>
+</body>
+</html>
