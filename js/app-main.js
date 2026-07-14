@@ -2865,10 +2865,11 @@
         els[i].setAttribute('aria-label',c.full+(st==='dormant'?' (asleep)':''));
       }
     }
+    var currentTodayInsight=null;
     function renderToday(){
       var el=document.getElementById('hive-today');
       if(!el)return;
-      var mv=nextMove();
+      var mv=nextMove(),now=Date.now(),events=(BHIVE.learning&&BHIVE.learning.events)||[];
       /* status line */
       var status;
       if(!history.length){
@@ -2899,9 +2900,23 @@
           change='Since last check-in, '+parts.join(' and ')+'.';
         }
       }
+      var insight='';
+      currentTodayInsight=null;
+      if(B.inference&&B.insightUI){
+        var answered=B.insightUI.latestFeedbackToday(events,now);
+        if(answered)insight=B.insightUI.renderAnswered(answered);
+        else{
+          var generated=B.inference.generate(events,cells,now,{ranking:{feedbackEvents:events,now:now}});
+          if(generated.insights.primary){
+            currentTodayInsight=generated.insights.primary.observation;
+            insight=B.insightUI.renderInsight(currentTodayInsight,events,cells);
+          }else insight=B.insightUI.renderQuiet();
+        }
+      }
       el.innerHTML=
         '<div class="td-status">'+B.esc(status)+'</div>'+
         (change?'<div class="td-change">'+change+'</div>':'')+
+        insight+
         '<button class="td-next" type="button" data-kind="'+mv.kind+'"'+
           (mv.idx!==undefined?' data-idx="'+mv.idx+'"':'')+'>'+
           '<span class="td-next-k">Next move</span>'+
@@ -3067,6 +3082,24 @@
     if(lb)lb.addEventListener('click',logCheckin);
     var todayEl=document.getElementById('hive-today');
     if(todayEl)todayEl.addEventListener('click',function(ev){
+      var toggle=ev.target&&ev.target.closest?ev.target.closest('.td-evidence-toggle'):null;
+      if(toggle){
+        B.insightUI.toggleEvidence(toggle);
+        return;
+      }
+      var verdict=ev.target&&ev.target.closest?ev.target.closest('.td-verdict'):null;
+      if(verdict&&currentTodayInsight){
+        var value=verdict.getAttribute('data-verdict');
+        var payload=B.insightUI.feedbackPayload(currentTodayInsight,value);
+        if(!payload||verdict.getAttribute('data-insight-id')!==currentTodayInsight.id)return;
+        var recorded=BHIVE.recordEvent('insight_feedback',{payload:payload});
+        if(recorded){
+          save();
+          var closure=todayEl.querySelector('.td-insight-answered');
+          if(closure)closure.focus();
+        }
+        return;
+      }
       var b=ev.target&&ev.target.closest?ev.target.closest('.td-next'):null;
       if(!b)return;
       var kind=b.getAttribute('data-kind');

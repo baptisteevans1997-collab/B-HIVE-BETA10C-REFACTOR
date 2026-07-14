@@ -1667,6 +1667,34 @@ em{font-style:italic}
 }
 .td-change{font-size:12.5px;line-height:1.55;color:var(--ink-2);margin-bottom:11px}
 .td-change em{color:var(--gold-2);font-style:italic}
+.td-insight{
+  margin:11px 0;padding:12px 0;border-top:1px solid var(--line-2);border-bottom:1px solid var(--line-2);
+}
+.td-insight-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:7px}
+.td-insight-k,.td-insight-quiet span,.td-insight-answered span{
+  display:block;font-family:var(--mono);font-size:9px;letter-spacing:0;text-transform:uppercase;color:var(--gold);
+}
+.td-confidence{font-size:10.5px;color:var(--sage);white-space:nowrap}
+.td-insight-read{margin:0;color:var(--ink);font-size:13px;line-height:1.55}
+.td-evidence-toggle{
+  margin:8px 0 0;padding:3px 0;border:0;background:transparent;color:var(--gold-2);
+  font:600 11.5px/1.4 var(--sans);cursor:pointer;text-decoration:underline;text-underline-offset:3px;
+}
+.td-evidence{margin:8px 0 0;max-height:180px;overflow:auto;color:var(--ink-2);font-size:11.5px;line-height:1.5}
+.td-evidence ol{margin:0;padding-left:20px}
+.td-evidence li+li{margin-top:5px}
+.td-feedback{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:11px}
+.td-feedback-q{width:100%;font-size:11px;color:var(--ink-3)}
+.td-verdict{
+  min-height:30px;padding:5px 9px;border:1px solid var(--line-2);border-radius:4px;
+  background:rgba(16,13,8,.38);color:var(--ink-2);font:600 11px/1.2 var(--sans);cursor:pointer;
+}
+.td-verdict:hover{border-color:var(--gold);color:var(--ink);background:rgba(201,174,120,.12)}
+.td-insight-quiet,.td-insight-answered{
+  margin:11px 0;padding:10px 0;border-top:1px solid var(--line-2);border-bottom:1px solid var(--line-2);
+  color:var(--ink-2);font-size:12px;line-height:1.5;
+}
+.td-insight-quiet span,.td-insight-answered span{margin-bottom:4px}
 .td-why{font-size:12px;line-height:1.5;color:var(--ink-2);margin-top:8px;padding-left:10px;border-left:2px solid var(--line-2)}
 .td-next{
   display:flex;align-items:center;gap:11px;width:100%;
@@ -1682,6 +1710,10 @@ em{font-style:italic}
 }
 .td-next-l{flex:1;font-size:13.5px;color:var(--ink);font-weight:600}
 .td-next-arrow{flex:none;color:var(--gold-2);font-size:15px}
+@media (max-width:680px){
+  .td-insight-head{align-items:flex-start}
+  .td-verdict{flex:1 1 calc(50% - 6px)}
+}
 /* attention marker: small breathing gold dot on the Next move target cell */
 .hive-att{fill:#f0cd72;pointer-events:none;animation:attPulse 1.8s ease-in-out infinite}
 @keyframes attPulse{0%,100%{opacity:.45}50%{opacity:1}}

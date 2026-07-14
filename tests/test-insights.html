@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>B HIVE Insight UI Tests (beta10c)</title>
+<link rel="stylesheet" href="../css/app.css?test=beta10c-stage3">
+<style>
+  body{background:#15120c;color:#ece4d2;font:14px/1.6 system-ui,sans-serif;max-width:780px;margin:40px auto;padding:0 20px}
+  h1{color:#c9ae78;font-size:20px;border-bottom:1px solid rgba(237,228,210,.1);padding-bottom:10px}
+  .test{padding:6px 10px;margin:3px 0;border-radius:4px;font:12px/1.5 monospace}
+  .pass{background:rgba(148,160,109,.15);color:#a3b07f}.fail{background:rgba(207,140,84,.2);color:#cf8c54}
+  .summary{margin-top:24px;padding:12px;border:1px solid #c9ae78;border-radius:8px}.summary b{color:#e2c890}
+</style>
+</head>
+<body>
+<h1>B HIVE Evidence-backed Insight UI Tests</h1>
+<div id="results"></div>
+<div id="sandbox" hidden></div>
+<script src="../js/bhive-data.js?test=beta10c-stage3"></script>
+<script src="../js/bhive-engine.js?test=beta10c-stage3"></script>
+<script src="../js/bhive-learning.js?test=beta10c-stage3"></script>
+<script src="../js/bhive-inference.js?test=beta10c-stage3"></script>
+<script src="../js/ui-insights.js?test=beta10c-stage3"></script>
+<script src="./fixtures/learning-fixtures.js?test=beta10c-stage3"></script>
+<script>
+(function(){
+  'use strict';
+  var I=BHIVE.inference,U=BHIVE.insightUI,F=BHIVE_TEST_FIXTURES;
+  var out=document.getElementById('results'),box=document.getElementById('sandbox'),passed=0,failed=0;
+  function test(name,fn){
+    var ok=false,msg='';
+    try{ok=!!fn();}catch(e){msg=' - threw: '+e.message;}
+    out.innerHTML+='<div class="test '+(ok?'pass':'fail')+'">'+(ok?'PASS ':'FAIL ')+name+msg+'</div>';
+    if(ok)passed++;else failed++;
+  }
+  function cell(key){return F.cells.filter(function(c){return c.key===key;})[0];}
+  function rendered(){
+    var events=F.rising(),observation=I.trendObservation(events,cell('lw'),7,F.NOW);
+    box.innerHTML=U.renderInsight(observation,events,F.cells);
+    return {events:events,observation:observation,root:box.firstElementChild};
+  }
+
+  test('quiet state explains that evidence is still insufficient',function(){
+    return U.renderQuiet().indexOf('Nothing strong enough yet')>=0;
+  });
+  test('insight renderer shows the deterministic read and plain confidence label',function(){
+    var r=rendered();
+    return r.root.querySelector('.td-insight-read').textContent===r.observation.read&&
+      r.root.querySelector('.td-confidence').textContent===r.observation.confidenceLabel;
+  });
+  test('insight renderer does not expose numeric confidence',function(){
+    var r=rendered(),label=r.root.querySelector('.td-confidence').textContent;
+    return !/[0-9%]/.test(label)&&/pattern|signal/.test(label);
+  });
+  test('evidence disclosure is labelled and collapsed initially',function(){
+    var r=rendered(),button=r.root.querySelector('.td-evidence-toggle');
+    var panel=r.root.querySelector('#'+button.getAttribute('aria-controls'));
+    return button.getAttribute('aria-expanded')==='false'&&panel&&panel.hidden;
+  });
+  test('evidence disclosure toggles its panel and accessible state',function(){
+    var r=rendered(),button=r.root.querySelector('.td-evidence-toggle');
+    var panel=r.root.querySelector('#'+button.getAttribute('aria-controls'));
+    return U.toggleEvidence(button)===true&&!panel.hidden&&button.getAttribute('aria-expanded')==='true'&&
+      U.toggleEvidence(button)===false&&panel.hidden&&button.getAttribute('aria-expanded')==='false';
+  });
+  test('renderer provides exactly the four feedback choices',function(){
+    var r=rendered();
+    var values=Array.prototype.map.call(r.root.querySelectorAll('.td-verdict'),function(b){return b.dataset.verdict;});
+    return values.join('|')==='true|partly|wrong|not_now';
+  });
+  test('feedback payload accepts only explicit verdicts and copies evidence',function(){
+    var r=rendered(),payload=U.feedbackPayload(r.observation,'partly');
+    payload.evidenceEventIds.push('mutated_copy');
+    return payload.insightId===r.observation.id&&payload.evidenceKey===I.evidenceKey(r.observation)&&
+      payload.verdict==='partly'&&r.observation.evidenceEventIds.indexOf('mutated_copy')<0&&
+      U.feedbackPayload(r.observation,'maybe')===null;
+  });
+  test('feedback payload persists as an append-only learning event',function(){
+    var r=rendered(),state=BHIVE.learningTools.emptyState();
+    var event=BHIVE.learningTools.createEvent('insight_feedback',{
+      ts:F.NOW,payload:U.feedbackPayload(r.observation,'true')
+    });
+    var appended=BHIVE.learningTools.appendEvent(state,event);
+    var restored=BHIVE.learningTools.normalizeState(state);
+    return !!appended&&restored.events.length===1&&restored.events[0].type==='insight_feedback'&&
+      restored.events[0].payload.verdict==='true';
+  });
+  test('check-in evidence includes its exact date and values',function(){
+    var r=rendered();
+    return r.root.querySelector('.td-evidence').textContent.indexOf('14 Jul 2026 - Main Project check-in: energy 62, importance 80.')>=0;
+  });
+  test('user-authored evidence is escaped before rendering',function(){
+    var event={id:'unsafe',type:'learning_added',ts:F.NOW,cellKey:'lw',payload:{source:'you',text:'<img src=x onerror=alert(1)>'}};
+    var observation={id:'obs_safe',read:'A safe read.',confidenceLabel:'early signal',evidenceEventIds:['unsafe']};
+    box.innerHTML=U.renderInsight(observation,[event],F.cells);
+    return !box.querySelector('img')&&box.textContent.indexOf('<img src=x onerror=alert(1)>')>=0;
+  });
+  test('missing evidence records fail visibly instead of inventing detail',function(){
+    var observation={id:'obs_missing',read:'A read.',confidenceLabel:'early signal',evidenceEventIds:['gone']};
+    return U.renderInsight(observation,[],F.cells).indexOf('Evidence record unavailable.')>=0;
+  });
+  test('latest feedback today ignores older feedback',function(){
+    var r=rendered();
+    var yesterday=F.insightFeedback(1,r.observation,'true');
+    var today=F.insightFeedback(0,r.observation,'partly');
+    return U.latestFeedbackToday([today,yesterday],F.NOW).payload.verdict==='partly';
+  });
+  test('feedback closure uses the recorded verdict without another insight',function(){
+    var r=rendered(),feedback=F.insightFeedback(0,r.observation,'wrong');
+    box.innerHTML=U.renderAnswered(feedback);
+    return !!box.querySelector('.td-insight-answered')&&box.textContent.indexOf('Corrected.')>=0&&
+      !box.querySelector('.td-verdict');
+  });
+
+  if(location.search.indexOf('visual=1')>=0){
+    document.querySelector('h1').hidden=true;
+    out.hidden=true;
+    box.hidden=false;
+    rendered();
+  }
+
+  out.innerHTML+='<div class="summary"><b>'+passed+' passed</b>, '+failed+' failed - '+
+    Math.round(passed/(passed+failed)*100)+'% pass rate</div>';
+})();
+</script>
+</body>
+</html>

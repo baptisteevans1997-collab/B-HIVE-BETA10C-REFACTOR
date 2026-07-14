@@ -30,9 +30,18 @@
   function queenMessage(daysAgo,text,role){
     return event('queen_message',daysAgo,{content:text,role:role||'user'});
   }
+  function insightFeedback(daysAgo,observation,verdict,hourOffset){
+    return event('insight_feedback',daysAgo,{
+      insightId:observation.id,
+      evidenceKey:(root.BHIVE&&root.BHIVE.inference)?root.BHIVE.inference.evidenceKey(observation):'',
+      evidenceEventIds:(observation.evidenceEventIds||[]).slice(),
+      verdict:verdict
+    },null,hourOffset);
+  }
   root.BHIVE_TEST_FIXTURES={
     DAY:DAY,NOW:NOW,event:event,checkin:checkin,trend:trend,
     userLearning:userLearning,claudeLearning:claudeLearning,queenMessage:queenMessage,
+    insightFeedback:insightFeedback,
     cells:[
       {key:'lw',label:'Main Project',imp:80,en:50},
       {key:'health',label:'Health',imp:85,en:35},

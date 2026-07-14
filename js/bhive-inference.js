@@ -172,12 +172,45 @@
     return out;
   }
 
+  function evidenceKey(obs){
+    return unique((obs&&obs.evidenceEventIds)||[]).sort().join('|');
+  }
+  function latestInsightFeedback(events,obs){
+    var latest=null,id=obs&&obs.id;
+    (events||[]).forEach(function(e){
+      if(!e||e.type!=='insight_feedback'||!e.payload||e.payload.insightId!==id)return;
+      if(!latest||e.ts>latest.ts)latest=e;
+    });
+    return latest?clone(latest):null;
+  }
+  function feedbackEffect(obs,options){
+    options=options||{};
+    var feedback=latestInsightFeedback(options.feedbackEvents,obs);
+    var effect={feedback:feedback,suppress:false,confidenceDelta:0,repetitionPenalty:0};
+    if(!feedback||!feedback.payload||feedback.payload.evidenceKey!==evidenceKey(obs))return effect;
+    var verdict=feedback.payload.verdict;
+    if(verdict==='wrong')effect.suppress=true;
+    else if(verdict==='not_now'){
+      if(validNow(options.now)){
+        var age=Math.floor((options.now-feedback.ts)/DAY);
+        effect.suppress=age>=0&&age<7;
+      }
+    }else if(verdict==='true'){
+      effect.confidenceDelta=0.12;effect.repetitionPenalty=0.18;
+    }else if(verdict==='partly'){
+      effect.confidenceDelta=0.03;effect.repetitionPenalty=0.12;
+    }
+    return effect;
+  }
+
   function scoreObservation(obs,options){
     options=options||{};
     if(!obs||obs.status!=='ready'||!obs.evidenceEventIds||!obs.evidenceEventIds.length)return -1;
-    var recent=options.recentInsightIds||[],repeat=recent.indexOf(obs.id)>=0?0.35:0;
+    var effect=feedbackEffect(obs,options);
+    if(effect.suppress)return -1;
+    var recent=options.recentInsightIds||[],repeat=(recent.indexOf(obs.id)>=0?0.35:0)+effect.repetitionPenalty;
     var uncertainty=clamp01(obs.uncertaintyPenalty||0);
-    var score=clamp01(obs.confidence)*clamp01(obs.recency)*
+    var score=clamp01(obs.confidence+effect.confidenceDelta)*clamp01(obs.recency)*
       (0.35+0.65*clamp01(obs.actionability))*(0.35+0.65*clamp01(obs.novelty))*
       (0.35+0.65*clamp01(obs.impact))-repeat-uncertainty*0.12;
     return Math.round(score*10000)/10000;
@@ -215,6 +248,9 @@
     themeObservations:themeObservations,
     matchesTheme:matchesTheme,
     confidenceLabel:confidenceLabel,
+    evidenceKey:evidenceKey,
+    latestInsightFeedback:latestInsightFeedback,
+    feedbackEffect:feedbackEffect,
     scoreObservation:scoreObservation,
     rankInsights:rankInsights,
     generate:generate

@@ -127,6 +127,47 @@
     var ranked=I.rankInsights([a,b],{recentInsightIds:[a.id]});
     return ranked.primary&&ranked.primary.observation.id===b.id;
   });
+  test('evidence keys are stable across event order and duplicates',function(){
+    return I.evidenceKey({evidenceEventIds:['b','a','b']})==='a|b';
+  });
+  test('latest feedback wins for an insight',function(){
+    var o=I.trendObservation(F.rising(),cell('lw'),7,F.NOW);
+    var older=F.insightFeedback(2,o,'true');
+    var newer=F.insightFeedback(1,o,'wrong');
+    return I.latestInsightFeedback([newer,older],o).payload.verdict==='wrong';
+  });
+  test('wrong feedback suppresses the same evidence',function(){
+    var o=I.trendObservation(F.rising(),cell('lw'),7,F.NOW);
+    var feedback=F.insightFeedback(0,o,'wrong');
+    return I.scoreObservation(o,{feedbackEvents:[feedback],now:F.NOW})===-1;
+  });
+  test('wrong feedback does not suppress changed evidence',function(){
+    var o=I.trendObservation(F.rising(),cell('lw'),7,F.NOW);
+    var feedback=F.insightFeedback(0,o,'wrong');
+    o.evidenceEventIds=o.evidenceEventIds.concat('new_evidence');
+    return I.scoreObservation(o,{feedbackEvents:[feedback],now:F.NOW})>=0;
+  });
+  test('not now suppresses matching evidence for seven days',function(){
+    var o=I.trendObservation(F.rising(),cell('lw'),7,F.NOW);
+    var recent=F.insightFeedback(6,o,'not_now');
+    var expired=F.insightFeedback(7,o,'not_now');
+    return I.scoreObservation(o,{feedbackEvents:[recent],now:F.NOW})===-1&&
+      I.scoreObservation(o,{feedbackEvents:[expired],now:F.NOW})>=0;
+  });
+  test('not now does not suppress without an explicit reference time',function(){
+    var o=I.trendObservation(F.rising(),cell('lw'),7,F.NOW);
+    return I.scoreObservation(o,{feedbackEvents:[F.insightFeedback(0,o,'not_now')]})>=0;
+  });
+  test('true and partly feedback adjust ranking without mutating evidence',function(){
+    var o=I.trendObservation(F.rising(),cell('lw'),7,F.NOW),before=JSON.stringify(o);
+    var yesEvent=F.insightFeedback(0,o,'true'),partlyEvent=F.insightFeedback(0,o,'partly');
+    var yes=I.feedbackEffect(o,{feedbackEvents:[yesEvent],now:F.NOW});
+    var partly=I.feedbackEffect(o,{feedbackEvents:[partlyEvent],now:F.NOW});
+    var baseScore=I.scoreObservation(o),yesScore=I.scoreObservation(o,{feedbackEvents:[yesEvent],now:F.NOW});
+    var partlyScore=I.scoreObservation(o,{feedbackEvents:[partlyEvent],now:F.NOW});
+    return yes.confidenceDelta>partly.confidenceDelta&&yes.repetitionPenalty>partly.repetitionPenalty&&
+      yesScore!==baseScore&&partlyScore!==baseScore&&JSON.stringify(o)===before;
+  });
   test('ranking does not mutate observations',function(){
     var observations=[I.trendObservation(F.rising(),cell('lw'),7,F.NOW)];
     var before=JSON.stringify(observations);I.rankInsights(observations);
