@@ -2865,7 +2865,7 @@
         els[i].setAttribute('aria-label',c.full+(st==='dormant'?' (asleep)':''));
       }
     }
-    var currentTodayInsight=null;
+    var currentTodayInsight=null,currentTodayExperiment=null;
     function renderToday(){
       var el=document.getElementById('hive-today');
       if(!el)return;
@@ -2900,14 +2900,32 @@
           change='Since last check-in, '+parts.join(' and ')+'.';
         }
       }
-      var insight='';
+      var insight='',experimentOwnsNextMove=false;
       currentTodayInsight=null;
+      currentTodayExperiment=null;
       if(B.inference&&B.insightUI){
         var answered=B.insightUI.latestFeedbackToday(events,now);
-        if(answered)insight=B.insightUI.renderAnswered(answered);
-        else{
+        var pending=!answered&&B.experiments?B.experiments.latestPendingFeedback(events,now):null;
+        var answeredVerdict=answered&&answered.payload&&answered.payload.verdict;
+        var proposalFeedback=(answeredVerdict==='true'||answeredVerdict==='partly')?answered:pending;
+        var active=B.experiments&&B.experimentUI?B.experiments.activeExperiment(events):null;
+        var closed=!active&&B.experiments&&B.experimentUI?B.experiments.latestClosedToday(events,now):null;
+        if(active){
+          currentTodayExperiment=active;
+          experimentOwnsNextMove=true;
+          insight=B.experimentUI.renderActive(active,now);
+        }else if(closed){
+          insight=B.experimentUI.renderClosed(closed);
+        }else{
           var generated=B.inference.generate(events,cells,now,{ranking:{feedbackEvents:events,now:now}});
-          if(generated.insights.primary){
+          var proposal=proposalFeedback&&B.experiments&&B.experimentUI?
+            B.experiments.proposalForFeedback(proposalFeedback,generated.observations,cells,events,now):null;
+          if(proposal){
+            currentTodayExperiment=proposal;
+            experimentOwnsNextMove=true;
+            insight=B.experimentUI.renderProposal(proposal);
+          }else if(answered)insight=B.insightUI.renderAnswered(answered);
+          else if(generated.insights.primary){
             currentTodayInsight=generated.insights.primary.observation;
             insight=B.insightUI.renderInsight(currentTodayInsight,events,cells);
           }else insight=B.insightUI.renderQuiet();
@@ -2917,14 +2935,15 @@
         '<div class="td-status">'+B.esc(status)+'</div>'+
         (change?'<div class="td-change">'+change+'</div>':'')+
         insight+
-        '<button class="td-next" type="button" data-kind="'+mv.kind+'"'+
-          (mv.idx!==undefined?' data-idx="'+mv.idx+'"':'')+'>'+
-          '<span class="td-next-k">Next move</span>'+
-          '<span class="td-next-l">'+B.esc(mv.label)+'</span>'+
-          '<span class="td-next-arrow">&rarr;</span>'+
-        '</button>'+
-        '<div class="td-why">'+B.esc(whyMove(mv))+'</div>';
-      updateAttentionMarker(mv);
+        (experimentOwnsNextMove?'':
+          '<button class="td-next" type="button" data-kind="'+mv.kind+'"'+
+            (mv.idx!==undefined?' data-idx="'+mv.idx+'"':'')+'>'+
+            '<span class="td-next-k">Next move</span>'+
+            '<span class="td-next-l">'+B.esc(mv.label)+'</span>'+
+            '<span class="td-next-arrow">&rarr;</span>'+
+          '</button>'+
+          '<div class="td-why">'+B.esc(whyMove(mv))+'</div>');
+      updateAttentionMarker(experimentOwnsNextMove?null:mv);
     }
 
     /* ── wire it up ── */
@@ -3087,6 +3106,78 @@
         B.insightUI.toggleEvidence(toggle);
         return;
       }
+      var expEdit=ev.target&&ev.target.closest?ev.target.closest('.td-exp-edit'):null;
+      var expEditCancel=ev.target&&ev.target.closest?ev.target.closest('.td-exp-edit-cancel'):null;
+      if((expEdit||expEditCancel)&&currentTodayExperiment&&
+         B.experimentUI.matches(expEdit||expEditCancel,currentTodayExperiment)){
+        B.experimentUI.toggleEditor(expEdit||expEditCancel);
+        return;
+      }
+      var expAccept=ev.target&&ev.target.closest?ev.target.closest('.td-exp-accept'):null;
+      if(expAccept&&currentTodayExperiment&&B.experimentUI.matches(expAccept,currentTodayExperiment)){
+        var acceptedPayload=B.experiments.decisionPayload(currentTodayExperiment,'accepted');
+        if(acceptedPayload&&BHIVE.recordEvent('experiment_accepted',{
+          cellKey:acceptedPayload.cellKey,payload:acceptedPayload
+        })){
+          save();
+          var activeExperiment=todayEl.querySelector('.td-exp-active');
+          if(activeExperiment)activeExperiment.focus();
+        }
+        return;
+      }
+      var expEditSave=ev.target&&ev.target.closest?ev.target.closest('.td-exp-edit-save'):null;
+      if(expEditSave&&currentTodayExperiment&&B.experimentUI.matches(expEditSave,currentTodayExperiment)){
+        var editorRoot=expEditSave.closest('.td-experiment');
+        var editFields=editorRoot.querySelectorAll('.td-exp-input'),fieldIndex;
+        for(fieldIndex=0;fieldIndex<editFields.length;fieldIndex++){
+          if(!editFields[fieldIndex].checkValidity()){
+            editFields[fieldIndex].reportValidity();
+            return;
+          }
+        }
+        var editedPayload=B.experiments.decisionPayload(
+          currentTodayExperiment,'edited',B.experimentUI.readEdits(editorRoot));
+        if(editedPayload&&BHIVE.recordEvent('experiment_edited',{
+          cellKey:editedPayload.cellKey,payload:editedPayload
+        })){
+          save();
+          activeExperiment=todayEl.querySelector('.td-exp-active');
+          if(activeExperiment)activeExperiment.focus();
+        }
+        return;
+      }
+      var expReport=ev.target&&ev.target.closest?ev.target.closest('.td-exp-report'):null;
+      if(expReport&&currentTodayExperiment&&B.experimentUI.matches(expReport,currentTodayExperiment)){
+        B.experimentUI.toggleOutcomes(expReport);
+        return;
+      }
+      var expOutcome=ev.target&&ev.target.closest?ev.target.closest('.td-exp-outcome'):null;
+      if(expOutcome&&currentTodayExperiment&&currentTodayExperiment.status==='active'&&
+         B.experimentUI.matches(expOutcome,currentTodayExperiment)){
+        var completedPayload=B.experiments.completionPayload(
+          currentTodayExperiment,expOutcome.getAttribute('data-outcome'));
+        if(completedPayload&&BHIVE.recordEvent('experiment_completed',{
+          cellKey:completedPayload.cellKey,payload:completedPayload
+        })){
+          save();
+          var completedExperiment=todayEl.querySelector('.td-experiment-closed');
+          if(completedExperiment)completedExperiment.focus();
+        }
+        return;
+      }
+      var expDecline=ev.target&&ev.target.closest?ev.target.closest('.td-exp-decline'):null;
+      if(expDecline&&currentTodayExperiment&&B.experimentUI.matches(expDecline,currentTodayExperiment)){
+        var declinedPayload=B.experiments.declinePayload(currentTodayExperiment,
+          currentTodayExperiment.status==='active'?'stopped':'not_now');
+        if(declinedPayload&&BHIVE.recordEvent('experiment_declined',{
+          cellKey:declinedPayload.cellKey,payload:declinedPayload
+        })){
+          save();
+          var declinedExperiment=todayEl.querySelector('.td-experiment-closed');
+          if(declinedExperiment)declinedExperiment.focus();
+        }
+        return;
+      }
       var verdict=ev.target&&ev.target.closest?ev.target.closest('.td-verdict'):null;
       if(verdict&&currentTodayInsight){
         var value=verdict.getAttribute('data-verdict');
@@ -3095,8 +3186,8 @@
         var recorded=BHIVE.recordEvent('insight_feedback',{payload:payload});
         if(recorded){
           save();
-          var closure=todayEl.querySelector('.td-insight-answered');
-          if(closure)closure.focus();
+          var response=todayEl.querySelector('.td-experiment')||todayEl.querySelector('.td-insight-answered');
+          if(response)response.focus();
         }
         return;
       }

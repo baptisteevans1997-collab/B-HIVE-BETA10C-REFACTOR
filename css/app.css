@@ -1695,6 +1695,42 @@ em{font-style:italic}
   color:var(--ink-2);font-size:12px;line-height:1.5;
 }
 .td-insight-quiet span,.td-insight-answered span{margin-bottom:4px}
+.td-experiment{
+  margin:11px 0;padding:12px 0;border-top:1px solid var(--line-2);border-bottom:1px solid var(--line-2);
+}
+.td-exp-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}
+.td-exp-k,.td-experiment-closed span{
+  display:block;font-family:var(--mono);font-size:9px;letter-spacing:0;text-transform:uppercase;color:var(--gold);
+}
+.td-exp-time{font-size:10.5px;color:var(--sage);white-space:nowrap}
+.td-exp-source,.td-exp-state{margin:0 0 8px;color:var(--ink-3);font-size:11px;line-height:1.45}
+.td-exp-action{margin:0;color:var(--ink);font-size:13px;font-weight:600;line-height:1.5}
+.td-exp-done{margin:7px 0 0;color:var(--ink-2);font-size:11.5px;line-height:1.5}
+.td-exp-done span{display:block;color:var(--gold-2);font-size:10px;font-weight:600;text-transform:uppercase}
+.td-exp-actions,.td-exp-editor-actions,.td-exp-outcomes{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:11px}
+.td-exp-editor[hidden],.td-exp-outcomes[hidden]{display:none}
+.td-exp-btn{
+  min-height:32px;padding:6px 10px;border:1px solid var(--line-2);border-radius:4px;
+  background:rgba(16,13,8,.38);color:var(--ink-2);font:600 11px/1.2 var(--sans);cursor:pointer;
+}
+.td-exp-accept,.td-exp-edit-save{
+  border-color:rgba(201,174,120,.62);background:rgba(201,174,120,.15);color:var(--ink);
+}
+.td-exp-btn:hover{border-color:var(--gold);color:var(--ink);background:rgba(201,174,120,.12)}
+.td-exp-btn:focus-visible,.td-exp-input:focus-visible{outline:2px solid var(--gold-2);outline-offset:2px}
+.td-exp-editor{margin-top:11px;padding-top:10px;border-top:1px solid var(--line-2)}
+.td-exp-editor label{display:block;margin:8px 0 4px;color:var(--gold-2);font-size:10px;font-weight:600;text-transform:uppercase}
+.td-exp-input{
+  display:block;box-sizing:border-box;width:100%;min-height:54px;resize:vertical;padding:8px 9px;
+  border:1px solid var(--line-2);border-radius:4px;background:rgba(10,9,6,.58);color:var(--ink);
+  font:12px/1.45 var(--sans);
+}
+.td-exp-question{width:100%;font-size:11px;color:var(--ink-3)}
+.td-experiment-closed{
+  margin:11px 0;padding:10px 0;border-top:1px solid var(--line-2);border-bottom:1px solid var(--line-2);
+  color:var(--ink-2);font-size:12px;line-height:1.5;
+}
+.td-experiment-closed span{margin-bottom:4px}
 .td-why{font-size:12px;line-height:1.5;color:var(--ink-2);margin-top:8px;padding-left:10px;border-left:2px solid var(--line-2)}
 .td-next{
   display:flex;align-items:center;gap:11px;width:100%;
@@ -1713,6 +1749,8 @@ em{font-style:italic}
 @media (max-width:680px){
   .td-insight-head{align-items:flex-start}
   .td-verdict{flex:1 1 calc(50% - 6px)}
+  .td-exp-head{align-items:flex-start}
+  .td-exp-outcome{flex:1 1 calc(50% - 6px)}
 }
 /* attention marker: small breathing gold dot on the Next move target cell */
 .hive-att{fill:#f0cd72;pointer-events:none;animation:attPulse 1.8s ease-in-out infinite}

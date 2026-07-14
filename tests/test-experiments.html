@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>B HIVE Experiment Loop Tests (beta10c)</title>
+<link rel="stylesheet" href="../css/app.css?test=beta10c-stage4">
+<style>
+  body{background:#15120c;color:#ece4d2;font:14px/1.6 system-ui,sans-serif;max-width:780px;margin:40px auto;padding:0 20px}
+  h1{color:#c9ae78;font-size:20px;border-bottom:1px solid rgba(237,228,210,.1);padding-bottom:10px}
+  .test{padding:6px 10px;margin:3px 0;border-radius:4px;font:12px/1.5 monospace}
+  .pass{background:rgba(148,160,109,.15);color:#a3b07f}.fail{background:rgba(207,140,84,.2);color:#cf8c54}
+  .summary{margin-top:24px;padding:12px;border:1px solid #c9ae78;border-radius:8px}.summary b{color:#e2c890}
+</style>
+</head>
+<body>
+<h1>B HIVE Deterministic Experiment Loop Tests</h1>
+<div id="results"></div>
+<div id="sandbox" hidden></div>
+<script src="../js/bhive-data.js?test=beta10c-stage4"></script>
+<script src="../js/bhive-engine.js?test=beta10c-stage4"></script>
+<script src="../js/bhive-learning.js?test=beta10c-stage4"></script>
+<script src="../js/bhive-inference.js?test=beta10c-stage4"></script>
+<script src="../js/bhive-experiments.js?test=beta10c-stage4"></script>
+<script src="../js/ui-experiments.js?test=beta10c-stage4"></script>
+<script src="./fixtures/learning-fixtures.js?test=beta10c-stage4"></script>
+<script>
+(function(){
+  'use strict';
+  var I=BHIVE.inference,X=BHIVE.experiments,U=BHIVE.experimentUI,F=BHIVE_TEST_FIXTURES;
+  var out=document.getElementById('results'),box=document.getElementById('sandbox'),passed=0,failed=0,eventSeq=0;
+  function test(name,fn){
+    var ok=false,msg='';
+    try{ok=!!fn();}catch(e){msg=' - threw: '+e.message;}
+    out.innerHTML+='<div class="test '+(ok?'pass':'fail')+'">'+(ok?'PASS ':'FAIL ')+name+msg+'</div>';
+    if(ok)passed++;else failed++;
+  }
+  function cell(key){return F.cells.filter(function(item){return item.key===key;})[0];}
+  function source(verdict){
+    var events=F.rising(),observation=I.trendObservation(events,cell('lw'),7,F.NOW);
+    var feedback=F.insightFeedback(0,observation,verdict||'true');
+    var all=events.concat(feedback);
+    return {
+      evidence:events,
+      observation:observation,
+      feedback:feedback,
+      events:all,
+      proposal:X.proposalForFeedback(feedback,[observation],F.cells,all,F.NOW)
+    };
+  }
+  function experimentEvent(type,payload,offset){
+    eventSeq++;
+    return {id:'experiment_fixture_'+eventSeq,type:type,ts:F.NOW+(offset||0),cellKey:payload.cellKey||null,payload:payload};
+  }
+  function accepted(sourceData,offset){
+    var payload=X.decisionPayload(sourceData.proposal,'accepted');
+    return experimentEvent('experiment_accepted',payload,offset||1);
+  }
+
+  test('true feedback creates one evidence-linked proposal',function(){
+    var data=source(),proposal=data.proposal;
+    return proposal&&proposal.insightId===data.observation.id&&
+      proposal.evidenceKey===I.evidenceKey(data.observation)&&
+      proposal.evidenceEventIds.length===data.observation.evidenceEventIds.length;
+  });
+  test('partly feedback can create a tentative proposal',function(){
+    var data=source('partly');
+    return data.proposal&&data.proposal.sourceVerdict==='partly';
+  });
+  test('wrong feedback never creates an experiment',function(){return source('wrong').proposal===null;});
+  test('not-now feedback never creates an experiment',function(){return source('not_now').proposal===null;});
+  test('a proposal requires the exact observation and evidence set',function(){
+    var data=source();
+    return X.proposalForFeedback(data.feedback,[],F.cells,data.events,F.NOW)===null;
+  });
+  test('proposal generation is deterministic for a fixed time',function(){
+    var data=source();
+    return JSON.stringify(data.proposal)===JSON.stringify(
+      X.proposalForFeedback(data.feedback,[data.observation],F.cells,data.events,F.NOW));
+  });
+  test('proposal generation does not mutate evidence or observations',function(){
+    var data=source(),eventsBefore=JSON.stringify(data.events),observationBefore=JSON.stringify(data.observation);
+    X.proposalForFeedback(data.feedback,[data.observation],F.cells,data.events,F.NOW);
+    return JSON.stringify(data.events)===eventsBefore&&JSON.stringify(data.observation)===observationBefore;
+  });
+  test('accepted payload is a defensive lifecycle record',function(){
+    var data=source(),payload=X.decisionPayload(data.proposal,'accepted');
+    payload.evidenceEventIds.push('changed');
+    return payload.decision==='accepted'&&data.proposal.evidenceEventIds.indexOf('changed')<0;
+  });
+  test('edited payload keeps identity and uses validated edits',function(){
+    var data=source(),payload=X.decisionPayload(data.proposal,'edited',{
+      action:'  Try my own smaller action  ',measure:'  Do it once and compare  '
+    });
+    return payload.experimentId===data.proposal.experimentId&&payload.decision==='edited'&&
+      payload.action==='Try my own smaller action'&&payload.measure==='Do it once and compare';
+  });
+  test('blank edited actions are rejected',function(){
+    var data=source();
+    return X.decisionPayload(data.proposal,'edited',{action:' ',measure:'Done once'})===null;
+  });
+  test('malformed durations are rejected instead of becoming NaN',function(){
+    var data=source(),malformed=JSON.parse(JSON.stringify(data.proposal));
+    delete malformed.durationDays;
+    return X.decisionPayload(malformed,'accepted')===null;
+  });
+  test('an accepted event restores one active experiment',function(){
+    var data=source(),event=accepted(data),active=X.activeExperiment(data.events.concat(event));
+    return active&&active.status==='active'&&active.experimentId===data.proposal.experimentId;
+  });
+  test('an edited event becomes active with the edited text',function(){
+    var data=source(),payload=X.decisionPayload(data.proposal,'edited',{action:'Try one custom move',measure:'Complete it once'});
+    var active=X.activeExperiment(data.events.concat(experimentEvent('experiment_edited',payload,1)));
+    return active&&active.action==='Try one custom move'&&active.measure==='Complete it once';
+  });
+  test('declining closes an experiment without leaving it active',function(){
+    var data=source(),accept=accepted(data,1),decline=X.declinePayload(data.proposal,'stopped');
+    var events=data.events.concat([accept,experimentEvent('experiment_declined',decline,2)]);
+    return X.lifecycle(events,data.proposal.experimentId).status==='declined'&&X.activeExperiment(events)===null;
+  });
+  test('completion closes an experiment and preserves its outcome',function(){
+    var data=source(),accept=accepted(data,1),complete=X.completionPayload(data.proposal,'helped');
+    var events=data.events.concat([accept,experimentEvent('experiment_completed',complete,2)]);
+    var state=X.lifecycle(events,data.proposal.experimentId);
+    return state.status==='completed'&&state.outcome==='helped'&&X.activeExperiment(events)===null;
+  });
+  test('unsupported completion outcomes are rejected',function(){
+    return X.completionPayload(source().proposal,'perhaps')===null;
+  });
+  test('the newest active lifecycle wins if synced data conflicts',function(){
+    var first=source(),second=source(),secondProposal=JSON.parse(JSON.stringify(second.proposal));
+    secondProposal.experimentId='exp_second';secondProposal.insightId='obs_second';secondProposal.evidenceKey='second_evidence';
+    var events=first.events.concat([accepted(first,1),experimentEvent('experiment_accepted',X.decisionPayload(secondProposal,'accepted'),2)]);
+    return X.activeExperiment(events).experimentId==='exp_second';
+  });
+  test('finishing a newer synced experiment does not revive an older one',function(){
+    var first=source(),second=source(),secondProposal=JSON.parse(JSON.stringify(second.proposal));
+    secondProposal.experimentId='exp_second';secondProposal.insightId='obs_second';secondProposal.evidenceKey='second_evidence';
+    var events=first.events.concat([
+      accepted(first,1),
+      experimentEvent('experiment_accepted',X.decisionPayload(secondProposal,'accepted'),2),
+      experimentEvent('experiment_completed',X.completionPayload(secondProposal,'helped'),3)
+    ]);
+    return X.activeExperiment(events)===null;
+  });
+  test('same-millisecond lifecycle events retain append order',function(){
+    var data=source(),accept=accepted(data,1),complete=experimentEvent(
+      'experiment_completed',X.completionPayload(data.proposal,'helped'),1);
+    var events=data.events.concat([accept,complete]);
+    return X.lifecycle(events,data.proposal.experimentId).status==='completed'&&X.activeExperiment(events)===null;
+  });
+  test('an active experiment blocks another proposal',function(){
+    var data=source(),events=data.events.concat(accepted(data));
+    return X.proposalForFeedback(data.feedback,[data.observation],F.cells,events,F.NOW)===null;
+  });
+  test('a prior decision blocks a duplicate proposal for the same evidence',function(){
+    var data=source(),decline=X.declinePayload(data.proposal,'not_now');
+    var events=data.events.concat(experimentEvent('experiment_declined',decline,1));
+    return X.decisionForFeedback(events,data.feedback).type==='experiment_declined'&&
+      X.proposalForFeedback(data.feedback,[data.observation],F.cells,events,F.NOW)===null;
+  });
+  test('recent unhandled trusted feedback can resume its proposal',function(){
+    var events=F.rising(),observation=I.trendObservation(events,cell('lw'),7,F.NOW);
+    var feedback=F.insightFeedback(1,observation,'true'),all=events.concat(feedback);
+    return X.latestPendingFeedback(all,F.NOW).id===feedback.id&&
+      !!X.proposalForFeedback(feedback,[observation],F.cells,all,F.NOW);
+  });
+  test('a decision removes trusted feedback from the pending queue',function(){
+    var events=F.rising(),observation=I.trendObservation(events,cell('lw'),7,F.NOW);
+    var feedback=F.insightFeedback(1,observation,'true'),all=events.concat(feedback);
+    var proposal=X.proposalForFeedback(feedback,[observation],F.cells,all,F.NOW);
+    all.push(experimentEvent('experiment_declined',X.declinePayload(proposal,'not_now'),1));
+    return X.latestPendingFeedback(all,F.NOW)===null;
+  });
+  test('negative and expired feedback never become pending experiments',function(){
+    var events=F.rising(),observation=I.trendObservation(events,cell('lw'),7,F.NOW);
+    var wrong=F.insightFeedback(1,observation,'wrong');
+    var expired=F.insightFeedback(8,observation,'true');
+    return X.latestPendingFeedback(events.concat([wrong,expired]),F.NOW)===null;
+  });
+  test('latest closed event is limited to the current local day',function(){
+    var data=source(),payload=X.completionPayload(data.proposal,'partly');
+    var yesterday=experimentEvent('experiment_completed',payload,-F.DAY);
+    var today=experimentEvent('experiment_completed',payload,2);
+    return X.latestClosedToday([today,yesterday],F.NOW).id===today.id&&
+      X.latestClosedToday([yesterday],F.NOW)===null;
+  });
+  test('a no-change outcome lowers that strategy on the next similar read',function(){
+    var data=source(),firstStrategy=data.proposal.strategyId;
+    var complete=X.completionPayload(data.proposal,'no_change');
+    var history=[experimentEvent('experiment_completed',complete,-F.DAY)];
+    var ranked=X.rankCandidates(X.candidatesFor(data.observation,F.cells),history,data.proposal.cellKey);
+    return ranked[0].candidate.strategyId!==firstStrategy&&ranked[0].stats.score===0;
+  });
+  test('a helpful outcome keeps that strategy preferred',function(){
+    var data=source(),complete=X.completionPayload(data.proposal,'helped');
+    var history=[experimentEvent('experiment_completed',complete,-F.DAY)];
+    var ranked=X.rankCandidates(X.candidatesFor(data.observation,F.cells),history,data.proposal.cellKey);
+    return ranked[0].candidate.strategyId===data.proposal.strategyId&&ranked[0].stats.completed===1;
+  });
+  test('declined strategies are gently deprioritised',function(){
+    var data=source(),decline=X.declinePayload(data.proposal,'not_now');
+    var history=[experimentEvent('experiment_declined',decline,-F.DAY)];
+    var ranked=X.rankCandidates(X.candidatesFor(data.observation,F.cells),history,data.proposal.cellKey);
+    return ranked[0].candidate.strategyId!==data.proposal.strategyId;
+  });
+  test('unknown observations do not receive generic invented advice',function(){
+    return X.candidatesFor({kind:'unknown',cellKeys:['lw']},F.cells).length===0;
+  });
+
+  test('proposal UI exposes try, edit, and not-now choices',function(){
+    var data=source();box.innerHTML=U.renderProposal(data.proposal);
+    return box.querySelectorAll('.td-exp-actions .td-exp-btn').length===3&&
+      box.firstElementChild.getAttribute('tabindex')==='-1'&&!!box.querySelector('.td-exp-accept')&&
+      !!box.querySelector('.td-exp-edit')&&!!box.querySelector('.td-exp-decline');
+  });
+  test('proposal edit fields are labelled and hidden initially',function(){
+    var data=source();box.innerHTML=U.renderProposal(data.proposal);
+    var editor=box.querySelector('.td-exp-editor'),button=box.querySelector('.td-exp-edit');
+    return editor.hidden&&button.getAttribute('aria-controls')===editor.id&&
+      editor.querySelectorAll('label').length===2&&editor.querySelectorAll('.td-exp-input[required]').length===2;
+  });
+  test('edit disclosure updates its accessible state',function(){
+    var data=source();box.innerHTML=U.renderProposal(data.proposal);
+    var button=box.querySelector('.td-exp-edit'),editor=box.querySelector('.td-exp-editor');
+    return U.toggleEditor(button)===true&&!editor.hidden&&button.getAttribute('aria-expanded')==='true'&&
+      U.toggleEditor(button)===false&&editor.hidden&&button.getAttribute('aria-expanded')==='false';
+  });
+  test('edit reader returns the current field values',function(){
+    var data=source();box.innerHTML=U.renderProposal(data.proposal);
+    box.querySelector('[data-exp-field="action"]').value='My changed action';
+    box.querySelector('[data-exp-field="measure"]').value='My changed finish line';
+    var edits=U.readEdits(box.firstElementChild);
+    return edits.action==='My changed action'&&edits.measure==='My changed finish line';
+  });
+  test('experiment text is escaped before rendering',function(){
+    var data=source(),unsafe=JSON.parse(JSON.stringify(data.proposal));
+    unsafe.action='<img src=x onerror=alert(1)>';box.innerHTML=U.renderProposal(unsafe);
+    return !box.querySelector('img')&&box.textContent.indexOf('<img src=x onerror=alert(1)>')>=0;
+  });
+  test('active experiment hides outcome choices before the due time',function(){
+    var data=source(),active=JSON.parse(JSON.stringify(data.proposal));active.status='active';
+    box.innerHTML=U.renderActive(active,F.NOW);
+    var outcomes=box.querySelector('.td-exp-outcomes');
+    return outcomes.hidden&&getComputedStyle(outcomes).display==='none'&&!!box.querySelector('.td-exp-report');
+  });
+  test('report-result disclosure reveals the four outcome choices',function(){
+    var data=source(),active=JSON.parse(JSON.stringify(data.proposal));active.status='active';
+    box.innerHTML=U.renderActive(active,F.NOW);
+    var button=box.querySelector('.td-exp-report'),outcomes=box.querySelector('.td-exp-outcomes');
+    return U.toggleOutcomes(button)===true&&!outcomes.hidden&&
+      outcomes.querySelectorAll('.td-exp-outcome').length===4&&button.getAttribute('aria-expanded')==='true'&&
+      button.getAttribute('aria-controls')===outcomes.id;
+  });
+  test('due experiments ask for an outcome immediately',function(){
+    var data=source(),active=JSON.parse(JSON.stringify(data.proposal));active.status='active';
+    box.innerHTML=U.renderActive(active,active.dueAt);
+    return !box.querySelector('.td-exp-outcomes').hidden&&!box.querySelector('.td-exp-report')&&
+      box.textContent.indexOf('The timebox is up')>=0;
+  });
+  test('completion closure explains how a no-change result is used',function(){
+    var data=source(),event=experimentEvent('experiment_completed',X.completionPayload(data.proposal,'no_change'),1);
+    box.innerHTML=U.renderClosed(event);
+    return !!box.querySelector('.td-experiment-closed')&&box.textContent.indexOf('lower this kind of move')>=0;
+  });
+
+  if(location.search.indexOf('visual=')>=0){
+    document.querySelector('h1').hidden=true;out.hidden=true;box.hidden=false;
+    var preview=source();
+    if(location.search.indexOf('visual=active')>=0){
+      preview.proposal.status='active';box.innerHTML=U.renderActive(preview.proposal,F.NOW);
+    }else box.innerHTML=U.renderProposal(preview.proposal);
+  }
+
+  out.innerHTML+='<div class="summary"><b>'+passed+' passed</b>, '+failed+' failed - '+
+    Math.round(passed/(passed+failed)*100)+'% pass rate</div>';
+})();
+</script>
+</body>
+</html>
