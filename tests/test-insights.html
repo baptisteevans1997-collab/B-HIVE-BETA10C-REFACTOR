@@ -71,8 +71,11 @@
   test('feedback payload accepts only explicit verdicts and copies evidence',function(){
     var r=rendered(),payload=U.feedbackPayload(r.observation,'partly');
     payload.evidenceEventIds.push('mutated_copy');
+    payload.memorySource.evidenceEventIds.push('mutated_memory_copy');
     return payload.insightId===r.observation.id&&payload.evidenceKey===I.evidenceKey(r.observation)&&
       payload.verdict==='partly'&&r.observation.evidenceEventIds.indexOf('mutated_copy')<0&&
+      payload.memorySource.read===r.observation.read&&
+      r.observation.evidenceEventIds.indexOf('mutated_memory_copy')<0&&
       U.feedbackPayload(r.observation,'maybe')===null;
   });
   test('feedback payload persists as an append-only learning event',function(){

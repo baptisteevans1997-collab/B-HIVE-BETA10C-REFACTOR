@@ -87,11 +87,22 @@
   function feedbackPayload(observation,verdict){
     var allowed={true:1,partly:1,wrong:1,not_now:1};
     if(!observation||!observation.id||!allowed[verdict]||!B.inference)return null;
+    var read=typeof observation.read==='string'?observation.read.replace(/\s+/g,' ').trim().slice(0,240):'';
+    var evidence=(observation.evidenceEventIds||[]).slice();
     return {
       insightId:observation.id,
       evidenceKey:B.inference.evidenceKey(observation),
-      evidenceEventIds:(observation.evidenceEventIds||[]).slice(),
-      verdict:verdict
+      evidenceEventIds:evidence,
+      verdict:verdict,
+      memorySource:{
+        kind:observation.kind||null,
+        classification:observation.classification||null,
+        themeId:observation.themeId||null,
+        cellKeys:(observation.cellKeys||[]).slice(0,4),
+        read:read,
+        confidence:typeof observation.confidence==='number'?observation.confidence:0,
+        evidenceEventIds:evidence.slice()
+      }
     };
   }
   function renderQuiet(){

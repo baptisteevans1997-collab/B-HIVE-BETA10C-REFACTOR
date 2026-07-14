@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>B HIVE Trusted Memory Tests (beta10c)</title>
+<style>
+  body{background:#15120c;color:#ece4d2;font:14px/1.6 system-ui,sans-serif;max-width:780px;margin:40px auto;padding:0 20px}
+  h1{color:#c9ae78;font-size:20px;border-bottom:1px solid rgba(237,228,210,.1);padding-bottom:10px}
+  .test{padding:6px 10px;margin:3px 0;border-radius:4px;font:12px/1.5 monospace}
+  .pass{background:rgba(148,160,109,.15);color:#a3b07f}.fail{background:rgba(207,140,84,.2);color:#cf8c54}
+  .summary{margin-top:24px;padding:12px;border:1px solid #c9ae78;border-radius:8px}.summary b{color:#e2c890}
+</style>
+</head>
+<body>
+<h1>B HIVE Trusted Personal Memory Tests</h1>
+<div id="results"></div>
+<script src="../js/bhive-data.js?test=beta10c-stage5a"></script>
+<script src="../js/bhive-engine.js?test=beta10c-stage5a"></script>
+<script src="../js/bhive-learning.js?test=beta10c-stage5a"></script>
+<script src="../js/bhive-inference.js?test=beta10c-stage5a"></script>
+<script src="../js/bhive-experiments.js?test=beta10c-stage5a"></script>
+<script src="../js/bhive-memory.js?test=beta10c-stage5a"></script>
+<script src="../js/ui-insights.js?test=beta10c-stage5a"></script>
+<script src="./fixtures/learning-fixtures.js?test=beta10c-stage5a"></script>
+<script>
+(function(){
+  'use strict';
+  var M=BHIVE.memoryModel,I=BHIVE.inference,L=BHIVE.learningTools,U=BHIVE.insightUI,F=BHIVE_TEST_FIXTURES;
+  var out=document.getElementById('results'),passed=0,failed=0,seq=0;
+  function test(name,fn){
+    var ok=false,msg='';
+    try{ok=!!fn();}catch(e){msg=' - threw: '+e.message;}
+    out.innerHTML+='<div class="test '+(ok?'pass':'fail')+'">'+(ok?'PASS ':'FAIL ')+name+msg+'</div>';
+    if(ok)passed++;else failed++;
+  }
+  function cell(key){return F.cells.filter(function(item){return item.key===key;})[0];}
+  function pattern(verdict,feedbackDays){
+    var events=F.rising(),observation=I.trendObservation(events,cell('lw'),7,F.NOW);
+    var feedback=F.insightFeedback(feedbackDays===undefined?0:feedbackDays,observation,verdict||'true');
+    return {events:events.concat(feedback),observation:observation,feedback:feedback};
+  }
+  function storedPattern(verdict){
+    var events=F.rising(),observation=I.trendObservation(events,cell('lw'),7,F.NOW);
+    var feedback=F.event('insight_feedback',0,U.feedbackPayload(observation,verdict||'true'));
+    return {events:events.concat(feedback),observation:observation,feedback:feedback};
+  }
+  function experiment(daysAgo,id,strategy,outcome,scope,source){
+    seq++;
+    source=source||F.userLearning(daysAgo+1,'Evidence for experiment '+id,scope||'lw');
+    var payload={
+      experimentId:id,insightId:'obs_'+id,
+      evidenceKey:M.evidenceKey([source.id]),evidenceEventIds:[source.id],
+      observationKind:'trend',classification:'rising',themeId:null,
+      cellKey:scope||'lw',strategyId:strategy||'protected_block',
+      action:'Try the action',measure:'Report the result',durationDays:5,
+      createdAt:source.ts,dueAt:F.NOW-daysAgo*F.DAY,
+      sourceVerdict:'true',sourceRead:'Evidence-backed source read',outcome:outcome
+    };
+    return {source:source,event:F.event('experiment_completed',daysAgo,payload,scope||'lw')};
+  }
+  function outcomeSet(outcomes,options){
+    options=options||{};
+    var events=[];
+    outcomes.forEach(function(outcome,index){
+      var days=options.sameDay?2:5-index*3;
+      var item=experiment(days,'exp_'+seq+'_'+index,options.strategy||'protected_block',outcome,
+        options.scope||'lw');
+      events.push(item.source,item.event);
+    });
+    return events;
+  }
+  function firstStrategyMemory(events){return M.strategyMemories(events,F.cells,F.NOW)[0]||null;}
+
+  test('learning store accepts the Stage 5A memory feedback event',function(){
+    return !!L.createEvent('memory_feedback',{ts:F.NOW,payload:{memoryId:'m',evidenceKey:'e',verdict:'true'}});
+  });
+  test('unconfirmed observations never become personal memories',function(){
+    var events=F.rising(),observation=I.trendObservation(events,cell('lw'),7,F.NOW);
+    return M.patternMemory(observation,events,F.NOW)===null;
+  });
+  test('true insight feedback creates a confirmed evidence-backed memory',function(){
+    var data=pattern('true'),memory=M.patternMemory(data.observation,data.events,F.NOW);
+    return memory&&memory.status==='confirmed'&&memory.userVerdict==='true'&&
+      memory.source==='confirmed_insight'&&memory.evidenceEventIds.indexOf(data.feedback.id)>=0&&
+      memory.evidenceKey===M.evidenceKey(memory.evidenceEventIds);
+  });
+  test('partly feedback keeps the memory explicitly tentative',function(){
+    var data=pattern('partly'),memory=M.patternMemory(data.observation,data.events,F.NOW);
+    return memory&&memory.status==='tentative'&&memory.userVerdict==='partly';
+  });
+  test('wrong and not-now insight feedback create no memory',function(){
+    var wrong=pattern('wrong'),later=pattern('not_now');
+    return M.patternMemory(wrong.observation,wrong.events,F.NOW)===null&&
+      M.patternMemory(later.observation,later.events,F.NOW)===null;
+  });
+  test('insight feedback must match the exact evidence set',function(){
+    var data=pattern('true');data.observation.evidenceEventIds.push('changed');
+    return M.patternMemory(data.observation,data.events,F.NOW)===null;
+  });
+  test('future insight feedback is ignored',function(){
+    var data=pattern('true',-1);
+    return M.patternMemory(data.observation,data.events,F.NOW)===null;
+  });
+  test('pattern memory identity is stable while evidence identity remains explicit',function(){
+    var data=pattern('true'),a=M.patternMemory(data.observation,data.events,F.NOW);
+    var changed=JSON.parse(JSON.stringify(data.observation));
+    var newEvidence=F.userLearning(0,'A fresh piece of matching evidence','lw');
+    changed.evidenceEventIds.push(newEvidence.id);
+    var changedFeedback=F.insightFeedback(0,changed,'true');
+    var b=M.patternMemory(changed,data.events.concat([newEvidence,changedFeedback]),F.NOW);
+    return a&&b&&a.id===b.id&&a.evidenceKey!==b.evidenceKey;
+  });
+  test('pattern derivation is deterministic and does not mutate its inputs',function(){
+    var data=pattern('true'),beforeEvents=JSON.stringify(data.events),beforeObs=JSON.stringify(data.observation);
+    var a=M.patternMemory(data.observation,data.events,F.NOW);
+    var b=M.patternMemory(data.observation,data.events,F.NOW);
+    return JSON.stringify(a)===JSON.stringify(b)&&JSON.stringify(data.events)===beforeEvents&&
+      JSON.stringify(data.observation)===beforeObs;
+  });
+  test('feedback snapshots keep confirmed patterns durable without a live observation',function(){
+    var data=storedPattern('true'),memories=M.storedPatternMemories(data.events,F.NOW);
+    var model=M.derive(data.events,F.cells,F.NOW,{observations:[]});
+    return memories.length===1&&memories[0].statement===data.observation.read&&
+      model.confirmed.length===1&&model.confirmed[0].id===memories[0].id;
+  });
+  test('malformed feedback snapshots cannot manufacture memory',function(){
+    var data=storedPattern('true');
+    data.feedback.payload.memorySource.evidenceEventIds=['detached'];
+    return M.storedPatternMemories(data.events,F.NOW).length===0;
+  });
+  test('feedback with an invalid timestamp cannot become memory',function(){
+    var data=storedPattern('true');data.feedback.ts=NaN;
+    return M.storedPatternMemories(data.events,F.NOW).length===0&&
+      M.patternMemory(data.observation,data.events,F.NOW)===null;
+  });
+  test('one completed experiment is not promoted into durable memory',function(){
+    return firstStrategyMemory(outcomeSet(['helped']))===null;
+  });
+  test('two outcomes on one day are not independent evidence',function(){
+    return firstStrategyMemory(outcomeSet(['helped','helped'],{sameDay:true}))===null;
+  });
+  test('two helpful experiments on separate days create a strategy candidate',function(){
+    var memory=firstStrategyMemory(outcomeSet(['helped','helped']));
+    return memory&&memory.kind==='strategy'&&memory.status==='candidate'&&
+      memory.polarity==='helpful'&&memory.strategyId==='protected_block'&&memory.cellKey==='lw'&&
+      memory.statement.indexOf('Main Project')>=0;
+  });
+  test('two negative experiments create an unhelpful strategy candidate',function(){
+    var memory=firstStrategyMemory(outcomeSet(['no_change','made_worse']));
+    return memory&&memory.polarity==='unhelpful'&&memory.statement.indexOf('not reliably helped')>=0;
+  });
+  test('mixed experiment results stay out of personal memory',function(){
+    return firstStrategyMemory(outcomeSet(['helped','made_worse']))===null;
+  });
+  test('strategy memory includes completion records and their source evidence',function(){
+    var events=outcomeSet(['helped','helped']),memory=firstStrategyMemory(events);
+    return memory&&events.every(function(event){return memory.evidenceEventIds.indexOf(event.id)>=0;})&&
+      memory.evidenceKey===M.evidenceKey(memory.evidenceEventIds);
+  });
+  test('malformed or detached experiment evidence cannot become memory',function(){
+    var events=outcomeSet(['helped','helped']);
+    events.filter(function(event){return event.type==='experiment_completed';})[0].payload.evidenceKey='detached';
+    return firstStrategyMemory(events)===null;
+  });
+  test('unknown strategies and scopes cannot manufacture memory',function(){
+    var unknownStrategy=outcomeSet(['helped','helped'],{strategy:'invented_strategy'});
+    var unknownScope=outcomeSet(['helped','helped'],{scope:'unknown_scope'});
+    return firstStrategyMemory(unknownStrategy)===null&&firstStrategyMemory(unknownScope)===null;
+  });
+  test('a future experiment outcome is ignored',function(){
+    var events=outcomeSet(['helped']),future=experiment(-1,'future','protected_block','helped','lw');
+    events.push(future.source,future.event);
+    return firstStrategyMemory(events)===null;
+  });
+  test('duplicate completion records for one experiment count once',function(){
+    var first=experiment(5,'same','protected_block','helped','lw');
+    var duplicate=JSON.parse(JSON.stringify(first.event));duplicate.id='duplicate_completion';duplicate.ts+=1000;
+    var second=experiment(2,'second','protected_block','helped','lw');
+    var events=[first.source,first.event,duplicate,second.source,second.event];
+    var memory=firstStrategyMemory(events);
+    return memory&&memory.evidenceEventIds.indexOf(first.event.id)<0&&
+      memory.evidenceEventIds.indexOf(duplicate.id)>=0;
+  });
+  test('strategy derivation is deterministic and leaves events untouched',function(){
+    var events=outcomeSet(['helped','helped']),before=JSON.stringify(events);
+    var a=M.strategyMemories(events,F.cells,F.NOW),b=M.strategyMemories(events,F.cells,F.NOW);
+    return JSON.stringify(a)===JSON.stringify(b)&&JSON.stringify(events)===before;
+  });
+  test('feedback payload rejects unsupported or blank corrections',function(){
+    var memory=firstStrategyMemory(outcomeSet(['helped','helped']));
+    return M.feedbackPayload(memory,'maybe')===null&&M.feedbackPayload(memory,'corrected',' ')===null;
+  });
+  test('true memory feedback confirms a candidate without changing its evidence key',function(){
+    var events=outcomeSet(['helped','helped']),memory=firstStrategyMemory(events),key=memory.evidenceKey;
+    var feedback=F.event('memory_feedback',0,M.feedbackPayload(memory,'true'));
+    var resolved=M.applyFeedback(memory,events.concat(feedback),F.NOW);
+    return resolved.status==='confirmed'&&resolved.confidence>memory.confidence&&
+      resolved.evidenceKey===key&&resolved.feedbackEventId===feedback.id;
+  });
+  test('partly memory feedback keeps a candidate tentative',function(){
+    var events=outcomeSet(['helped','helped']),memory=firstStrategyMemory(events);
+    var feedback=F.event('memory_feedback',0,M.feedbackPayload(memory,'partly'));
+    return M.applyFeedback(memory,events.concat(feedback),F.NOW).status==='tentative';
+  });
+  test('wrong memory feedback suppresses only the matching evidence set',function(){
+    var events=outcomeSet(['helped','helped']),memory=firstStrategyMemory(events);
+    var feedback=F.event('memory_feedback',0,M.feedbackPayload(memory,'wrong'));
+    var suppressed=M.applyFeedback(memory,events.concat(feedback),F.NOW);
+    var changed=JSON.parse(JSON.stringify(memory));changed.evidenceKey+='|new';
+    return suppressed.status==='suppressed'&&M.applyFeedback(changed,events.concat(feedback),F.NOW).status==='candidate';
+  });
+  test('a user correction becomes the highest-authority memory text',function(){
+    var events=outcomeSet(['helped','helped']),memory=firstStrategyMemory(events);
+    var feedback=F.event('memory_feedback',0,M.feedbackPayload(memory,'corrected','Short solo blocks help only before lunch.'));
+    var resolved=M.applyFeedback(memory,events.concat(feedback),F.NOW);
+    return resolved.status==='confirmed'&&resolved.confidence===1&&resolved.source==='user_correction'&&
+      resolved.statement==='Short solo blocks help only before lunch.';
+  });
+  test('latest matching memory feedback wins',function(){
+    var events=outcomeSet(['helped','helped']),memory=firstStrategyMemory(events);
+    var older=F.event('memory_feedback',1,M.feedbackPayload(memory,'true'));
+    var newer=F.event('memory_feedback',0,M.feedbackPayload(memory,'wrong'));
+    return M.applyFeedback(memory,events.concat([newer,older]),F.NOW).status==='suppressed';
+  });
+  test('future memory feedback is ignored',function(){
+    var events=outcomeSet(['helped','helped']),memory=firstStrategyMemory(events);
+    var future=F.event('memory_feedback',-1,M.feedbackPayload(memory,'wrong'));
+    return M.applyFeedback(memory,events.concat(future),F.NOW).status==='candidate';
+  });
+  test('ranking prioritises confirmed memory and respects its bound',function(){
+    var events=outcomeSet(['helped','helped']),candidate=firstStrategyMemory(events);
+    var data=pattern('true'),confirmed=M.patternMemory(data.observation,data.events,F.NOW);
+    var ranked=M.rank([candidate,confirmed],1);
+    return ranked.length===1&&ranked[0].status==='confirmed';
+  });
+  test('derive combines memory sources, deduplicates concepts, and partitions status',function(){
+    var patternData=pattern('true'),experiments=outcomeSet(['helped','helped']);
+    var events=patternData.events.concat(experiments);
+    var result=M.derive(events,F.cells,F.NOW,{observations:[patternData.observation,patternData.observation]});
+    return result.memories.length===2&&result.confirmed.length===1&&result.candidates.length===1&&
+      result.suppressed.length===0;
+  });
+  test('derive stays quiet for invalid time or absent evidence',function(){
+    return M.derive([],F.cells,F.NOW).memories.length===0&&M.derive([],F.cells,NaN).memories.length===0;
+  });
+  test('full model derivation is deterministic and does not mutate source state',function(){
+    var data=pattern('true'),events=data.events.concat(outcomeSet(['helped','helped']));
+    var observations=[data.observation],beforeEvents=JSON.stringify(events),beforeObs=JSON.stringify(observations);
+    var a=M.derive(events,F.cells,F.NOW,{observations:observations});
+    var b=M.derive(events,F.cells,F.NOW,{observations:observations});
+    return JSON.stringify(a)===JSON.stringify(b)&&JSON.stringify(events)===beforeEvents&&
+      JSON.stringify(observations)===beforeObs;
+  });
+
+  out.innerHTML+='<div class="summary"><b>'+passed+' passed</b>, '+failed+' failed - '+
+    Math.round(passed/(passed+failed)*100)+'% pass rate</div>';
+})();
+</script>
+</body>
+</html>
