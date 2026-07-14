@@ -20,6 +20,7 @@
 <script src="../js/bhive-engine.js?test=beta10c-stage4"></script>
 <script src="../js/bhive-learning.js?test=beta10c-stage4"></script>
 <script src="../js/bhive-inference.js?test=beta10c-stage4"></script>
+<script src="../js/bhive-memory-use.js?test=beta10c-stage5c"></script>
 <script src="../js/bhive-experiments.js?test=beta10c-stage4"></script>
 <script src="../js/ui-experiments.js?test=beta10c-stage4"></script>
 <script src="./fixtures/learning-fixtures.js?test=beta10c-stage4"></script>
@@ -35,7 +36,7 @@
     if(ok)passed++;else failed++;
   }
   function cell(key){return F.cells.filter(function(item){return item.key===key;})[0];}
-  function source(verdict){
+  function source(verdict,options){
     var events=F.rising(),observation=I.trendObservation(events,cell('lw'),7,F.NOW);
     var feedback=F.insightFeedback(0,observation,verdict||'true');
     var all=events.concat(feedback);
@@ -44,7 +45,7 @@
       observation:observation,
       feedback:feedback,
       events:all,
-      proposal:X.proposalForFeedback(feedback,[observation],F.cells,all,F.NOW)
+      proposal:X.proposalForFeedback(feedback,[observation],F.cells,all,F.NOW,options)
     };
   }
   function experimentEvent(type,payload,offset){
@@ -54,6 +55,31 @@
   function accepted(sourceData,offset){
     var payload=X.decisionPayload(sourceData.proposal,'accepted');
     return experimentEvent('experiment_accepted',payload,offset||1);
+  }
+  function choice(strategyId){
+    return {strategyId:strategyId,action:'Try '+strategyId,measure:'Measure '+strategyId,durationDays:3};
+  }
+  function provenance(id,influence){
+    return {memoryId:'mem_'+id,evidenceKey:'evidence_'+id,
+      feedbackEventId:'feedback_'+id,influence:influence};
+  }
+  function memorySignal(id,influence,delta,veto){
+    var adapterInfluence=veto?'veto':'preference';
+    var item=provenance(id,adapterInfluence);
+    return {veto:!!veto,delta:delta||0,influence:adapterInfluence,provenance:item};
+  }
+  function installMemoryAdapter(signals,validator){
+    BHIVE.memoryUse={
+      strategySignal:function(context,candidate,scope,sourceEvidenceIds){
+        var signal=typeof signals==='function'?signals(context,candidate,scope,sourceEvidenceIds):
+          signals&&signals[candidate.strategyId];
+        return signal?JSON.parse(JSON.stringify(signal)):null;
+      },
+      validateProvenance:function(item,context){
+        return validator?validator(item,context):!!context&&context.valid!==false&&
+          (item.influence==='preference'||item.influence==='veto');
+      }
+    };
   }
 
   test('true feedback creates one evidence-linked proposal',function(){
@@ -71,6 +97,16 @@
   test('a proposal requires the exact observation and evidence set',function(){
     var data=source();
     return X.proposalForFeedback(data.feedback,[],F.cells,data.events,F.NOW)===null;
+  });
+  test('a proposal rejects missing, duplicate, or unrelated feedback evidence IDs',function(){
+    var data=source(),missing=JSON.parse(JSON.stringify(data.feedback));
+    var duplicate=JSON.parse(JSON.stringify(data.feedback)),unrelated=JSON.parse(JSON.stringify(data.feedback));
+    missing.payload.evidenceEventIds=[];
+    duplicate.payload.evidenceEventIds.push(duplicate.payload.evidenceEventIds[0]);
+    unrelated.payload.evidenceEventIds=['unrelated'];
+    return X.proposalForFeedback(missing,[data.observation],F.cells,data.events,F.NOW)===null&&
+      X.proposalForFeedback(duplicate,[data.observation],F.cells,data.events,F.NOW)===null&&
+      X.proposalForFeedback(unrelated,[data.observation],F.cells,data.events,F.NOW)===null;
   });
   test('proposal generation is deterministic for a fixed time',function(){
     var data=source();
@@ -203,6 +239,83 @@
     var ranked=X.rankCandidates(X.candidatesFor(data.observation,F.cells),history,data.proposal.cellKey);
     return ranked[0].candidate.strategyId!==data.proposal.strategyId;
   });
+  test('memory-free ranking and proposals preserve their baseline output',function(){
+    var data=source(),choices=X.candidatesFor(data.observation,F.cells);
+    var baselineRank=JSON.stringify(X.rankCandidates(choices,[],data.proposal.cellKey));
+    var baselineProposal=JSON.stringify(data.proposal);
+    installMemoryAdapter({});
+    return baselineRank===JSON.stringify(X.rankCandidates(choices,[],data.proposal.cellKey,{memoryContext:{valid:true}}))&&
+      baselineProposal===JSON.stringify(X.proposalForFeedback(data.feedback,[data.observation],F.cells,
+        data.events,F.NOW,{memoryContext:{valid:true}}));
+  });
+  test('helpful confirmed memory is bounded to a plus point one preference',function(){
+    installMemoryAdapter({second:memorySignal('helpful','preferred',0.8,false)});
+    var ranked=X.rankCandidates([choice('first'),choice('second')],[],'lw',{memoryContext:{valid:true}});
+    return ranked[0].candidate.strategyId==='second'&&ranked[0].memoryDelta===0.1&&ranked[0].rankScore===0.1;
+  });
+  test('helpful memory cannot flip a strategy with a negative base score',function(){
+    installMemoryAdapter({second:memorySignal('negative','preferred',0.8,false)});
+    var declined={type:'experiment_declined',payload:{strategyId:'second',cellKey:'lw'}};
+    var ranked=X.rankCandidates([choice('first'),choice('second')],[declined],'lw',
+      {memoryContext:{valid:true}});
+    var second=ranked.filter(function(item){return item.candidate.strategyId==='second';})[0];
+    return ranked[0].candidate.strategyId==='first'&&second.stats.score<0&&second.memoryDelta===undefined;
+  });
+  test('memory adapter receives cell-first scope with theme fallback',function(){
+    installMemoryAdapter(function(context,candidate,scope){
+      return candidate.strategyId==='second'&&(scope==='lw'||scope==='avoidance')?
+        memorySignal('scoped','preferred',0.1,false):null;
+    });
+    var exactCell=X.rankCandidates([choice('first'),choice('second')],[],'lw',
+      {memoryContext:{valid:true},themeId:'avoidance'});
+    var fallbackTheme=X.rankCandidates([choice('first'),choice('second')],[],null,
+      {memoryContext:{valid:true},themeId:'avoidance'});
+    var other=X.rankCandidates([choice('first'),choice('second')],[],'money',
+      {memoryContext:{valid:true},themeId:'avoidance'});
+    return exactCell[0].candidate.strategyId==='second'&&fallbackTheme[0].candidate.strategyId==='second'&&
+      other[0].candidate.strategyId==='first';
+  });
+  test('overlapping source evidence is passed through and receives no memory preference',function(){
+    var data=source(),overlap=data.observation.evidenceEventIds[0];
+    installMemoryAdapter(function(context,candidate,scope,sourceEvidenceIds){
+      if(sourceEvidenceIds.indexOf(context.overlap)>=0)return null;
+      return candidate.strategyId==='visible_finish'?memorySignal('overlap','preferred',0.1,false):null;
+    });
+    var proposal=X.proposalForFeedback(data.feedback,[data.observation],F.cells,data.events,F.NOW,
+      {memoryContext:{valid:true,overlap:overlap}});
+    return proposal.strategyId===data.proposal.strategyId&&!proposal.memoryGuidance;
+  });
+  test('unhelpful memory vetoes one strategy and records only bounded provenance',function(){
+    var data=source(),first=data.proposal.strategyId;
+    installMemoryAdapter((function(){
+      var signals={};signals[first]=memorySignal('avoid','avoided',0,true);return signals;
+    })());
+    var proposal=X.proposalForFeedback(data.feedback,[data.observation],F.cells,data.events,F.NOW,
+      {memoryContext:{valid:true}});
+    return proposal&&proposal.strategyId!==first&&proposal.memoryGuidance.length===1&&
+      proposal.memoryGuidance[0].influence==='avoided'&&!proposal.memoryGuidance[0].statement;
+  });
+  test('all memory-vetoed strategies make the proposal stay quiet',function(){
+    var data=source(),choices=X.candidatesFor(data.observation,F.cells),signals={};
+    choices.forEach(function(item,index){signals[item.strategyId]=memorySignal('veto_'+index,'avoided',0,true);});
+    installMemoryAdapter(signals);
+    return X.proposalForFeedback(data.feedback,[data.observation],F.cells,data.events,F.NOW,
+      {memoryContext:{valid:true}})===null;
+  });
+  test('memory provenance is carried defensively and stale acceptance fails closed',function(){
+    var data=source(),choices=X.candidatesFor(data.observation,F.cells),preferred=choices[1].strategyId;
+    var signals={};signals[preferred]=memorySignal('carry','preferred',0.1,false);
+    installMemoryAdapter(signals,function(item,context){return !!context&&context.version==='current'&&!!item.memoryId;});
+    var context={version:'current'};
+    var proposal=X.proposalForFeedback(data.feedback,[data.observation],F.cells,data.events,F.NOW,
+      {memoryContext:context});
+    var accepted=X.decisionPayload(proposal,'accepted',null,context);
+    accepted.memoryGuidance[0].memoryId='changed';
+    return proposal.memoryGuidance.length===1&&accepted.decision==='accepted'&&
+      proposal.memoryGuidance[0].memoryId==='mem_carry'&&
+      X.decisionPayload(proposal,'accepted')===null&&
+      X.decisionPayload(proposal,'accepted',null,{version:'stale'})===null;
+  });
   test('unknown observations do not receive generic invented advice',function(){
     return X.candidatesFor({kind:'unknown',cellKeys:['lw']},F.cells).length===0;
   });
@@ -236,6 +349,11 @@
     var data=source(),unsafe=JSON.parse(JSON.stringify(data.proposal));
     unsafe.action='<img src=x onerror=alert(1)>';box.innerHTML=U.renderProposal(unsafe);
     return !box.querySelector('img')&&box.textContent.indexOf('<img src=x onerror=alert(1)>')>=0;
+  });
+  test('memory-guided proposals disclose that reviewed memory affected the recommendation',function(){
+    var data=source(),guided=JSON.parse(JSON.stringify(data.proposal));
+    guided.memoryGuidance=[provenance('display','preferred')];box.innerHTML=U.renderProposal(guided);
+    return box.querySelector('.td-exp-source').textContent.indexOf('memory you reviewed')>=0;
   });
   test('active experiment hides outcome choices before the due time',function(){
     var data=source(),active=JSON.parse(JSON.stringify(data.proposal));active.status='active';

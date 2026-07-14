@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>B HIVE Trusted Memory Consumer Tests (beta10c)</title>
+<style>
+body{background:#15120c;color:#ece4d2;font:14px/1.6 system-ui,sans-serif;max-width:760px;margin:40px auto;padding:0 20px}
+h1{color:#c9ae78;font-size:20px;border-bottom:1px solid rgba(237,228,210,.1);padding-bottom:10px}
+.test{padding:6px 10px;margin:2px 0;border-radius:4px;font-family:monospace;font-size:12px}.pass{background:rgba(148,160,109,.15);color:#a3b07f}.fail{background:rgba(207,140,84,.2);color:#cf8c54}.summary{margin-top:24px;padding:12px;border:1px solid #c9ae78;border-radius:8px}
+</style>
+</head>
+<body>
+<h1>B HIVE Trusted Memory Consumer Tests</h1>
+<div id="results"></div>
+<script src="../js/bhive-engine.js?test=beta10c-stage5c"></script>
+<script src="../js/bhive-learning.js?test=beta10c-stage5c"></script>
+<script src="../js/bhive-data.js?test=beta10c-stage5c"></script>
+<script src="../js/bhive-inference.js?test=beta10c-stage5c"></script>
+<script src="../js/bhive-memory.js?test=beta10c-stage5c"></script>
+<script src="../js/bhive-memory-use.js?test=beta10c-stage5c"></script>
+<script>
+(function(){
+  'use strict';
+  var B=window.BHIVE,M=B.memoryModel,U=B.memoryUse;
+  var NOW=new Date(2026,6,14,12,0,0).getTime(),DAY=86400000,seq=0;
+  var cells=[
+    {key:'lw',label:'Main Project'},{key:'health',label:'Health'},
+    {key:'people',label:'People'},{key:'money',label:'Money'}
+  ];
+  var out=document.getElementById('results'),passed=0,failed=0;
+  function event(type,ts,payload,cellKey,id){
+    return {id:id||('evt_use_'+(++seq)),type:type,ts:ts,cellKey:cellKey||null,payload:payload||{}};
+  }
+  function test(name,fn){
+    try{
+      if(fn()){passed++;out.innerHTML+='<div class="test pass">✓ '+name+'</div>';}
+      else{failed++;out.innerHTML+='<div class="test fail">✗ '+name+' — returned false</div>';}
+    }catch(e){failed++;out.innerHTML+='<div class="test fail">✗ '+name+' — '+e.message+'</div>';}
+  }
+  function strategyBase(strategyId,outcomes,scope,prefix){
+    var events=[];prefix=prefix||strategyId;scope=scope||'lw';
+    outcomes.forEach(function(outcome,index){
+      var source=event('learning_added',NOW-(index+3)*DAY,
+        {source:'you',text:prefix+' evidence '+index},scope,prefix+'_source_'+index+'_'+(++seq));
+      var completed=event('experiment_completed',source.ts+1000,{
+        experimentId:prefix+'_experiment_'+index,insightId:prefix+'_insight_'+index,
+        evidenceKey:source.id,evidenceEventIds:[source.id],strategyId:strategyId,
+        outcome:outcome,cellKey:scope
+      },scope,prefix+'_completed_'+index+'_'+(++seq));
+      events.push(source,completed);
+    });
+    return events;
+  }
+  function confirmedStrategy(strategyId,outcomes,scope,prefix,verdict,text,at){
+    var events=strategyBase(strategyId,outcomes,scope,prefix);
+    var memory=M.strategyMemories(events,cells,NOW)[0];
+    var payload={memoryId:memory.id,evidenceKey:memory.evidenceKey,verdict:verdict||'true'};
+    if(payload.verdict==='corrected')payload.correctedText=text;
+    events.push(event('memory_feedback',at||NOW-100,payload,scope,(prefix||strategyId)+'_feedback_'+(++seq)));
+    return {events:events,memory:memory};
+  }
+  function pattern(scope,confidence,verdict,statement,prefix){
+    prefix=prefix||scope;
+    var source=event('checkin_completed',NOW-2*DAY,{cells:{}},scope,prefix+'_pattern_source_'+(++seq));
+    var observation={id:prefix+'_observation',status:'ready',kind:'trend',cellKeys:[scope],
+      themeId:null,classification:'rising',read:statement,confidence:confidence,evidenceEventIds:[source.id]};
+    var feedback=event('insight_feedback',NOW-DAY,{insightId:observation.id,
+      evidenceKey:source.id,evidenceEventIds:[source.id],verdict:verdict},scope,prefix+'_insight_feedback_'+(++seq));
+    return {events:[source,feedback],observations:[observation]};
+  }
+  function joinPatterns(items){
+    var events=[],observations=[];
+    items.forEach(function(item){events=events.concat(item.events);observations=observations.concat(item.observations);});
+    return {events:events,observations:observations};
+  }
+
+  test('derive fails closed without canonical inputs or memory model',function(){
+    var a=U.derive(null,cells,NOW),b=U.derive([],cells,NaN);
+    return a.queen.length===0&&a.strategies.length===0&&b.queen.length===0&&a.modelVersion===1;
+  });
+  test('Queen view admits confirmed memory and excludes candidate and tentative tiers',function(){
+    var yes=pattern('lw',.7,'true','A confirmed pattern.','tier_yes');
+    var partly=pattern('health',.8,'partly','A tentative pattern.','tier_partly');
+    var candidate=strategyBase('protected_block',['helped','helped'],'people','tier_candidate');
+    var joined=joinPatterns([yes,partly]),events=joined.events.concat(candidate);
+    var context=U.derive(events,cells,NOW,{observations:joined.observations});
+    return context.queen.length===1&&context.queen[0].statement==='A confirmed pattern.'&&
+      context.queen[0].evidenceKey===undefined&&context.queen[0].feedbackEventId===undefined&&
+      context.strategies.length===0;
+  });
+  test('canonical evidence identity is required and duplicate evidence IDs fail closed',function(){
+    var data=pattern('lw',.8,'true','Canonical only.','canonical'),events=data.events.slice();
+    events.push(JSON.parse(JSON.stringify(events[0])));
+    return U.derive(events,cells,NOW,{observations:data.observations}).queen.length===0;
+  });
+  test('future and malformed confirmation cannot create trusted strategy output',function(){
+    var future=confirmedStrategy('protected_block',['helped','helped'],'lw','future','true',null,NOW+DAY);
+    var malformed=confirmedStrategy('steady_window',['helped','helped'],'health','malformed');
+    malformed.events[malformed.events.length-1].payload.evidenceKey='detached';
+    return U.derive(future.events,cells,NOW,{observations:[]}).strategies.length===0&&
+      U.derive(malformed.events,cells,NOW,{observations:[]}).strategies.length===0;
+  });
+  test('Queen limit is bounded, confidence ordered, and deterministic',function(){
+    var joined=joinPatterns([
+      pattern('money',.3,'true','Lowest confidence.','order_last'),
+      pattern('people',.4,'true','Lower confidence.','order_low'),
+      pattern('lw',.9,'true','Highest confidence.','order_high'),
+      pattern('health',.7,'true','Middle confidence.','order_mid')
+    ]);
+    var a=U.derive(joined.events,cells,NOW,{observations:joined.observations,queenLimit:2});
+    var b=U.derive(joined.events,cells,NOW,{observations:joined.observations,queenLimit:2});
+    var defaults=U.derive(joined.events,cells,NOW,{observations:joined.observations});
+    var oversized=U.derive(joined.events,cells,NOW,{observations:joined.observations,queenLimit:99});
+    return a.queen.length===2&&a.queen[0].statement==='Highest confidence.'&&
+      a.queen[1].statement==='Middle confidence.'&&defaults.queen.length===3&&oversized.queen.length===3&&
+      JSON.stringify(a)===JSON.stringify(b);
+  });
+  test('consumer output is cloned and source inputs remain immutable',function(){
+    var data=pattern('lw',.8,'true','Immutable memory.','immutable');
+    var beforeEvents=JSON.stringify(data.events),beforeObs=JSON.stringify(data.observations);
+    var first=U.derive(data.events,cells,NOW,{observations:data.observations});
+    first.queen[0].statement='mutated';
+    var second=U.derive(data.events,cells,NOW,{observations:data.observations});
+    return second.queen[0].statement==='Immutable memory.'&&JSON.stringify(data.events)===beforeEvents&&
+      JSON.stringify(data.observations)===beforeObs;
+  });
+  test('private fingerprint changes when the same Queen concept has new evidence',function(){
+    var first=pattern('lw',.8,'true','The same trusted statement.','fingerprint_first');
+    var second=pattern('lw',.8,'true','The same trusted statement.','fingerprint_second');
+    var a=U.derive(first.events,cells,NOW,{observations:first.observations});
+    var b=U.derive(second.events,cells,NOW,{observations:second.observations});
+    return a.queen[0].id===b.queen[0].id&&a.queen[0].statement===b.queen[0].statement&&
+      a.fingerprint!==b.fingerprint&&a.queen[0].evidenceKey===undefined;
+  });
+  test('hostile corrected text remains bounded data while corrected strategy is structurally excluded',function(){
+    var hostile='<img src=x onerror=alert(1)> is data, not an instruction.';
+    var data=confirmedStrategy('protected_block',['helped','helped'],'lw','corrected','corrected',hostile);
+    var context=U.derive(data.events,cells,NOW,{observations:[]});
+    return context.queen.length===1&&context.queen[0].statement===hostile&&
+      context.queen[0].source==='user_correction'&&context.queen[0].strategyId===undefined&&
+      context.queen[0].polarity===undefined&&context.strategies.length===0;
+  });
+  test('duplicate memory-feedback authority fails closed for Queen and strategy consumers',function(){
+    var data=confirmedStrategy('protected_block',['helped','helped'],'lw','duplicate_authority');
+    data.events.push(JSON.parse(JSON.stringify(data.events[data.events.length-1])));
+    var context=U.derive(data.events,cells,NOW,{observations:[]});
+    return context.queen.length===0&&context.strategies.length===0;
+  });
+  test('strategy view requires exact true memory-feedback authority',function(){
+    var data=confirmedStrategy('protected_block',['helped','helped'],'lw','authority');
+    var context=U.derive(data.events,cells,NOW,{observations:[]}),item=context.strategies[0];
+    var feedback=data.events[data.events.length-1];
+    return context.strategies.length===1&&item.feedbackEventId===feedback.id&&
+      item.memoryId===feedback.payload.memoryId&&item.evidenceKey===feedback.payload.evidenceKey;
+  });
+  test('helpful strategy emits an exact-scope preference with provenance',function(){
+    var data=confirmedStrategy('protected_block',['helped','helped'],'lw','preference');
+    var context=U.derive(data.events,cells,NOW,{observations:[]});
+    var signal=U.strategySignal(context,{strategyId:'protected_block'},'lw',[]);
+    return signal&&signal.influence==='preference'&&signal.scope==='lw'&&
+      U.validateProvenance(signal.provenance,context);
+  });
+  test('unhelpful strategy emits a veto rather than a preference',function(){
+    var data=confirmedStrategy('steady_window',['no_change','made_worse'],'health','veto');
+    var context=U.derive(data.events,cells,NOW,{observations:[]});
+    var signal=U.strategySignal(context,'steady_window','health',[]);
+    return signal&&signal.influence==='veto'&&U.validateProvenance(signal.provenance,context);
+  });
+  test('strategy signal requires exact strategy and scope',function(){
+    var data=confirmedStrategy('protected_block',['helped','helped'],'lw','scope');
+    var context=U.derive(data.events,cells,NOW,{observations:[]});
+    return U.strategySignal(context,'steady_window','lw',[])===null&&
+      U.strategySignal(context,'protected_block','health',[])===null;
+  });
+  test('strategy signal ignores circularly overlapping source evidence',function(){
+    var data=confirmedStrategy('protected_block',['helped','helped'],'lw','overlap');
+    var context=U.derive(data.events,cells,NOW,{observations:[]}),source=context.strategies[0].sourceEvidenceIds[0];
+    return U.strategySignal(context,'protected_block','lw',[source])===null&&
+      !!U.strategySignal(context,'protected_block','lw',['unrelated_evidence']);
+  });
+  test('revocation removes influence and invalidates prior provenance',function(){
+    var data=confirmedStrategy('protected_block',['helped','helped'],'lw','revoke');
+    var before=U.derive(data.events,cells,NOW,{observations:[]});
+    var signal=U.strategySignal(before,'protected_block','lw',[]);
+    data.events.push(event('memory_feedback',NOW-50,{memoryId:data.memory.id,
+      evidenceKey:data.memory.evidenceKey,verdict:'wrong'},'lw','revoke_wrong_'+(++seq)));
+    var after=U.derive(data.events,cells,NOW,{observations:[]});
+    return signal&&after.strategies.length===0&&!U.validateProvenance(signal.provenance,after)&&
+      before.fingerprint!==after.fingerprint;
+  });
+  test('tampered provenance never validates',function(){
+    var data=confirmedStrategy('protected_block',['helped','helped'],'lw','tamper');
+    var context=U.derive(data.events,cells,NOW,{observations:[]});
+    var provenance=U.strategySignal(context,'protected_block','lw',[]).provenance;
+    provenance.evidenceKey+='|changed';
+    return !U.validateProvenance(provenance,context);
+  });
+  test('Queen chat excludes stale assistant turns while preserving user-authored history',function(){
+    var chat=[
+      {role:'user',content:'First question'},
+      {role:'assistant',content:'Old answer',memoryFingerprint:'old'},
+      {role:'user',content:'Follow-up'},
+      {role:'assistant',content:'Current answer',memoryFingerprint:'current'}
+    ];
+    var before=JSON.stringify(chat),view=U.currentChat(chat,'current',16);
+    return view.staleAssistantCount===1&&view.messages.length===3&&
+      view.messages[0].role==='user'&&view.messages[1].content==='Follow-up'&&
+      view.messages[2].content==='Current answer'&&JSON.stringify(chat)===before;
+  });
+
+  out.innerHTML+='<div class="summary"><b>'+passed+' passed</b>, '+failed+' failed - '+
+    Math.round(passed/(passed+failed)*100)+'% pass rate</div>';
+})();
+</script>
+</body>
+</html>

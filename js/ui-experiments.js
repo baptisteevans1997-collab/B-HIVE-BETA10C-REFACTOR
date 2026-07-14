@@ -31,7 +31,9 @@
         '<span class="td-exp-k" id="td-exp-title-'+id+'">Small experiment</span>'+
         '<span class="td-exp-time">'+experiment.durationDays+' day'+(experiment.durationDays===1?'':'s')+'</span>'+
       '</div>'+
-      '<p class="td-exp-source">'+(experiment.sourceVerdict==='partly'?'Built from the part of the read that held.':'Built from the read you confirmed.')+'</p>'+
+      '<p class="td-exp-source">'+(experiment.memoryGuidance&&experiment.memoryGuidance.length?
+        'Built from the read you confirmed and memory you reviewed.':
+        (experiment.sourceVerdict==='partly'?'Built from the part of the read that held.':'Built from the read you confirmed.'))+'</p>'+
       actionBlock(experiment)+
       '<div class="td-exp-actions" role="group" aria-label="Choose this experiment">'+
         '<button class="td-exp-btn td-exp-accept" type="button" data-experiment-id="'+esc(experiment.experimentId)+'">Try it</button>'+

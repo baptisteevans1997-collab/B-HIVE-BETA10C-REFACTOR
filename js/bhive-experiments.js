@@ -29,6 +29,9 @@
     var text=typeof value==='string'?value.replace(/\s+/g,' ').trim():'';
     return text.length>=3?text.slice(0,max||180):'';
   }
+  function cleanId(value,max){
+    return typeof value==='string'&&value&&value.length<=(max||160)?value:'';
+  }
   function cellMap(cells){
     var out={};
     (cells||[]).forEach(function(cell){if(cell&&cell.key)out[cell.key]=cell;});
@@ -56,6 +59,21 @@
       return false;
     });
     return match;
+  }
+  function canonicalSourceEvidence(source,observation){
+    var supplied=source&&source.evidenceEventIds,observed=observation&&observation.evidenceEventIds;
+    if(!Array.isArray(supplied)||!supplied.length||!Array.isArray(observed)||!observed.length||
+       typeof source.evidenceKey!=='string'||!source.evidenceKey)return null;
+    function exact(values){
+      var seen={},ids=[],valid=true;
+      values.forEach(function(id){
+        if(typeof id!=='string'||!id||seen[id]){valid=false;return;}
+        seen[id]=1;ids.push(id);
+      });
+      return valid&&ids.slice().sort().join('|')===source.evidenceKey?ids:null;
+    }
+    var sourceIds=exact(supplied),observationIds=exact(observed);
+    return sourceIds&&observationIds?observationIds:null;
   }
 
   function trendCandidates(observation,label){
@@ -151,14 +169,31 @@
     return [];
   }
 
+  function normalizedGuidance(raw){
+    if(raw===undefined||raw===null)return [];
+    if(!Array.isArray(raw)||raw.length>2)return null;
+    var seen={},out=[],valid=true;
+    raw.forEach(function(item){
+      var memoryId=cleanId(item&&item.memoryId),key=cleanId(item&&item.evidenceKey,4000);
+      var feedbackEventId=cleanId(item&&item.feedbackEventId),influence=item&&item.influence;
+      var identity=memoryId+'|'+key+'|'+feedbackEventId+'|'+influence;
+      if(!memoryId||!key||!feedbackEventId||(influence!=='preferred'&&influence!=='avoided')||seen[identity]){
+        valid=false;return;
+      }
+      seen[identity]=1;
+      out.push({memoryId:memoryId,evidenceKey:key,feedbackEventId:feedbackEventId,influence:influence});
+    });
+    return valid?out:null;
+  }
   function normalizedPayload(raw){
     if(!raw||typeof raw!=='object')return null;
     var action=cleanText(raw.action,180),measure=cleanText(raw.measure,180);
     var duration=Math.floor(raw.durationDays),dueAt=Math.floor(raw.dueAt);
+    var guidance=normalizedGuidance(raw.memoryGuidance);
     if(typeof raw.experimentId!=='string'||!raw.experimentId||typeof raw.insightId!=='string'||!raw.insightId||
        typeof raw.evidenceKey!=='string'||!raw.evidenceKey||typeof raw.strategyId!=='string'||!raw.strategyId||
-       !action||!measure||!isFinite(duration)||duration<1||duration>14||!validNow(dueAt))return null;
-    return {
+       !action||!measure||!isFinite(duration)||duration<1||duration>14||!validNow(dueAt)||guidance===null)return null;
+    var payload={
       experimentId:raw.experimentId,
       insightId:raw.insightId,
       evidenceKey:raw.evidenceKey,
@@ -176,6 +211,8 @@
       sourceVerdict:raw.sourceVerdict==='partly'?'partly':'true',
       sourceRead:cleanText(raw.sourceRead,240)||''
     };
+    if(guidance.length)payload.memoryGuidance=guidance;
+    return payload;
   }
   function strategyStats(events,strategyId,cellKey){
     var result={strategyId:strategyId,completed:0,declined:0,score:0},weight=0;
@@ -192,10 +229,52 @@
     result.score=Math.round((result.score/(weight+2))*10000)/10000;
     return result;
   }
-  function rankCandidates(candidates,events,cellKey){
+  function adapterProvenance(item){
+    if(!item)return null;
+    return {memoryId:item.memoryId,evidenceKey:item.evidenceKey,feedbackEventId:item.feedbackEventId,
+      influence:item.influence==='preferred'?'preference':item.influence==='avoided'?'veto':''};
+  }
+  function validGuidance(guidance,memoryContext){
+    return !!(guidance&&guidance.length&&memoryContext&&B.memoryUse&&
+      typeof B.memoryUse.validateProvenance==='function'&&guidance.every(function(item){
+        return B.memoryUse.validateProvenance(adapterProvenance(item),memoryContext);
+      }));
+  }
+  function strategySignal(candidate,stats,cellKey,options){
+    options=options||{};
+    if(!options.memoryContext||!B.memoryUse||typeof B.memoryUse.strategySignal!=='function')return null;
+    var signal=B.memoryUse.strategySignal(options.memoryContext,candidate,
+      cellKey||options.themeId||'',options.sourceEvidenceIds||[]);
+    if(!signal||typeof signal!=='object')return null;
+    var influence=signal.influence||(signal.provenance&&signal.provenance.influence);
+    var veto=signal.veto===true||influence==='veto';
+    var provenance=clone(signal.provenance)||{};
+    provenance.influence=veto?'avoided':'preferred';
+    var guidance=normalizedGuidance([provenance]);
+    if(!guidance||!guidance.length)return null;
+    if(!validGuidance(guidance,options.memoryContext))return null;
+    var requested=typeof signal.delta==='number'&&isFinite(signal.delta)?signal.delta:0.10;
+    var delta=!veto&&influence!=='veto'&&stats.score>=0?Math.max(0,Math.min(0.10,requested)):0;
+    if(!veto&&delta<=0)return null;
+    return {veto:veto,delta:Math.round(delta*10000)/10000,provenance:guidance[0]};
+  }
+  function rankCandidates(candidates,events,cellKey,options){
     return (candidates||[]).map(function(candidate,index){
-      return {candidate:clone(candidate),index:index,stats:strategyStats(events,candidate.strategyId,cellKey)};
-    }).sort(function(a,b){return b.stats.score-a.stats.score||a.index-b.index;});
+      var stats=strategyStats(events,candidate.strategyId,cellKey);
+      var signal=strategySignal(candidate,stats,cellKey,options);
+      var item={candidate:clone(candidate),index:index,stats:stats};
+      if(signal){
+        item.memoryVeto=signal.veto;item.memoryDelta=signal.delta;
+        item.memoryProvenance=clone(signal.provenance);
+        item.rankScore=Math.round((stats.score+signal.delta)*10000)/10000;
+      }
+      return item;
+    }).sort(function(a,b){
+      var as=a.rankScore===undefined?a.stats.score:a.rankScore;
+      var bs=b.rankScore===undefined?b.stats.score:b.rankScore;
+      return Number(!!a.memoryVeto)-Number(!!b.memoryVeto)||bs-as||
+        b.stats.score-a.stats.score||a.index-b.index;
+    });
   }
   function experimentEvents(events){
     return (events||[]).filter(function(event){return event&&EVENT_TYPES[event.type]&&event.payload;});
@@ -224,40 +303,66 @@
     });
     return latest?clone(latest):null;
   }
-  function proposalForFeedback(feedback,observations,cells,events,now){
-    var source=feedback&&feedback.payload,observation,choices,ranked,cell,selected,createdAt;
+  function proposalGuidance(selected,ranked,memoryContext){
+    var raw=[];
+    if(selected&&selected.memoryProvenance)raw.push(selected.memoryProvenance);
+    (ranked||[]).some(function(item){
+      if(raw.length>=2)return true;
+      if(item&&item.memoryVeto&&item.memoryProvenance)raw.push(item.memoryProvenance);
+      return raw.length>=2;
+    });
+    var guidance=normalizedGuidance(raw);
+    if(!guidance||!guidance.length)return [];
+    if(!validGuidance(guidance,memoryContext))return [];
+    return guidance;
+  }
+  function proposalForFeedback(feedback,observations,cells,events,now,options){
+    options=options||{};
+    var source=feedback&&feedback.payload,observation,sourceEvidence,choices,ranked,cell,selected,createdAt,guidance;
     if(!source||(source.verdict!=='true'&&source.verdict!=='partly')||activeExperiment(events)||
        decisionForFeedback(events,feedback))return null;
     observation=matchingObservation(feedback,observations);
     if(!observation)return null;
+    sourceEvidence=canonicalSourceEvidence(source,observation);
+    if(!sourceEvidence)return null;
     choices=candidatesFor(observation,cells);
     if(!choices.length)return null;
     cell=cellLabel(observation,cells);
-    ranked=rankCandidates(choices,events,cell.key);
-    selected=ranked[0].candidate;
+    ranked=rankCandidates(choices,events,cell.key,{
+      memoryContext:options.memoryContext,
+      themeId:observation.themeId||options.themeId||null,
+      sourceEvidenceIds:sourceEvidence.concat(
+        Array.isArray(options.sourceEvidenceIds)?options.sourceEvidenceIds:[])
+    });
+    selected=ranked.filter(function(item){return !item.memoryVeto;})[0];
+    if(!selected)return null;
+    guidance=proposalGuidance(selected,ranked,options.memoryContext);
     createdAt=validNow(now)?Math.floor(now):Math.floor(feedback.ts);
-    return normalizedPayload({
+    var proposal={
       experimentId:'exp_'+hash(source.insightId+'|'+source.evidenceKey),
       insightId:source.insightId,
       evidenceKey:source.evidenceKey,
-      evidenceEventIds:(source.evidenceEventIds||[]).slice(),
+      evidenceEventIds:sourceEvidence.slice(),
       observationKind:observation.kind,
       classification:observation.classification||null,
       themeId:observation.themeId||null,
       cellKey:cell.key,
-      strategyId:selected.strategyId,
-      action:selected.action,
-      measure:selected.measure,
-      durationDays:selected.durationDays,
+      strategyId:selected.candidate.strategyId,
+      action:selected.candidate.action,
+      measure:selected.candidate.measure,
+      durationDays:selected.candidate.durationDays,
       createdAt:createdAt,
-      dueAt:createdAt+selected.durationDays*DAY,
+      dueAt:createdAt+selected.candidate.durationDays*DAY,
       sourceVerdict:source.verdict,
       sourceRead:observation.read||''
-    });
+    };
+    if(guidance.length)proposal.memoryGuidance=guidance;
+    return normalizedPayload(proposal);
   }
-  function decisionPayload(experiment,decision,edits){
+  function decisionPayload(experiment,decision,edits,memoryContext){
     var payload=normalizedPayload(experiment);
     if(!payload||(decision!=='accepted'&&decision!=='edited'))return null;
+    if(payload.memoryGuidance&&!validGuidance(payload.memoryGuidance,memoryContext))return null;
     if(decision==='edited'){
       edits=edits||{};
       payload.action=cleanText(edits.action,180);
