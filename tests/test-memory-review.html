@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>B HIVE Weekly Memory Review Tests (beta10c)</title>
+<link rel="stylesheet" href="../css/app.css?test=beta10c-stage5b">
+<style>
+  body{background:#15120c;color:#ece4d2;font:14px/1.6 system-ui,sans-serif;max-width:780px;margin:40px auto;padding:0 20px}
+  h1{color:#c9ae78;font-size:20px;border-bottom:1px solid rgba(237,228,210,.1);padding-bottom:10px}
+  .test{padding:6px 10px;margin:3px 0;border-radius:4px;font:12px/1.5 monospace}
+  .pass{background:rgba(148,160,109,.15);color:#a3b07f}.fail{background:rgba(207,140,84,.2);color:#cf8c54}
+  .summary{margin-top:24px;padding:12px;border:1px solid #c9ae78;border-radius:8px}.summary b{color:#e2c890}
+  #sandbox{position:fixed;left:-9999px;top:0;width:500px}
+  #visual[hidden]{display:none}
+  body.visual-mode{max-width:1180px}
+  #visual{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;margin:28px 0}
+  #visual h2{grid-column:1/-1;margin:0;color:#c9ae78;font-size:16px}
+  #visual .hive-today{min-width:0;margin:0}
+  @media(max-width:760px){#visual{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<h1>B HIVE Weekly Memory Review Tests</h1>
+<div id="results"></div>
+<div id="visual" hidden></div>
+<div id="sandbox"></div>
+<script src="../js/bhive-learning.js?test=beta10c-stage5b"></script>
+<script src="../js/bhive-review.js?test=beta10c-stage5b"></script>
+<script src="../js/ui-memory.js?test=beta10c-stage5b"></script>
+<script>
+(function(){
+  'use strict';
+  var R=BHIVE.review,L=BHIVE.learningTools,U=BHIVE.memoryReviewUI;
+  var NOW=new Date(2026,6,14,12,0,0).getTime(),DAY=R.DAY,seq=0;
+  var out=document.getElementById('results'),sandbox=document.getElementById('sandbox');
+  var passed=0,failed=0;
+  function test(name,fn){
+    var ok=false,msg='';
+    try{ok=!!fn();}catch(e){msg=' - threw: '+e.message;}
+    out.innerHTML+='<div class="test '+(ok?'pass':'fail')+'">'+(ok?'PASS ':'FAIL ')+name+msg+'</div>';
+    if(ok)passed++;else failed++;
+  }
+  function memory(id,confidence,status){
+    return {
+      id:id,evidenceKey:'evidence_'+id,statement:'Evidence-backed memory '+id+'.',
+      status:status||'candidate',source:'experiment_outcomes',confidence:confidence===undefined?.62:confidence,
+      cellKey:'lw',themeId:null,strategyId:'protected_block',
+      evidenceEventIds:['source_'+id,'outcome_'+id],feedbackEventId:null
+    };
+  }
+  function model(items){return {candidates:items||[memory('one'),memory('two')]};}
+  function event(type,ts,payload,id){
+    seq++;
+    return L.createEvent(type,{id:id||('evt_'+type+'_'+seq),ts:ts,payload:payload});
+  }
+  function started(items,daysAgo){
+    var proposedAt=NOW-(daysAgo||0)*DAY-2000;
+    var proposal=R.proposal(model(items),[],proposedAt);
+    var start=event('weekly_review_started',proposedAt+1000,R.startPayload(proposal));
+    return {proposal:proposal,start:start,review:R.activeReview([start],NOW),events:[start]};
+  }
+  function feedback(review,item,verdict,ts,text){
+    var payload={memoryId:item.memoryId,evidenceKey:item.evidenceKey,verdict:verdict,reviewId:review.reviewId};
+    if(verdict==='corrected')payload.correctedText=text||'This is the corrected memory.';
+    return event('memory_feedback',ts||NOW-500,payload);
+  }
+  function answerAll(data,at){
+    at=typeof at==='number'?at:NOW-600;
+    data.review.items.forEach(function(item,index){
+      data.events.push(feedback(data.review,item,index?'partly':'true',at+index));
+    });
+    return data;
+  }
+  function complete(data,ts){
+    var completedAt=typeof ts==='number'?ts:NOW;
+    answerAll(data,completedAt-500);
+    var payload=R.completionPayload(data.review,data.events,completedAt);
+    var done=event('weekly_review_completed',completedAt,payload);
+    data.events.push(done);data.done=done;
+    return data;
+  }
+
+  test('learning store accepts weekly review start and completion events',function(){
+    return !!event('weekly_review_started',NOW,{reviewId:'r',createdAt:NOW,items:[]})&&
+      !!event('weekly_review_completed',NOW,{reviewId:'r',items:[]});
+  });
+  test('candidate selection ranks confidence, deduplicates, and caps at three',function(){
+    var one=memory('one',.2),duplicate=memory('one',.9),four=memory('four',.4);
+    var selected=R.candidateMemories(model([one,memory('two',.8),memory('three',.6),four,duplicate]),3);
+    return selected.length===3&&selected[0].memoryId==='two'&&selected[1].memoryId==='three'&&
+      selected[2].memoryId==='four';
+  });
+  test('already-reviewed and invalid memories are excluded',function(){
+    var reviewed=memory('reviewed');reviewed.feedbackEventId='feedback';
+    var confirmed=memory('confirmed');confirmed.status='confirmed';
+    var detached=memory('detached');detached.evidenceEventIds=[];
+    return R.candidateMemories(model([reviewed,confirmed,detached]),3).length===0;
+  });
+  test('proposal is stable and does not mutate its model',function(){
+    var source=model(),before=JSON.stringify(source);
+    var first=R.proposal(source,[],NOW),second=R.proposal(source,[],NOW);
+    return first.reviewId===second.reviewId&&JSON.stringify(first)===JSON.stringify(second)&&
+      JSON.stringify(source)===before;
+  });
+  test('proposal stays quiet without reviewable evidence',function(){
+    return R.proposal(model([]),[],NOW)===null&&R.proposal(model(),[],NaN)===null;
+  });
+  test('start payload is a bounded immutable snapshot',function(){
+    var proposal=R.proposal(model(),[],NOW),payload=R.startPayload(proposal);
+    proposal.items[0].statement='Changed later';
+    return payload.items.length===2&&payload.items[0].statement!=='Changed later'&&
+      payload.items[0].evidenceEventIds.length===2;
+  });
+  test('active review is restored from its append-only start event',function(){
+    var data=started(),restored=R.activeReview(JSON.parse(JSON.stringify(data.events)),NOW);
+    return restored&&restored.reviewId===data.proposal.reviewId&&restored.startedEventId===data.start.id;
+  });
+  test('future and malformed review starts are ignored',function(){
+    var data=started(),future=JSON.parse(JSON.stringify(data.start)),malformed=JSON.parse(JSON.stringify(data.start));
+    future.id='future';future.ts=NOW+DAY;
+    malformed.id='bad';malformed.payload.items=[];
+    return R.activeReview([future,malformed],NOW)===null;
+  });
+  test('matching feedback resolves only its exact memory and evidence set',function(){
+    var data=started(),item=data.review.items[0],match=feedback(data.review,item,'true',NOW-500);
+    var resolved=R.resolve(data.review,data.events.concat(match),NOW);
+    return resolved.answered===1&&resolved.items[0].verdict==='true'&&!resolved.items[1].verdict;
+  });
+  test('feedback before review start cannot answer the review',function(){
+    var data=started(),early=feedback(data.review,data.review.items[0],'true',data.review.startedAt-1);
+    return R.resolve(data.review,data.events.concat(early),NOW).answered===0;
+  });
+  test('future, wrong-review, and changed-evidence feedback are ignored',function(){
+    var data=started(),item=data.review.items[0];
+    var future=feedback(data.review,item,'true',NOW+DAY);
+    var wrong=feedback(data.review,item,'true',NOW-500);wrong.payload.reviewId='another';
+    var changed=feedback(data.review,item,'true',NOW-400);changed.payload.evidenceKey='changed';
+    return R.resolve(data.review,data.events.concat([future,wrong,changed]),NOW).answered===0;
+  });
+  test('a valid correction resolves with the user text',function(){
+    var data=started(),item=data.review.items[0];
+    var corrected=feedback(data.review,item,'corrected',NOW-500,'Short blocks help before lunch.');
+    var resolved=R.resolve(data.review,data.events.concat(corrected),NOW);
+    return resolved.items[0].verdict==='corrected'&&resolved.items[0].correctedText==='Short blocks help before lunch.';
+  });
+  test('blank corrected feedback is rejected by review resolution',function(){
+    var data=started(),bad=feedback(data.review,data.review.items[0],'corrected',NOW-500,'valid');
+    bad.payload.correctedText=' ';
+    return R.resolve(data.review,data.events.concat(bad),NOW).answered===0;
+  });
+  test('completion payload is unavailable until every item is answered',function(){
+    var data=started(),one=feedback(data.review,data.review.items[0],'true',NOW-500);
+    return R.completionPayload(data.review,data.events.concat(one),NOW)===null;
+  });
+  test('completion payload cites every exact feedback event',function(){
+    var data=answerAll(started()),payload=R.completionPayload(data.review,data.events,NOW);
+    return payload&&payload.items.length===2&&payload.items.every(function(item){
+      return data.events.some(function(source){return source.id===item.feedbackEventId;});
+    });
+  });
+  test('a valid completion closes the active review',function(){
+    var data=complete(started());
+    return R.activeReview(data.events,NOW)===null&&R.latestCompleted(data.events,NOW).id===data.done.id;
+  });
+  test('a forged completion without matching feedback cannot close a review',function(){
+    var data=started(),fake={reviewId:data.review.reviewId,items:data.review.items.map(function(item){
+      return {memoryId:item.memoryId,evidenceKey:item.evidenceKey,feedbackEventId:'missing',verdict:'true'};
+    })};
+    data.events.push(event('weekly_review_completed',NOW-1,fake));
+    return !!R.activeReview(data.events,NOW)&&R.latestCompleted(data.events,NOW)===null;
+  });
+  test('completion is shown as today-only closure',function(){
+    var today=complete(started()),older=complete(started(null,2),NOW-2*DAY+1000);
+    return R.latestCompletedToday(today.events,NOW).id===today.done.id&&
+      R.latestCompletedToday(older.events,NOW)===null;
+  });
+  test('completed review enforces the seven-day cooldown',function(){
+    var data=complete(started()),state=R.proposal(model([memory('fresh')]),data.events,NOW);
+    return state===null;
+  });
+  test('a new proposal becomes eligible after the cooldown',function(){
+    var then=NOW-7*DAY-5000,data=started(null,8),item=data.review.items[0];
+    data.events.push(feedback(data.review,item,'true',then-1000));
+    data.events.push(feedback(data.review,data.review.items[1],'true',then-900));
+    var payload=R.completionPayload(data.review,data.events,then-500);
+    data.events.push(event('weekly_review_completed',then,payload));
+    return !!R.proposal(model([memory('fresh')]),data.events,NOW);
+  });
+  test('state prioritises active review over a new proposal',function(){
+    var data=started(),state=R.state(model([memory('fresh')]),data.events,NOW);
+    return state.kind==='active'&&state.review.reviewId===data.review.reviewId;
+  });
+  test('state returns completed closure before another proposal',function(){
+    var data=complete(started()),state=R.state(model([memory('fresh')]),data.events,NOW);
+    return state.kind==='completed'&&state.event.id===data.done.id;
+  });
+  test('review derivation remains deterministic and leaves events untouched',function(){
+    var data=answerAll(started()),before=JSON.stringify(data.events);
+    var first=R.resolve(data.review,data.events,NOW),second=R.resolve(data.review,data.events,NOW);
+    return JSON.stringify(first)===JSON.stringify(second)&&JSON.stringify(data.events)===before;
+  });
+  test('proposal UI escapes memory-derived content and exposes an accessible start',function(){
+    var proposal=R.proposal(model([memory('safe')]),[],NOW);
+    proposal.reviewId='"><img src=x onerror=alert(1)>';
+    var html=U.renderProposal(proposal);
+    return html.indexOf('<img')<0&&html.indexOf('&lt;img')>=0&&html.indexOf('aria-labelledby')>=0&&
+      html.indexOf('td-memory-start')>=0;
+  });
+  test('active UI renders exact controls for unanswered memories',function(){
+    var data=started([memory('single')]),resolved=R.resolve(data.review,data.events,NOW);
+    sandbox.innerHTML=U.renderActive(resolved);
+    return sandbox.querySelectorAll('.td-memory-verdict').length===3&&
+      sandbox.querySelectorAll('.td-memory-correct-toggle').length===1&&
+      sandbox.querySelector('.td-memory-actions').getAttribute('role')==='group';
+  });
+  test('UI control matching requires review, memory, and evidence identity',function(){
+    var data=started([memory('single')]),resolved=R.resolve(data.review,data.events,NOW);
+    sandbox.innerHTML=U.renderActive(resolved);
+    var button=sandbox.querySelector('.td-memory-verdict');
+    var matches=U.itemFor(button,resolved);
+    button.setAttribute('data-evidence-key','changed');
+    return matches&&matches.memoryId==='single'&&U.itemFor(button,resolved)===null;
+  });
+  test('Correct reveals a labelled required input and restores focus on close',function(){
+    var data=started([memory('single')]),resolved=R.resolve(data.review,data.events,NOW);
+    sandbox.innerHTML=U.renderActive(resolved);
+    var button=sandbox.querySelector('.td-memory-correct-toggle');
+    var opened=U.toggleCorrection(button),input=sandbox.querySelector('.td-memory-input');
+    var ready=opened&&!input.closest('.td-memory-corrector').hidden&&input.required&&
+      sandbox.querySelector('label').getAttribute('for')===input.id&&document.activeElement===input;
+    U.toggleCorrection(sandbox.querySelector('.td-memory-correct-cancel'));
+    return ready&&document.activeElement===button;
+  });
+  test('answered UI removes verdict controls and shows the recorded answer',function(){
+    var data=started([memory('single')]);
+    data.events.push(feedback(data.review,data.review.items[0],'partly',NOW-500));
+    var resolved=R.resolve(data.review,data.events,NOW),html=U.renderActive(resolved);
+    return html.indexOf('Recorded')>=0&&html.indexOf('Partly')>=0&&html.indexOf('td-memory-verdict')<0;
+  });
+  test('fully answered recovery UI offers an explicit finish action',function(){
+    var data=answerAll(started()),resolved=R.resolve(data.review,data.events,NOW);
+    return resolved.complete&&U.renderActive(resolved).indexOf('td-memory-finish')>=0;
+  });
+  test('completed UI exposes a focusable Memory updated closure',function(){
+    var html=U.renderCompleted();
+    return html.indexOf('Memory updated')>=0&&html.indexOf('tabindex="-1"')>=0;
+  });
+
+  if(location.search.indexOf('visual=1')>=0){
+    document.body.classList.add('visual-mode');
+    var visual=document.getElementById('visual'),visualProposal=R.proposal(model(),[],NOW);
+    var visualActiveData=started(),visualFeedback=feedback(visualActiveData.review,
+      visualActiveData.review.items[0],'partly',NOW-500);
+    var visualActive=R.resolve(visualActiveData.review,visualActiveData.events.concat(visualFeedback),NOW);
+    visual.hidden=false;
+    visual.innerHTML='<h2>Stage 5B visual states</h2>'+
+      '<div class="hive-today"><div class="td-status">Review proposal</div>'+U.renderProposal(visualProposal)+'</div>'+
+      '<div class="hive-today"><div class="td-status">Active review</div>'+U.renderActive(visualActive)+'</div>'+
+      '<div class="hive-today"><div class="td-status">Completed today</div>'+U.renderCompleted()+'</div>';
+    visual.addEventListener('click',function(ev){
+      var button=ev.target&&ev.target.closest?ev.target.closest('.td-memory-correct-toggle, .td-memory-correct-cancel'):null;
+      if(button)U.toggleCorrection(button);
+    });
+  }
+
+  out.innerHTML+='<div class="summary"><b>'+passed+' passed</b>, '+failed+' failed - '+
+    Math.round(passed/(passed+failed)*100)+'% pass rate</div>';
+})();
+</script>
+</body>
+</html>

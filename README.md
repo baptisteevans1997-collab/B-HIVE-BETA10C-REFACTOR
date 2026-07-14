@@ -9,6 +9,7 @@ Audited refactor build with a local-first schema v4 learning foundation.
 - Insight UI regressions: `tests/test-insights.html`
 - Experiment-loop regressions: `tests/test-experiments.html`
 - Trusted-memory regressions: `tests/test-memory.html`
+- Weekly-memory-review regressions: `tests/test-memory-review.html`
 
 The v4 snapshot preserves the v3 hive state and adds append-only learning events. Existing
 v3 check-ins, learnings, and unlocks migrate locally on load; no network service is required.

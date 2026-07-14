@@ -2865,7 +2865,7 @@
         els[i].setAttribute('aria-label',c.full+(st==='dormant'?' (asleep)':''));
       }
     }
-    var currentTodayInsight=null,currentTodayExperiment=null;
+    var currentTodayInsight=null,currentTodayExperiment=null,currentTodayReview=null;
     function renderToday(){
       var el=document.getElementById('hive-today');
       if(!el)return;
@@ -2900,9 +2900,10 @@
           change='Since last check-in, '+parts.join(' and ')+'.';
         }
       }
-      var insight='',experimentOwnsNextMove=false;
+      var insight='',todayOwnsNextMove=false;
       currentTodayInsight=null;
       currentTodayExperiment=null;
+      currentTodayReview=null;
       if(B.inference&&B.insightUI){
         var answered=B.insightUI.latestFeedbackToday(events,now);
         var pending=!answered&&B.experiments?B.experiments.latestPendingFeedback(events,now):null;
@@ -2912,7 +2913,7 @@
         var closed=!active&&B.experiments&&B.experimentUI?B.experiments.latestClosedToday(events,now):null;
         if(active){
           currentTodayExperiment=active;
-          experimentOwnsNextMove=true;
+          todayOwnsNextMove=true;
           insight=B.experimentUI.renderActive(active,now);
         }else if(closed){
           insight=B.experimentUI.renderClosed(closed);
@@ -2920,10 +2921,25 @@
           var generated=B.inference.generate(events,cells,now,{ranking:{feedbackEvents:events,now:now}});
           var proposal=proposalFeedback&&B.experiments&&B.experimentUI?
             B.experiments.proposalForFeedback(proposalFeedback,generated.observations,cells,events,now):null;
+          var reviewState=null;
+          if(!proposal&&B.memoryModel&&B.review&&B.memoryReviewUI){
+            var memoryModel=B.memoryModel.derive(events,cells,now,{observations:generated.observations});
+            reviewState=B.review.state(memoryModel,events,now);
+          }
           if(proposal){
             currentTodayExperiment=proposal;
-            experimentOwnsNextMove=true;
+            todayOwnsNextMove=true;
             insight=B.experimentUI.renderProposal(proposal);
+          }else if(reviewState&&reviewState.kind==='active'){
+            currentTodayReview=reviewState.review;
+            todayOwnsNextMove=true;
+            insight=B.memoryReviewUI.renderActive(currentTodayReview);
+          }else if(reviewState&&reviewState.kind==='proposal'){
+            currentTodayReview=reviewState.review;
+            todayOwnsNextMove=true;
+            insight=B.memoryReviewUI.renderProposal(currentTodayReview);
+          }else if(reviewState&&reviewState.kind==='completed'){
+            insight=B.memoryReviewUI.renderCompleted(reviewState.event);
           }else if(answered)insight=B.insightUI.renderAnswered(answered);
           else if(generated.insights.primary){
             currentTodayInsight=generated.insights.primary.observation;
@@ -2935,7 +2951,7 @@
         '<div class="td-status">'+B.esc(status)+'</div>'+
         (change?'<div class="td-change">'+change+'</div>':'')+
         insight+
-        (experimentOwnsNextMove?'':
+        (todayOwnsNextMove?'':
           '<button class="td-next" type="button" data-kind="'+mv.kind+'"'+
             (mv.idx!==undefined?' data-idx="'+mv.idx+'"':'')+'>'+
             '<span class="td-next-k">Next move</span>'+
@@ -2943,7 +2959,25 @@
             '<span class="td-next-arrow">&rarr;</span>'+
           '</button>'+
           '<div class="td-why">'+B.esc(whyMove(mv))+'</div>');
-      updateAttentionMarker(experimentOwnsNextMove?null:mv);
+      updateAttentionMarker(todayOwnsNextMove?null:mv);
+    }
+
+    function saveMemoryReviewFeedback(item,verdict,correctedText){
+      if(!currentTodayReview||!item||!B.memoryModel||!B.review)return false;
+      var payload=B.memoryModel.feedbackPayload({id:item.memoryId,evidenceKey:item.evidenceKey},
+        verdict,correctedText);
+      if(!payload)return false;
+      payload.reviewId=currentTodayReview.reviewId;
+      var recorded=BHIVE.recordEvent('memory_feedback',{cellKey:item.cellKey,payload:payload});
+      if(!recorded)return false;
+      var now=Date.now(),events=(BHIVE.learning&&BHIVE.learning.events)||[];
+      var completion=B.review.completionPayload(currentTodayReview,events,now);
+      if(completion)BHIVE.recordEvent('weekly_review_completed',{payload:completion});
+      save();
+      var response=document.querySelector('#hive-today .td-memory-complete')||
+        document.querySelector('#hive-today .td-memory-active');
+      if(response)response.focus();
+      return true;
     }
 
     /* ── wire it up ── */
@@ -3104,6 +3138,63 @@
       var toggle=ev.target&&ev.target.closest?ev.target.closest('.td-evidence-toggle'):null;
       if(toggle){
         B.insightUI.toggleEvidence(toggle);
+        return;
+      }
+      var memoryStart=ev.target&&ev.target.closest?ev.target.closest('.td-memory-start'):null;
+      if(memoryStart&&currentTodayReview&&currentTodayReview.status==='proposal'&&
+         B.memoryReviewUI.matchesReview(memoryStart,currentTodayReview)){
+        var startPayload=B.review.startPayload(currentTodayReview);
+        if(startPayload&&BHIVE.recordEvent('weekly_review_started',{payload:startPayload})){
+          save();
+          var activeReview=todayEl.querySelector('.td-memory-active');
+          if(activeReview)activeReview.focus();
+        }
+        return;
+      }
+      var memoryCorrect=ev.target&&ev.target.closest?ev.target.closest('.td-memory-correct-toggle'):null;
+      var memoryCorrectCancel=ev.target&&ev.target.closest?ev.target.closest('.td-memory-correct-cancel'):null;
+      if((memoryCorrect||memoryCorrectCancel)&&currentTodayReview&&
+         B.memoryReviewUI.itemFor(memoryCorrect||memoryCorrectCancel,currentTodayReview)){
+        B.memoryReviewUI.toggleCorrection(memoryCorrect||memoryCorrectCancel);
+        return;
+      }
+      var memoryVerdict=ev.target&&ev.target.closest?ev.target.closest('.td-memory-verdict'):null;
+      if(memoryVerdict&&currentTodayReview){
+        var memoryItem=B.memoryReviewUI.itemFor(memoryVerdict,currentTodayReview);
+        var memoryVerdictValue=memoryVerdict.getAttribute('data-verdict');
+        if(memoryItem&&(memoryVerdictValue==='true'||memoryVerdictValue==='partly'||
+           memoryVerdictValue==='wrong'))saveMemoryReviewFeedback(memoryItem,memoryVerdictValue);
+        return;
+      }
+      var memoryCorrectSave=ev.target&&ev.target.closest?ev.target.closest('.td-memory-correct-save'):null;
+      if(memoryCorrectSave&&currentTodayReview){
+        memoryItem=B.memoryReviewUI.itemFor(memoryCorrectSave,currentTodayReview);
+        var corrector=memoryCorrectSave.closest('.td-memory-corrector');
+        var correctionInput=corrector&&corrector.querySelector('.td-memory-input');
+        if(!memoryItem||!correctionInput)return;
+        correctionInput.setCustomValidity('');
+        if(!correctionInput.checkValidity()){
+          correctionInput.reportValidity();
+          return;
+        }
+        var correctionText=B.memoryReviewUI.readCorrection(corrector);
+        if(correctionText.replace(/\s+/g,' ').trim().length<3){
+          correctionInput.setCustomValidity('Write a few words for the corrected memory.');
+          correctionInput.reportValidity();
+          return;
+        }
+        saveMemoryReviewFeedback(memoryItem,'corrected',correctionText);
+        return;
+      }
+      var memoryFinish=ev.target&&ev.target.closest?ev.target.closest('.td-memory-finish'):null;
+      if(memoryFinish&&currentTodayReview&&B.memoryReviewUI.matchesReview(memoryFinish,currentTodayReview)){
+        var finishPayload=B.review.completionPayload(currentTodayReview,
+          (BHIVE.learning&&BHIVE.learning.events)||[],Date.now());
+        if(finishPayload&&BHIVE.recordEvent('weekly_review_completed',{payload:finishPayload})){
+          save();
+          var completedReview=todayEl.querySelector('.td-memory-complete');
+          if(completedReview)completedReview.focus();
+        }
         return;
       }
       var expEdit=ev.target&&ev.target.closest?ev.target.closest('.td-exp-edit'):null;

@@ -16,6 +16,7 @@
     experiment_declined:1,
     experiment_completed:1,
     memory_feedback:1,
+    weekly_review_started:1,
     weekly_review_completed:1
   };
 
