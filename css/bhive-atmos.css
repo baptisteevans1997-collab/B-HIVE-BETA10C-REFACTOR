@@ -1,0 +1,674 @@
+/* ═══════════════════════════════════════════════════════════════════
+   B HIVE — ATMOSPHERE LAYER
+   Keeper pass: visual-hld-atmosphere-01
+
+   Original neon-pixel sci-fi-fantasy art direction for B HIVE.
+   Decorative only. Contains no application logic, no IDs, no hooks.
+   Loaded LAST so it wins the cascade; delete the <link> to revert.
+
+   Palette discipline: B HIVE's gold/honey/amber/ember/clay/sage/cream
+   are PRESERVED as the identity. This layer only (a) deepens the void
+   behind them and (b) adds emissive variants of the SAME hues so the
+   existing colours read as light sources instead of surfaces.
+   ═══════════════════════════════════════════════════════════════════ */
+
+:root{
+  /* ── depth ladder: the void the hive floats in ───────────────── */
+  --atmos-void:#05060c;      /* deepest — behind everything          */
+  --atmos-deep:#080a12;      /* far structures                       */
+  --atmos-mid:#0d0f18;       /* cell interiors                       */
+  --atmos-rise:#12121e;      /* near surfaces / panels               */
+  --atmos-edge:rgba(201,174,120,0.14);
+
+  /* ── emissive hues: B HIVE's own colours, pushed to light ────── */
+  --neon-gold:#ffd98a;       /* from --gold   #c9ae78                */
+  --neon-honey:#ffc76b;      /* from --gold-2 #e2c890                */
+  --neon-amber:#ffb457;
+  --neon-ember:#ff8347;      /* from --ember  #cf8c54                */
+  --neon-clay:#ff6b52;       /* from --clay   #bd6c52                */
+  --neon-sage:#c2dd86;       /* from --sage   #94a06d                */
+  --neon-cream:#fff4da;      /* from --ink    #ece4d2                */
+  --neon-dead:#3a3322;       /* unpowered edge — dormant only        */
+
+  /* ── glow ladder: four rungs, never all at once ──────────────── */
+  --glow-0:none;
+  --glow-1:0 0 3px rgba(255,217,138,.22);
+  --glow-2:0 0 8px rgba(255,217,138,.34), 0 0 18px rgba(255,180,87,.14);
+  --glow-3:0 0 12px rgba(255,217,138,.48), 0 0 30px rgba(255,131,71,.20);
+
+  /* ── pixel geometry: hard edges, no rounding ─────────────────── */
+  --px:2px;
+  --edge:1px;
+  --tick:6px;
+
+  /* ── motion: restrained, game-like ───────────────────────────── */
+  --t-step:.16s;
+  --t-pulse:3.2s;
+  --t-breathe:7s;
+  --t-drift:48s;
+  --ease-step:steps(5,end);
+  --ease-out:cubic-bezier(.2,.7,.3,1);
+}
+
+/* ═══ 1. THE VOID ══════════════════════════════════════════════════
+   Deep, dimensional, quiet. Readability first: everything here sits
+   under 0.2 opacity so text contrast is untouched.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* LAYER ORDER MATTERS. .grid-bg and .glow-bg are siblings, both
+   position:fixed z-index:0, so .glow-bg (later in the DOM) paints OVER
+   .grid-bg. The opaque void therefore lives on <body>, and both fixed
+   layers stay fully transparent apart from their own marks — otherwise
+   .glow-bg silently erases the lattice.
+
+   NO mask-image ANYWHERE in this file. A mask on a fixed, full-viewport
+   layer forces a compositing path that blanks the whole page to black
+   in some renderers (reproduced here). Edge fades are composited as
+   ordinary gradient layers instead — same look, no mask. */
+/* Flat void on <body>. The depth gradient lives on .glow-bg (already
+   position:fixed) instead of using background-attachment:fixed here —
+   that property repaints the entire background on every scroll frame
+   and is a documented jank/compositing hazard on mobile. */
+body{ background:var(--atmos-void); }
+
+/* honeycomb circuitry lattice — replaces the flat 36px square grid.
+   Three sheared rules weave an isometric triangular/hex mesh.
+   NOTE: repeating-linear-gradient with hard px stops, NOT a 1px colour
+   stop on a rotated linear-gradient — the latter scales with the
+   gradient line and smears into wide diagonal bands.
+   The leading radial paints the void back over the mesh at the edges:
+   a vignette without a mask. */
+.grid-bg{
+  background-image:
+    radial-gradient(circle at 50% 40%,transparent 0 32%,rgba(5,6,12,0.75) 72%,#05060c 92%),
+    repeating-linear-gradient(60deg,transparent 0 25px,rgba(201,174,120,0.05) 25px 26px),
+    repeating-linear-gradient(-60deg,transparent 0 25px,rgba(201,174,120,0.05) 25px 26px),
+    repeating-linear-gradient(0deg,transparent 0 43px,rgba(201,174,120,0.028) 43px 44px);
+  opacity:.75;
+}
+
+/* fog + depth. Every stop transparent so the lattice below survives.
+   This element is already position:fixed, which gives the depth wash
+   its parallax for free — no background-attachment needed. */
+.glow-bg{
+  background:
+    radial-gradient(1200px 780px at 50% 20%,rgba(201,174,120,0.075),transparent 62%),
+    radial-gradient(760px 520px at 8% 74%,rgba(207,140,84,0.05),transparent 70%),
+    radial-gradient(820px 560px at 94% 12%,rgba(226,200,144,0.04),transparent 72%);
+}
+
+/* distant geometric ruins — original hex-tower silhouette, authored
+   here as a data-URI so it adds no asset request and no SW entry.
+   Sits at the horizon, barely above the void. */
+.glow-bg::before{
+  content:"";position:absolute;inset:auto 0 0 0;height:38vh;
+  background-image:
+    linear-gradient(180deg,#05060c 0%,rgba(5,6,12,0.55) 34%,transparent 66%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 480 140' preserveAspectRatio='xMidYMax slice'%3E%3Cg fill='%23080a12'%3E%3Cpath d='M18 140V58l16-9 16 9v82z'/%3E%3Cpath d='M62 140V78l12-7 12 7v62z'/%3E%3Cpath d='M104 140V44l20-11 20 11v96z'/%3E%3Cpath d='M160 140V86l14-8 14 8v54z'/%3E%3Cpath d='M204 140V62l17-10 17 10v78z'/%3E%3Cpath d='M256 140V30l22-13 22 13v110z'/%3E%3Cpath d='M318 140V72l15-9 15 9v68z'/%3E%3Cpath d='M362 140V52l18-10 18 10v88z'/%3E%3Cpath d='M416 140V84l13-8 13 8v56z'/%3E%3C/g%3E%3Cg fill='none' stroke='%23c9ae78' stroke-opacity='.16' stroke-width='1'%3E%3Cpath d='M124 44v96M278 30v110M380 52v88'/%3E%3C/g%3E%3Cg fill='%23ffd98a' fill-opacity='.30'%3E%3Crect x='122' y='60' width='4' height='4'/%3E%3Crect x='276' y='46' width='4' height='4'/%3E%3Crect x='378' y='68' width='4' height='4'/%3E%3Crect x='32' y='74' width='3' height='3'/%3E%3Crect x='219' y='78' width='3' height='3'/%3E%3C/g%3E%3C/svg%3E");
+  background-repeat:no-repeat,no-repeat;
+  background-position:center top,center bottom;
+  background-size:100% 100%,cover;
+  opacity:.85;
+}
+
+/* drifting pollen — one composited layer, translate-only, GPU-cheap.
+   Pixel dots (no blur) to hold the sharp-pixel read. */
+.glow-bg::after{
+  content:"";position:absolute;inset:-20% -10%;
+  background-image:
+    radial-gradient(var(--px) var(--px) at 12% 18%,rgba(255,217,138,.42),transparent 50%),
+    radial-gradient(var(--px) var(--px) at 34% 62%,rgba(255,180,87,.30),transparent 50%),
+    radial-gradient(var(--px) var(--px) at 58% 28%,rgba(255,217,138,.34),transparent 50%),
+    radial-gradient(var(--px) var(--px) at 76% 74%,rgba(255,131,71,.26),transparent 50%),
+    radial-gradient(var(--px) var(--px) at 88% 40%,rgba(255,217,138,.30),transparent 50%),
+    radial-gradient(var(--px) var(--px) at 24% 86%,rgba(226,200,144,.24),transparent 50%),
+    radial-gradient(var(--px) var(--px) at 66% 8%,rgba(255,199,107,.28),transparent 50%);
+  background-size:340px 340px;
+  animation:atmos-drift var(--t-drift) linear infinite;
+  /* deliberately NO will-change: this layer spans the viewport, and
+     promoting it permanently costs more than the animation saves. */
+}
+@keyframes atmos-drift{
+  from{transform:translate3d(0,0,0)}
+  to{transform:translate3d(-340px,-170px,0)}
+}
+
+/* supersede the 5B "#energy atmosphere" layer (css/app.css:2176).
+   Same intent — diagonal signal lines + distant hexes — but its stops
+   were percentages on rotated gradients and its tile was stretched
+   `100% 100%` across a ~930x3000 section, so the lines smeared into
+   broad beams and the hexes distorted. Rebuilt with px-based hard
+   stops and a fixed tile size, so both stay sharp at any section height. */
+#energy{
+  background-image:
+    repeating-linear-gradient(118deg,transparent 0 330px,rgba(201,174,120,0.06) 330px 331px),
+    repeating-linear-gradient(62deg,transparent 0 430px,rgba(226,200,144,0.045) 430px 431px),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='620' height='1080' viewBox='0 0 620 1080'%3E%3Cg fill='none' stroke='%23c9ae78' stroke-width='1'%3E%3Cpath d='M60 90 L130 90 L165 150 L130 210 L60 210 L25 150 Z' opacity='.14'/%3E%3Cpath d='M470 250 L530 250 L560 302 L530 354 L470 354 L440 302 Z' opacity='.09'/%3E%3Cpath d='M250 560 L330 560 L370 629 L330 698 L250 698 L210 629 Z' opacity='.11'/%3E%3Cpath d='M520 800 L575 800 L602 847 L575 894 L520 894 L493 847 Z' opacity='.08'/%3E%3Cpath d='M70 900 L120 900 L145 943 L120 986 L70 986 L45 943 Z' opacity='.10'/%3E%3C/g%3E%3Cg fill='%23ffd98a' fill-opacity='.16'%3E%3Crect x='94' y='148' width='3' height='3'/%3E%3Crect x='288' y='627' width='3' height='3'/%3E%3Crect x='498' y='300' width='2' height='2'/%3E%3C/g%3E%3C/svg%3E");
+  background-size:auto, auto, 620px 1080px;
+  background-repeat:repeat, repeat, repeat;
+  background-position:0 0, 0 0, center top;
+}
+
+/* ═══ 2. HIVE CELLS ════════════════════════════════════════════════
+   Each cell reads as a chamber: dark interior, illuminated edge.
+   CSS overrides the SVG presentation attributes set by renderHive();
+   the JS is untouched and keeps full control of geometry + data.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* dark internal surface — the fill is now a chamber floor, not a blob */
+.hive-fill{
+  fill:var(--atmos-mid);
+  fill-opacity:.88;
+  transition:fill-opacity var(--t-step) var(--ease-out);
+}
+/* the cell's own colour survives as an interior ember, not a wash */
+.hive-glow{
+  opacity:.16;
+  transition:opacity var(--t-step) var(--ease-out);
+}
+/* the silhouette: a hard, bright, geometric edge */
+.hive-frame{
+  stroke-width:1.4;
+  stroke-linejoin:miter;
+  transition:stroke var(--t-step) var(--ease-out),
+             stroke-width var(--t-step) var(--ease-out);
+}
+.hive-label{
+  fill:var(--ink-3);
+  stroke:var(--atmos-void);
+  letter-spacing:.09em;
+}
+
+/* ── dormant: quiet, unpowered. No glow at all. ───────────────── */
+.hive-cell.hv-dormant .hive-frame{ stroke:#4b4636; stroke-width:1.1; }
+.hive-cell.hv-dormant .hive-fill{ fill:var(--atmos-deep); fill-opacity:.94; }
+.hive-cell.hv-dormant .hive-glow{ opacity:.03; }
+.hive-cell.hv-dormant .hive-label{ fill:#6d6551; }
+
+/* ── aligned: clean, resolved. Sage-gold, deliberately restrained
+      so it never reads as generic "success green". ─────────────── */
+.hive-cell.hv-aligned .hive-frame{ stroke:var(--neon-sage); stroke-opacity:.82; }
+.hive-cell.hv-aligned .hive-glow{ opacity:.13; }
+
+/* ── under-fed: starved. Amber edge, hollow interior. ─────────── */
+.hive-cell.hv-under .hive-frame{ stroke:var(--neon-amber); stroke-opacity:.72; }
+.hive-cell.hv-under .hive-fill{ fill-opacity:.94; }
+.hive-cell.hv-under .hive-glow{ opacity:.09; }
+
+/* ── leaking: strained. Fractured, unstable light. ────────────── */
+.hive-cell.hv-leak .hive-frame{
+  stroke:var(--neon-ember);
+  stroke-dasharray:15 3 7 2;      /* fractured edge — light escaping */
+  animation:cell-strain 2.4s steps(3,end) infinite;
+}
+.hive-cell.hv-leak .hive-glow{ opacity:.20; animation:cell-strain-glow 2.4s ease-in-out infinite; }
+@keyframes cell-strain{
+  0%,100%{ stroke-opacity:.92; stroke-dashoffset:0 }
+  45%    { stroke-opacity:.50; }
+  60%    { stroke-opacity:.98; }
+  70%    { stroke-opacity:.62; }
+  to     { stroke-dashoffset:-27 }
+}
+@keyframes cell-strain-glow{
+  0%,100%{ opacity:.20 } 50%{ opacity:.30 }
+}
+
+/* ── active (energy >= 58): energised and alive. Slow breathing
+      pulse — the only ambient animation on a healthy cell. ─────── */
+.hive-cell.alive .hive-frame{ stroke-width:1.8; stroke-opacity:1; }
+.hive-cell.alive .hive-glow{ animation:cell-breathe var(--t-breathe) ease-in-out infinite; }
+@keyframes cell-breathe{
+  0%,100%{ opacity:.14 } 50%{ opacity:.26 }
+}
+
+/* ── hovered: edge lifts, interior wakes ─────────────────────── */
+.hive-cell:hover .hive-frame{ stroke-width:2.4; stroke-opacity:1; }
+.hive-cell:hover .hive-glow{ opacity:.30; }
+.hive-cell:hover .hive-label{ fill:var(--neon-cream); }
+
+/* ── selected: unmistakable. Cream edge + full glow. ──────────── */
+.hive-cell.on .hive-frame{
+  stroke:var(--neon-cream); stroke-width:2.6; stroke-opacity:1;
+  stroke-dasharray:none;
+  animation:none;                 /* selection outranks strain flicker */
+}
+.hive-cell.on .hive-glow{ opacity:.38; animation:none; }
+.hive-cell.on .hive-fill{ fill:var(--atmos-rise); }
+.hive-cell.on .hive-label{ fill:var(--neon-cream); }
+
+/* ── completed (evolved into an agent): apex crown ───────────── */
+.hive-cell.cm-apex .hive-frame{
+  stroke:var(--neon-gold); stroke-width:2.2;
+  filter:drop-shadow(0 0 4px rgba(255,217,138,.55));
+}
+.hive-cell.cm-apex .hive-glow{ opacity:.30; }
+
+/* keyboard focus must stay obvious and beat every state above */
+.hive-cell:focus-visible .hive-frame{
+  stroke:var(--neon-cream); stroke-width:3;
+  filter:drop-shadow(0 0 6px rgba(255,244,218,.8));
+  animation:none;
+}
+
+/* the environment disc (drawn by updateEnv() as .hive-env ellipses,
+   fill #c7a65c at ~.11/.18) is a broad warm wash that greys the void
+   and flattens the silhouettes. Dimmed to a faint floor so the Core
+   stays the only real light source. Attribute values, so plain CSS
+   wins — no !important, and updateEnv keeps full control of geometry. */
+.hive-env ellipse{
+  fill:var(--gold);
+  opacity:.045;
+  transition:opacity var(--t-step) var(--ease-out);
+}
+
+/* ═══ 3. THE CORE ══════════════════════════════════════════════════
+   The hive-heart: an ancient technological power source. Layered
+   glow, controlled pulse, and a state that answers to hive condition.
+   ═══════════════════════════════════════════════════════════════ */
+
+.hive-core polygon{
+  transition:fill var(--t-step) var(--ease-out),
+             stroke var(--t-step) var(--ease-out);
+}
+/* outer corona */
+.hive-core .hc-glow{
+  fill:var(--neon-honey);
+  opacity:.30;
+  animation:core-pulse var(--t-pulse) ease-in-out infinite;
+}
+/* the chamber wall — dark body, bright rim: silhouette over surface */
+.hive-core polygon:not(.hc-glow){
+  fill:#1a1408;
+  stroke:var(--neon-gold);
+  stroke-width:2.2;
+  filter:drop-shadow(0 0 6px rgba(255,217,138,.5));
+}
+.hive-core .hc-label{ fill:var(--neon-gold); letter-spacing:.18em; }
+
+@keyframes core-pulse{
+  0%,100%{ opacity:.24; transform:scale(1) }
+  50%    { opacity:.40; transform:scale(1.035) }
+}
+.hive-core .hc-glow{ transform-origin:300px 300px; transform-box:view-box; }
+
+/* Core answers to the hive's overall condition (class set in markCells) */
+.hive-core.hc-high .hc-glow{ opacity:.42; animation-duration:2.6s; }
+.hive-core.hc-high polygon:not(.hc-glow){
+  stroke:var(--neon-cream);
+  filter:drop-shadow(0 0 10px rgba(255,217,138,.72));
+}
+.hive-core.hc-mid .hc-glow{ animation-duration:3.6s; }
+.hive-core.hc-low .hc-glow{ opacity:.16; animation-duration:5.4s; }
+.hive-core.hc-low polygon:not(.hc-glow){
+  fill:#120e06;
+  stroke:var(--gold);
+  stroke-width:1.8;
+  filter:drop-shadow(0 0 3px rgba(201,174,120,.30));
+}
+.hive-core.hc-low .hc-label{ fill:var(--ink-3); }
+
+/* the Core is the most important object in the world — say so on hover */
+.hive-core:hover polygon:not(.hc-glow),
+.hive-core:focus-visible polygon:not(.hc-glow){
+  stroke:var(--neon-cream);
+  filter:drop-shadow(0 0 12px rgba(255,244,218,.85));
+}
+
+/* ═══ 4. FRAME THE WORLD ═══════════════════════════════════════════
+   The hive canvas becomes a viewport into the world, not a card.
+   ═══════════════════════════════════════════════════════════════ */
+
+.hive-card{
+  border-radius:0;
+  border:var(--edge) solid var(--atmos-edge);
+  /* light pooled tight around the Core, not a broad wash — a wide soft
+     radial reads as web-gradient fog and greys the void out. */
+  background:
+    radial-gradient(46% 44% at 50% 50%,rgba(201,174,120,0.075),transparent 68%),
+    linear-gradient(180deg,var(--atmos-deep),var(--atmos-void));
+  position:relative;
+  box-shadow:inset 0 0 70px rgba(0,0,0,.62);
+}
+/* pixel corner ticks — geometric framing, no rounded chrome */
+.hive-card::before,.hive-card::after{
+  content:"";position:absolute;width:var(--tick);height:var(--tick);
+  border:var(--edge) solid var(--gold);opacity:.5;pointer-events:none;
+}
+.hive-card::before{ top:-1px;left:-1px;border-right:0;border-bottom:0; }
+.hive-card::after{ bottom:-1px;right:-1px;border-left:0;border-top:0; }
+
+/* ── legend must agree with the cells ──────────────────────────────
+   The swatches are inline styles in index.html:122-127 (#a3b07f /
+   #b89a6e / var(--ember) / #5f5743), so they still showed the old
+   palette while the cells moved to the emissive one. Overridden here
+   rather than by editing the markup, so removing this one stylesheet
+   still reverts the legend and the cells together.
+   Positional selectors: the legend is a fixed 6-item list; if items are
+   ever reordered, re-check these. !important is required only because
+   the source values are inline. */
+.hive-legend .hive-leg b{ border-radius:0; }
+.hive-legend .hive-leg:nth-child(3) b{ background:var(--neon-sage)!important; }
+.hive-legend .hive-leg:nth-child(4) b{ background:var(--neon-amber)!important; }
+.hive-legend .hive-leg:nth-child(5) b{ background:var(--neon-ember)!important; }
+.hive-legend .hive-leg:nth-child(6) b{ background:var(--neon-dead)!important; }
+
+/* ═══ 5. REDUCED MOTION ════════════════════════════════════════════
+   Every ambient animation in this layer stops. Nothing that carries
+   meaning (state colour, silhouette, focus) depends on movement.
+   ═══════════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion:reduce){
+  .glow-bg::after{ animation:none; }
+  .hive-cell.hv-leak .hive-frame{ animation:none; stroke-opacity:.92; }
+  .hive-cell.hv-leak .hive-glow{ animation:none; opacity:.24; }
+  .hive-cell.alive .hive-glow{ animation:none; opacity:.22; }
+  .hive-core .hc-glow{ animation:none; opacity:.34; }
+  .hive-cell .hive-frame,.hive-cell .hive-glow,.hive-cell .hive-fill,
+  .hive-core polygon{ transition:none; }
+}
+
+/* ═══ 6. MOBILE ════════════════════════════════════════════════════
+   Fewer layers, no parallax cost, thicker strokes for small-screen
+   legibility. Body type is never pixel-font.
+   ═══════════════════════════════════════════════════════════════ */
+
+@media (max-width:760px){
+  .glow-bg::before{ height:26vh; opacity:.7; }
+  .glow-bg::after{ animation-duration:72s; background-size:260px 260px; }
+  .grid-bg{ opacity:.6; background-size:34px 59px,34px 59px,34px 59px; }
+  .hive-frame{ stroke-width:1.7; }
+  .hive-cell.on .hive-frame{ stroke-width:3; }
+  .hive-cell.alive .hive-frame{ stroke-width:2; }
+  .hive-card{ box-shadow:inset 0 0 34px rgba(0,0,0,.5); }
+}
+
+/* ═══ 7. GAME HUD SURFACES ═════════════════════════════════════════
+   One visual grammar for the whole app: near-black chambers, luminous
+   one-pixel edges, clipped corners, and typography that stays human.
+   The serif remains the reading face; mono is reserved for telemetry.
+   ═══════════════════════════════════════════════════════════════ */
+
+:root{
+  --hud-surface:rgba(8,10,18,.94);
+  --hud-surface-2:rgba(13,15,24,.96);
+  --hud-surface-hot:rgba(27,22,15,.96);
+  --hud-line:rgba(201,174,120,.24);
+  --hud-line-hot:rgba(255,217,138,.62);
+  --hud-inset:inset 0 0 0 1px rgba(255,244,218,.025);
+  --hud-shadow:0 18px 50px rgba(0,0,0,.42);
+  --hud-scan:repeating-linear-gradient(0deg,rgba(255,255,255,.012) 0 1px,transparent 1px 4px);
+}
+
+/* shell and navigation become the frame around the world */
+.rail{
+  background:
+    var(--hud-scan),
+    linear-gradient(180deg,rgba(13,15,24,.985),rgba(5,6,12,.985));
+  border-right:1px solid var(--hud-line);
+  box-shadow:10px 0 35px rgba(0,0,0,.35);
+}
+.rail-rule{ background:linear-gradient(90deg,var(--hud-line-hot),transparent); }
+.rail-stamp,.signal,.callout{
+  border-radius:0;
+  border-color:var(--hud-line);
+  background:var(--hud-scan),var(--hud-surface);
+  box-shadow:var(--hud-inset);
+}
+.nav a{
+  border-radius:0;
+  border:1px solid transparent;
+  transition:color var(--t-step) var(--ease-out),
+             background var(--t-step) var(--ease-out),
+             border-color var(--t-step) var(--ease-out),
+             transform var(--t-step) var(--ease-out);
+}
+.nav a:hover{
+  color:var(--neon-cream);
+  border-color:var(--hud-line);
+  background:rgba(255,217,138,.045);
+  transform:translateX(2px);
+}
+.nav a.active{
+  color:var(--neon-cream);
+  border-color:var(--hud-line-hot);
+  background:
+    linear-gradient(90deg,rgba(255,217,138,.16),transparent 72%),
+    var(--atmos-mid);
+  box-shadow:inset 3px 0 0 var(--neon-gold),var(--glow-1);
+}
+.nav a.active .n{ color:var(--neon-gold); }
+
+.masthead{ position:relative; }
+.masthead::after{
+  content:"";display:block;width:min(460px,72%);height:1px;margin-top:22px;
+  background:linear-gradient(90deg,var(--neon-gold),rgba(255,217,138,.15),transparent);
+  box-shadow:0 0 8px rgba(255,217,138,.18);
+}
+.section{ isolation:isolate; }
+
+/* shared chamber construction */
+.card,.hive-level,.hive-mood,.hive-mbti,.hive-quiz,.hive-detail,
+.hive-bar,.hive-log,.hive-io,.queen-card,.cq-answer,.bp-card,
+.navmenu-panel,.hive-cmdmenu-panel,.tr-card,.bhpr-card,.bhpr-modal,
+.bhtm-card{
+  border-radius:0;
+  border-color:var(--hud-line);
+  background-color:var(--hud-surface);
+  background-image:var(--hud-scan),
+    linear-gradient(145deg,rgba(255,217,138,.035),transparent 44%);
+  box-shadow:var(--hud-inset),var(--hud-shadow);
+}
+.card,.hive-level,.hive-mbti,.hive-quiz,.hive-detail,.hive-bar,
+.hive-log,.hive-io,.queen-card,.bp-card,.tr-card,.bhpr-card,.bhpr-modal,
+.bhtm-card{ position:relative; }
+.card::before,.hive-level::before,.hive-mbti::before,.hive-quiz::before,
+.hive-detail::before,.hive-bar::before,.hive-log::before,.hive-io::before,
+.queen-card::before,.bp-card::before,.tr-card::before,.bhpr-card::before,
+.bhpr-modal::before,.bhtm-card::before{
+  content:"";position:absolute;top:-1px;left:-1px;width:8px;height:8px;
+  border-top:1px solid var(--neon-gold);border-left:1px solid var(--neon-gold);
+  border-radius:0;pointer-events:none;opacity:.74;
+}
+.card:hover,.bp-card:hover{
+  border-color:rgba(255,217,138,.4);
+  background-color:var(--hud-surface-2);
+  box-shadow:var(--hud-inset),0 12px 34px rgba(0,0,0,.38),var(--glow-1);
+  transform:translateY(-1px);
+}
+
+.tag,.bp-chip,.bp-tier,.bp-tag,.hive-leg,.cq-chip{
+  border-radius:0;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.012);
+}
+.tag::before{ border-radius:0;box-shadow:0 0 5px currentColor; }
+
+/* telemetry labels */
+.hive-level,.hive-mood,.hive-mbti,.hive-quiz,.hive-bar,
+.hive-detail .hk,.si-k,.bp-field-k,.queen-read-meta,.hive-io-msg{
+  letter-spacing:.12em;
+}
+.hive-level,.hive-mood,.hive-mbti{
+  border-color:var(--hud-line);
+  background:var(--hud-scan),rgba(8,10,18,.9);
+}
+.hive-mood.hm-good{border-color:rgba(194,221,134,.42);background-color:rgba(10,16,16,.92)}
+.hive-mood.hm-low{border-color:rgba(255,131,71,.38);background-color:rgba(20,12,12,.92)}
+.hive-detail h3{color:var(--neon-cream)}
+
+/* inputs and information wells */
+input,textarea,select,.hive-io-box,.queen-in,.hd-learn-in,.hd-ask-in,.hq-in{
+  border-radius:0;
+  border-color:var(--hud-line);
+  background:rgba(5,6,12,.88);
+  color:var(--ink);
+  box-shadow:inset 3px 0 0 rgba(255,217,138,.08);
+  caret-color:var(--neon-gold);
+}
+input:hover,textarea:hover,select:hover,.hive-io-box:hover,.queen-in:hover{
+  border-color:rgba(255,217,138,.38);
+}
+input:focus,textarea:focus,select:focus,.hive-io-box:focus,.queen-in:focus{
+  border-color:var(--hud-line-hot);
+  background:rgba(8,10,18,.98);
+  box-shadow:inset 3px 0 0 var(--neon-gold),var(--glow-1);
+}
+::placeholder{color:#77705f;opacity:1}
+
+/* tactile controls: sharp, bright, and stateful */
+.hive-btn,.tr-next,.tour-open,.bhpr-go,.bhpr-next,.bhtm-btn,.bhtm-fin,
+.bhtm-add,.bhtm-mc,.navmenu-close,.hive-cmdmenu-close,.hd-sheet-close,
+.cmd,.cmd-tile,.cq-chip{
+  border-radius:0;
+  transition:transform var(--t-step) var(--ease-out),
+             color var(--t-step) var(--ease-out),
+             border-color var(--t-step) var(--ease-out),
+             background var(--t-step) var(--ease-out),
+             box-shadow var(--t-step) var(--ease-out);
+}
+.hive-btn,.tr-next,.bhpr-go,.bhpr-next,.bhtm-btn.bhtm-yes,.cmd-primary{
+  border:1px solid var(--neon-gold);
+  color:#171108;
+  background:linear-gradient(180deg,var(--neon-honey),#c99a42);
+  box-shadow:inset 0 -2px 0 rgba(57,35,6,.35),0 0 12px rgba(255,199,107,.12);
+}
+.hive-btn:hover,.tr-next:hover,.bhpr-go:hover,.bhpr-next:hover,
+.bhtm-btn.bhtm-yes:hover,.cmd-primary:hover{
+  filter:none;
+  color:#08070b;
+  background:var(--neon-cream);
+  box-shadow:inset 0 -2px 0 rgba(57,35,6,.32),var(--glow-2);
+  transform:translateY(-1px);
+}
+.hive-btn:active,.tr-next:active,.bhpr-go:active,.bhpr-next:active,
+.bhtm-btn:active,.cmd:active,.cmd-tile:active{transform:translateY(1px)}
+.hive-btn.ghost,.bhtm-btn,.bhtm-add,.bhtm-mc,.cq-chip{
+  color:var(--ink-2);
+  background:rgba(8,10,18,.92);
+  border-color:var(--hud-line);
+  box-shadow:inset 0 -1px 0 rgba(255,217,138,.08);
+}
+.hive-btn.ghost:hover,.bhtm-btn:hover,.bhtm-add:hover,.bhtm-mc:hover,
+.cq-chip:hover{
+  color:var(--neon-cream);border-color:var(--hud-line-hot);
+  background:rgba(255,217,138,.09);box-shadow:var(--glow-1);
+}
+.hive-btn:disabled,.bhpr-next[disabled],button:disabled{
+  opacity:.42;filter:saturate(.35);box-shadow:none;transform:none;cursor:not-allowed;
+}
+
+/* selected controls must be obvious without relying on glow alone */
+.bhtm-mc.sel,.bhpr-opt.sel,.navmenu-row.active{
+  color:var(--neon-cream);
+  border-color:var(--neon-gold);
+  background:linear-gradient(90deg,rgba(255,217,138,.18),rgba(8,10,18,.96));
+  box-shadow:inset 3px 0 0 var(--neon-gold),var(--glow-1);
+}
+
+/* ═══ 8. MENUS, DIALOGS, AND MOBILE COMMAND LAYERS ═══════════════ */
+.tour,.navmenu,.hive-cmdmenu,.bhpr-ov,.bhtm-ov{
+  background-color:rgba(3,4,9,.9);
+  background-image:
+    linear-gradient(rgba(255,217,138,.025) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,217,138,.025) 1px,transparent 1px),
+    radial-gradient(circle at 50% 35%,rgba(255,180,87,.08),transparent 46%);
+  background-size:24px 24px,24px 24px,auto;
+  backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
+}
+.navmenu-panel,.hive-cmdmenu-panel{
+  border-radius:0;
+  border-color:var(--hud-line-hot);
+  background:var(--hud-scan),linear-gradient(160deg,var(--atmos-rise),var(--atmos-deep));
+  box-shadow:0 28px 80px rgba(0,0,0,.7),var(--glow-1);
+}
+.navmenu-row,.cmd-tile,.bhpr-opt{
+  border-radius:0;
+  border-color:var(--hud-line);
+  background:rgba(5,6,12,.7);
+}
+.navmenu-row:hover,.cmd-tile:hover,.cmd-tile:focus-visible,.bhpr-opt:hover{
+  border-color:var(--hud-line-hot);
+  background:linear-gradient(90deg,rgba(255,217,138,.12),rgba(8,10,18,.96));
+  box-shadow:inset 2px 0 0 var(--neon-gold),var(--glow-1);
+}
+.cmd-tile-icon{filter:drop-shadow(0 0 4px rgba(255,217,138,.3))}
+.cmd-tile.cmd-danger:hover{box-shadow:inset 2px 0 0 var(--neon-clay),0 0 8px rgba(255,107,82,.16)}
+.bhpr-move{border-radius:0;border-left-color:var(--neon-gold);background:rgba(5,6,12,.74)}
+.bhtm-shot,.bhtm-field textarea,.bhtm-blob{border-radius:0}
+
+.queen-msg{border-radius:0;border:1px solid var(--hud-line);background:rgba(5,6,12,.72)}
+.queen-msg-you{border-color:rgba(194,221,134,.34);box-shadow:inset -2px 0 0 var(--neon-sage)}
+.queen-msg-her{border-color:rgba(255,217,138,.38);box-shadow:inset 2px 0 0 var(--neon-gold)}
+.queen-think{animation:queen-text-pulse 1.8s steps(4,end) infinite}
+@keyframes queen-text-pulse{50%{color:var(--neon-gold)}}
+
+/* ═══ 9. QUEEN, BEES, AND LIVING WORLD ════════════════════════════
+   Movement remains owned by app-main.js. This layer only changes the
+   rendering: crisp silhouettes, caste signatures, and stepped wings.
+   ═══════════════════════════════════════════════════════════════ */
+.hive-bee,.hive-queen{shape-rendering:crispEdges}
+.hive-bee path,.hive-bee line,.hive-bee polygon,
+.hive-queen path,.hive-queen line,.hive-queen polygon{
+  stroke-linecap:square;stroke-linejoin:miter;
+}
+.hive-bee{filter:drop-shadow(0 1px 0 rgba(0,0,0,.9)) drop-shadow(0 0 2px rgba(255,199,107,.14))}
+.hive-bee-wing{
+  transform-box:fill-box;transform-origin:center;
+  animation-timing-function:steps(2,end);
+  filter:drop-shadow(0 0 1px rgba(255,244,218,.3));
+}
+.bee-nurse{filter:drop-shadow(0 0 2px rgba(194,221,134,.28))}
+.bee-forager{filter:drop-shadow(0 0 2px rgba(255,180,87,.28))}
+.bee-guard,.hive-wasp{filter:drop-shadow(0 0 2px rgba(255,131,71,.28))}
+.bee-scout{filter:drop-shadow(0 0 2px rgba(194,221,134,.22))}
+.bee-drones{filter:drop-shadow(0 0 2px rgba(70,215,230,.34))}
+.bee-elder{filter:drop-shadow(0 0 4px rgba(255,217,138,.48))}
+
+.hive-queen{filter:drop-shadow(0 0 4px rgba(255,217,138,.55))}
+.queen-aura{fill:var(--neon-gold);opacity:.13;transform-box:fill-box;transform-origin:center;animation:queen-aura 3.6s steps(6,end) infinite}
+.queen-wing{fill:#fff4da;stroke:var(--neon-gold);stroke-width:.55;opacity:.72;transform-box:fill-box;transform-origin:center bottom;animation:queen-wing .52s steps(2,end) infinite alternate}
+.queen-shell{fill:#171108;stroke:var(--neon-gold);stroke-width:1}
+.queen-band{fill:var(--neon-honey)}
+.queen-eye{fill:var(--neon-ember);filter:drop-shadow(0 0 2px rgba(255,131,71,.85))}
+.queen-crown{fill:var(--neon-cream);stroke:var(--neon-gold);stroke-width:.7;filter:drop-shadow(0 0 3px rgba(255,217,138,.72))}
+@keyframes queen-aura{50%{opacity:.25;transform:scale(1.06)}}
+@keyframes queen-wing{to{transform:scaleX(.84) rotate(4deg);opacity:.48}}
+
+/* tiny reactions: only the object being used responds */
+.hive-card:focus-within{border-color:rgba(255,217,138,.32)}
+.hive-detail:focus-within,.hive-io:focus-within,.queen-card:focus-within{
+  border-color:rgba(255,217,138,.42);box-shadow:var(--hud-inset),var(--glow-1);
+}
+
+/* ═══ 10. RESPONSIVE + ACCESSIBLE MOTION ══════════════════════════ */
+@media (max-width:760px){
+  .rail{
+    border-right:0;border-top:1px solid var(--hud-line);
+    box-shadow:0 -10px 30px rgba(0,0,0,.45);
+    background:linear-gradient(180deg,rgba(13,15,24,.98),rgba(5,6,12,.99));
+  }
+  .nav a:hover{transform:none}
+  .hive-cmdbar{
+    border-radius:0;border-color:var(--hud-line-hot);
+    background:var(--hud-scan),rgba(8,10,18,.97);
+    box-shadow:0 12px 36px rgba(0,0,0,.62),var(--glow-1);
+    backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
+  }
+  .cmd{border-radius:0;background:rgba(13,15,24,.92);border-color:var(--hud-line)}
+  .hive-sheet{
+    border-radius:0;background:var(--hud-scan),linear-gradient(170deg,var(--atmos-rise),var(--atmos-deep));
+    border-top-color:var(--hud-line-hot);box-shadow:0 -18px 54px rgba(0,0,0,.7);
+  }
+  .hive-sheet::before,.hive-sheet::after{border-radius:0}
+  .hd-handle{height:2px;border-radius:0;background:var(--neon-gold);box-shadow:var(--glow-1)}
+  .hive-sheet-backdrop{background:rgba(3,4,9,.72)}
+  .card:hover,.bp-card:hover{transform:none}
+  .tour,.navmenu,.hive-cmdmenu,.bhpr-ov,.bhtm-ov{backdrop-filter:none;-webkit-backdrop-filter:none}
+}
+
+@media (prefers-reduced-motion:reduce){
+  .nav a,.card,.bp-card,.hive-btn,.tr-next,.tour-open,.bhpr-go,.bhpr-next,
+  .bhtm-btn,.bhtm-fin,.bhtm-add,.bhtm-mc,.cmd,.cmd-tile,.cq-chip,
+  input,textarea,select{transition:none}
+  .queen-think,.queen-aura,.queen-wing,.hive-bee-wing,.hive-bee-glow{animation:none}
+  .queen-aura{opacity:.2}.queen-wing{opacity:.7}
+}
