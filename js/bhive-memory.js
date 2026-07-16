@@ -310,8 +310,7 @@
     var byId={};
     raw.forEach(function(memory){
       var previous=byId[memory.id];
-      if(!previous||(memory.lastSeenAt||0)>(previous.lastSeenAt||0)||
-         memory.lastSeenAt===previous.lastSeenAt&&memory.confidence>previous.confidence)byId[memory.id]=memory;
+      if(!previous||(memory.lastSeenAt||0)>(previous.lastSeenAt||0))byId[memory.id]=memory;
     });
     var resolved=Object.keys(byId).sort().map(function(id){return applyFeedback(byId[id],events,now);});
     return {

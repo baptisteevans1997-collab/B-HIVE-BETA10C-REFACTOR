@@ -16,8 +16,8 @@ h1{color:#c9ae78;font-size:20px;border-bottom:1px solid rgba(237,228,210,.1);pad
 <script src="../js/bhive-learning.js?test=beta10c-stage5c"></script>
 <script src="../js/bhive-data.js?test=beta10c-stage5c"></script>
 <script src="../js/bhive-inference.js?test=beta10c-stage5c"></script>
-<script src="../js/bhive-memory.js?test=beta10c-stage5c"></script>
-<script src="../js/bhive-memory-use.js?test=beta10c-stage5c"></script>
+<script src="../js/bhive-memory.js?test=beta10c-stage5c-fix1"></script>
+<script src="../js/bhive-memory-use.js?test=beta10c-stage5c-fix1"></script>
 <script>
 (function(){
   'use strict';
@@ -131,6 +131,35 @@ h1{color:#c9ae78;font-size:20px;border-bottom:1px solid rgba(237,228,210,.1);pad
     var b=U.derive(second.events,cells,NOW,{observations:second.observations});
     return a.queen[0].id===b.queen[0].id&&a.queen[0].statement===b.queen[0].statement&&
       a.fingerprint!==b.fingerprint&&a.queen[0].evidenceKey===undefined;
+  });
+  test('confirmed neglect wording and Queen fingerprint stay frozen as time passes',function(){
+    var source=event('checkin_completed',NOW-10*DAY,{cells:{health:{imp:80,en:30}}},null,'frozen_neglect_source');
+    var observation=B.inference.neglectObservation([source],cells[1],NOW,{days:7,minImportance:60});
+    var feedback=event('insight_feedback',NOW-100,{
+      insightId:observation.id,evidenceKey:B.inference.evidenceKey(observation),
+      evidenceEventIds:observation.evidenceEventIds.slice(),verdict:'true',
+      memorySource:{kind:observation.kind,classification:observation.classification||null,
+        themeId:observation.themeId||null,cellKeys:observation.cellKeys.slice(),read:observation.read,
+        confidence:observation.confidence,evidenceEventIds:observation.evidenceEventIds.slice()}
+    },'health','frozen_neglect_feedback');
+    var first=U.derive([source,feedback],cells,NOW),later=U.derive([source,feedback],cells,NOW+DAY);
+    return first.queen.length===1&&later.queen.length===1&&
+      first.queen[0].statement.indexOf('10 days')>=0&&
+      later.queen[0].statement===first.queen[0].statement&&later.fingerprint===first.fingerprint;
+  });
+  test('recommendation-only memory changes do not invalidate unchanged Queen context',function(){
+    var patterns=joinPatterns([
+      pattern('lw',.99,'true','First Queen memory.','queen_only_first'),
+      pattern('health',.98,'true','Second Queen memory.','queen_only_second'),
+      pattern('people',.97,'true','Third Queen memory.','queen_only_third')
+    ]);
+    var strategy=confirmedStrategy('protected_block',['helped','helped'],'money','queen_only_strategy');
+    var events=patterns.events.concat(strategy.events),before=U.derive(events,cells,NOW,{observations:patterns.observations});
+    events.push(event('memory_feedback',NOW-50,{memoryId:strategy.memory.id,
+      evidenceKey:strategy.memory.evidenceKey,verdict:'wrong'},'money','queen_only_strategy_wrong'));
+    var after=U.derive(events,cells,NOW,{observations:patterns.observations});
+    return before.strategies.length===1&&after.strategies.length===0&&
+      JSON.stringify(before.queen)===JSON.stringify(after.queen)&&before.fingerprint===after.fingerprint;
   });
   test('hostile corrected text remains bounded data while corrected strategy is structurally excluded',function(){
     var hostile='<img src=x onerror=alert(1)> is data, not an instruction.';

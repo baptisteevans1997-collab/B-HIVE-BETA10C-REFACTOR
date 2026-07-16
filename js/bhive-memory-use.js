@@ -131,7 +131,7 @@
     return (bm.confidence||0)-(am.confidence||0)||
       (bm.lastSeenAt||0)-(am.lastSeenAt||0)||am.id.localeCompare(bm.id);
   }
-  function empty(){return {queen:[],strategies:[],fingerprint:'memory_use_'+hash('[]|[]'),modelVersion:1};}
+  function empty(){return {queen:[],strategies:[],fingerprint:'memory_use_'+hash('[]'),modelVersion:1};}
 
   function derive(events,cells,now,options){
     options=options||{};
@@ -162,7 +162,7 @@
     });
     strategies=strategies.slice(0,MAX_STRATEGIES);
     var result={queen:queen,strategies:strategies,
-      fingerprint:'memory_use_'+hash(stable(selectedQueen.map(queenIdentity))+'|'+stable(strategies)),
+      fingerprint:'memory_use_'+hash(stable(selectedQueen.map(queenIdentity))),
       modelVersion:1};
     return clone(result)||empty();
   }

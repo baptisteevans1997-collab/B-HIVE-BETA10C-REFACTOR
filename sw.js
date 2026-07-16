@@ -1,12 +1,12 @@
 /* Claude Brain Map — service worker · offline app shell */
-var CACHE = 'brainmap-v89-beta10c-refactor-stage5c';
+var CACHE = 'brainmap-v90-beta10c-refactor-stage5c-fix1';
 var CORE = [
   './', './index.html',
   './css/app.css', './css/beta-mobile-polish.css',
   './js/bhive-data.js', './js/bhive-engine.js', './js/bhive-learning.js',
   './js/bhive-inference.js?v=beta10c-stage3', './js/bhive-experiments.js?v=beta10c-stage5c',
-  './js/bhive-memory.js?v=beta10c-stage5a',
-  './js/bhive-memory-use.js?v=beta10c-stage5c',
+  './js/bhive-memory.js?v=beta10c-stage5c-fix1',
+  './js/bhive-memory-use.js?v=beta10c-stage5c-fix1',
   './js/bhive-review.js?v=beta10c-stage5b',
   './js/ui-insights.js?v=beta10c-stage3', './js/ui-experiments.js?v=beta10c-stage5c',
   './js/ui-memory.js?v=beta10c-stage5b', './js/app-main.js?v=beta10c-stage5c', './js/pwa-register.js',
