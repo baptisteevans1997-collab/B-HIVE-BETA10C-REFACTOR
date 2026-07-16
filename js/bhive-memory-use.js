@@ -102,9 +102,8 @@
   function queenIdentity(trusted){
     var memory=trusted.memory;
     return {
-      id:memory.id,evidenceKey:memory.evidenceKey,status:memory.status,
-      statement:cleanText(memory.statement,240),source:cleanId(memory.source,80)||'derived',
-      userVerdict:memory.userVerdict,feedbackEventId:cleanId(memory.feedbackEventId)||null
+      visible:queenDTO(trusted),evidenceKey:memory.evidenceKey,status:memory.status,
+      feedbackEventId:cleanId(memory.feedbackEventId)||null
     };
   }
   function strategyDTO(trusted,index,now,model){
@@ -156,11 +155,11 @@
       var dto=strategyDTO(item,index,now,model);
       if(dto)strategies.push(dto);
     });
+    strategies=strategies.slice(0,MAX_STRATEGIES);
     strategies.sort(function(a,b){
       return a.strategyId.localeCompare(b.strategyId)||a.scope.localeCompare(b.scope)||
         a.memoryId.localeCompare(b.memoryId)||a.evidenceKey.localeCompare(b.evidenceKey);
     });
-    strategies=strategies.slice(0,MAX_STRATEGIES);
     var result={queen:queen,strategies:strategies,
       fingerprint:'memory_use_'+hash(stable(selectedQueen.map(queenIdentity))),
       modelVersion:1};

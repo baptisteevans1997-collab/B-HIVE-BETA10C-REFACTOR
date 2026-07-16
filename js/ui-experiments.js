@@ -32,7 +32,9 @@
         '<span class="td-exp-time">'+experiment.durationDays+' day'+(experiment.durationDays===1?'':'s')+'</span>'+
       '</div>'+
       '<p class="td-exp-source">'+(experiment.memoryGuidance&&experiment.memoryGuidance.length?
-        'Built from the read you confirmed and memory you reviewed.':
+        (experiment.sourceVerdict==='partly'?
+          'Built from the part of the read that held and memory you reviewed.':
+          'Built from the read you confirmed and memory you reviewed.'):
         (experiment.sourceVerdict==='partly'?'Built from the part of the read that held.':'Built from the read you confirmed.'))+'</p>'+
       actionBlock(experiment)+
       '<div class="td-exp-actions" role="group" aria-label="Choose this experiment">'+

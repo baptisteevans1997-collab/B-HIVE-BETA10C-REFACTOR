@@ -20,9 +20,9 @@
 <script src="../js/bhive-engine.js?test=beta10c-stage4"></script>
 <script src="../js/bhive-learning.js?test=beta10c-stage4"></script>
 <script src="../js/bhive-inference.js?test=beta10c-stage4"></script>
-<script src="../js/bhive-memory-use.js?test=beta10c-stage5c-fix1"></script>
-<script src="../js/bhive-experiments.js?test=beta10c-stage4"></script>
-<script src="../js/ui-experiments.js?test=beta10c-stage4"></script>
+<script src="../js/bhive-memory-use.js?test=beta10c-stage5c-fix2"></script>
+<script src="../js/bhive-experiments.js?test=beta10c-stage5c-fix2"></script>
+<script src="../js/ui-experiments.js?test=beta10c-stage5c-fix2"></script>
 <script src="./fixtures/learning-fixtures.js?test=beta10c-stage4"></script>
 <script>
 (function(){
@@ -285,6 +285,13 @@
       {memoryContext:{valid:true,overlap:overlap}});
     return proposal.strategyId===data.proposal.strategyId&&!proposal.memoryGuidance;
   });
+  test('delimiter-colliding evidence sets are not treated as the same canonical source',function(){
+    var data=source();
+    data.feedback.payload.evidenceKey='a|b|c';
+    data.feedback.payload.evidenceEventIds=['a','b|c'];
+    data.observation.evidenceEventIds=['a|b','c'];
+    return X.proposalForFeedback(data.feedback,[data.observation],F.cells,data.events,F.NOW)===null;
+  });
   test('unhelpful memory vetoes one strategy and records only bounded provenance',function(){
     var data=source(),first=data.proposal.strategyId;
     installMemoryAdapter((function(){
@@ -354,6 +361,13 @@
     var data=source(),guided=JSON.parse(JSON.stringify(data.proposal));
     guided.memoryGuidance=[provenance('display','preferred')];box.innerHTML=U.renderProposal(guided);
     return box.querySelector('.td-exp-source').textContent.indexOf('memory you reviewed')>=0;
+  });
+  test('memory-guided partly-true proposals keep the partial-read qualification',function(){
+    var data=source(),guided=JSON.parse(JSON.stringify(data.proposal));
+    guided.sourceVerdict='partly';guided.memoryGuidance=[provenance('partial_display','preferred')];
+    box.innerHTML=U.renderProposal(guided);
+    var text=box.querySelector('.td-exp-source').textContent;
+    return text.indexOf('part of the read that held')>=0&&text.indexOf('memory you reviewed')>=0;
   });
   test('active experiment hides outcome choices before the due time',function(){
     var data=source(),active=JSON.parse(JSON.stringify(data.proposal));active.status='active';

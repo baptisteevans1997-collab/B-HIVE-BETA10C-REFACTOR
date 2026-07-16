@@ -70,10 +70,12 @@
         if(typeof id!=='string'||!id||seen[id]){valid=false;return;}
         seen[id]=1;ids.push(id);
       });
-      return valid&&ids.slice().sort().join('|')===source.evidenceKey?ids:null;
+      ids.sort();
+      return valid&&ids.join('|')===source.evidenceKey?ids:null;
     }
     var sourceIds=exact(supplied),observationIds=exact(observed);
-    return sourceIds&&observationIds?observationIds:null;
+    return sourceIds&&observationIds&&sourceIds.length===observationIds.length&&
+      sourceIds.every(function(id,index){return id===observationIds[index];})?observed.slice():null;
   }
 
   function trendCandidates(observation,label){

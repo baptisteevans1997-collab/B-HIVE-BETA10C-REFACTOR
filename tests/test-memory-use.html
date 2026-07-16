@@ -17,7 +17,7 @@ h1{color:#c9ae78;font-size:20px;border-bottom:1px solid rgba(237,228,210,.1);pad
 <script src="../js/bhive-data.js?test=beta10c-stage5c"></script>
 <script src="../js/bhive-inference.js?test=beta10c-stage5c"></script>
 <script src="../js/bhive-memory.js?test=beta10c-stage5c-fix1"></script>
-<script src="../js/bhive-memory-use.js?test=beta10c-stage5c-fix1"></script>
+<script src="../js/bhive-memory-use.js?test=beta10c-stage5c-fix2"></script>
 <script>
 (function(){
   'use strict';
@@ -160,6 +160,48 @@ h1{color:#c9ae78;font-size:20px;border-bottom:1px solid rgba(237,228,210,.1);pad
     var after=U.derive(events,cells,NOW,{observations:patterns.observations});
     return before.strategies.length===1&&after.strategies.length===0&&
       JSON.stringify(before.queen)===JSON.stringify(after.queen)&&before.fingerprint===after.fingerprint;
+  });
+  test('every Queen-visible DTO field contributes directly to the private fingerprint',function(){
+    var source=event('learning_added',NOW-DAY,{source:'you',text:'Identity evidence.'},'lw','identity_source');
+    var feedback=event('insight_feedback',NOW-100,{insightId:'identity_observation',
+      evidenceKey:'identity_source',evidenceEventIds:['identity_source'],verdict:'true'},'lw','identity_feedback');
+    var ids=['identity_source','identity_feedback'],original=M.derive;
+    var base={id:'mem_identity',kind:'pattern',source:'confirmed_insight',statement:'Identity statement.',
+      cellKey:'lw',themeId:null,strategyId:null,polarity:null,confidence:.9,status:'confirmed',
+      evidenceEventIds:ids,evidenceKey:M.evidenceKey(ids),firstSeenAt:source.ts,lastSeenAt:feedback.ts,
+      userVerdict:'true',feedbackEventId:null};
+    function fingerprint(changes){
+      var memory=JSON.parse(JSON.stringify(base)),key;
+      for(key in changes)memory[key]=changes[key];
+      M.derive=function(){return {confirmed:[memory]};};
+      return U.derive([source,feedback],cells,NOW).fingerprint;
+    }
+    try{
+      var originalFingerprint=fingerprint({}),variants=[
+        fingerprint({kind:'strategy'}),fingerprint({cellKey:'health'}),
+        fingerprint({cellKey:null,themeId:'avoidance'}),fingerprint({strategyId:'protected_block'}),
+        fingerprint({polarity:'helpful'})
+      ];
+      return variants.every(function(value){return value!==originalFingerprint;});
+    }finally{M.derive=original;}
+  });
+  test('strategy bound keeps the strongest memories before presentation sorting',function(){
+    var strategyIds=Object.keys(M.STRATEGIES).sort(),events=[],high=null,count=0;
+    cells.forEach(function(cell){
+      strategyIds.forEach(function(strategyId){
+        if(strategyId==='visible_finish'&&cell.key==='money')return;
+        if(count>=25)return;
+        var item=confirmedStrategy(strategyId,['helped','helped'],cell.key,'bounded_'+count);
+        events=events.concat(item.events);count++;
+      });
+    });
+    high=confirmedStrategy('visible_finish',['helped','helped','helped','helped','helped'],
+      'money','bounded_high');
+    events=events.concat(high.events);
+    var context=U.derive(events,cells,NOW,{observations:[]});
+    return context.strategies.length===24&&context.strategies.some(function(item){
+      return item.memoryId===high.memory.id;
+    });
   });
   test('hostile corrected text remains bounded data while corrected strategy is structurally excluded',function(){
     var hostile='<img src=x onerror=alert(1)> is data, not an instruction.';
