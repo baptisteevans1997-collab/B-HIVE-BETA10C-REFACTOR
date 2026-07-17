@@ -237,8 +237,14 @@ BHIVE.init = function() {
   }
 
   /* ── playbook ── */
+  /* Seeds ship approved. They are the app's own voice, not pasted or
+     model-authored input, and queenContext now gates the Queen prompt on
+     `ok` (app-main.js) — with ok:false these four silently stopped
+     reaching her, so a fresh hive lost its own helping preferences.
+     Model-suggested rules still arrive unapproved (addPlaybookRule(...,
+     'claude', false)) and stay gated, which is the point of that filter. */
   B.playbook = B.SEED_PLAYBOOK.map(function(t) {
-    return { t: t, s: 'seed', ok: false };
+    return { t: t, s: 'seed', ok: true };
   });
 
   /* ── agents, requests, MBTI ── */
