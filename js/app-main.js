@@ -770,8 +770,8 @@
         var col=t.body,sz=t.size||1;
         var mine=cells.filter(function(c){return (META[c.key]||{}).race===t.name;});
         var chips=mine.map(function(c){
-          var lv=cellLevel(c.key),ag=agents&&agents[c.key];
-          return '<span class="bst-cellchip">'+B.esc(c.label)+'<b>'+(ag?'Agent':'Lv '+lv)+'</b></span>';
+          var ag=agents&&agents[c.key];
+          return '<span class="bst-cellchip">'+B.esc(c.label)+(ag?'<b>Agent</b>':'')+'</span>';
         }).join('');
         return '<article class="bst-card">'+
           '<div class="bst-portrait"><svg viewBox="0 0 84 84">'+
@@ -1967,7 +1967,6 @@
         if(pv==='under')why='Widest live gap. Importance '+pc.imp+' vs energy '+pc.en+'.';
         else if(pv==='leak')why='Burning more than the cell can metabolise.';
         else if(pv==='dormant')why='Quiet, slated for re-engagement.';
-        else if(cellLevel(pc.key)>=3&&!agents[pc.key])why='Level '+cellLevel(pc.key)+'. Ready to evolve.';
         else why='Holding line. The swarm has it.';
         why+=signalClause(pc.key);
       }else if(mv.kind==='checkin'){
@@ -1999,21 +1998,20 @@
       var lv=cellLevel(c.key),race=(META[c.key]||{}).race||'These bees';
       if(agents[c.key]){
         return '<div class="hd-agent"><div class="ag-k">&#9889; '+B.esc(race)+
-          ', agent on duty &middot; Lv '+lv+'</div>'+
+          ', agent on duty</div>'+
           '<div class="ag-status">'+B.esc(agentRead(c))+'</div></div>';
       }
       if(lv>=3){
-        return '<div class="hd-evolve-box"><span class="ev-msg">'+B.esc(race)+
+        return '<div class="hd-evolve-box agent-progression-ui" hidden><span class="ev-msg">'+B.esc(race)+
           ' have reached Level '+lv+', ready to evolve.</span>'+
           '<button class="hd-evolve" type="button" data-k="'+c.key+'">&#9650; Evolve into an Agent</button></div>';
       }
-      return '<div class="hd-evolve-box hd-evolve-soon">'+B.esc(race)+
+      return '<div class="hd-evolve-box hd-evolve-soon agent-progression-ui" hidden>'+B.esc(race)+
         ' evolve into an Agent at Level 3, currently Level '+lv+'. Teach this cell more.</div>';
     }
     function showCell(idx){
       if(!detail)return;
       var c=cells[idx],v=B.cellVitality(c),M=META[c.key]||{race:'Hive cell',cls:'',trait:''};
-      var clv=cellLevel(c.key);
       /* beta: a sleeping cell shows its name and a quiet nudge only — no teach,
          no questions, no steppers. The hive hasn't grown here yet. */
       if(cellState(c.key)==='dormant'){
@@ -2026,8 +2024,8 @@
         return;
       }
       detail.innerHTML=
-        '<div class="hk">'+B.esc(M.race)+' &middot; level '+clv+'</div>'+
-        '<h3>'+c.full+' <span class="hd-clv">LV '+clv+'</span></h3>'+
+        '<div class="hk">'+B.esc(M.race)+'</div>'+
+        '<h3>'+c.full+'</h3>'+
         ((M.cls||M.trait)?'<p class="hd-persona"><b>'+B.esc(M.cls)+'</b> &middot; '+B.esc(M.trait)+'</p>':'')+
         (c.desc?'<div class="hd-sec">What this cell is</div><p class="hd-what">'+B.esc(c.desc)+'</p>':'')+
         '<div class="hd-sec">Current state</div>'+
@@ -2046,7 +2044,7 @@
         signalRead(c.key)+
         '<div class="hd-sec">Next move</div>'+
         '<p class="hd-adjust">'+c.adj+'</p>'+
-        '<div class="hd-sec">The swarm &amp; evolution</div>'+
+        '<div class="hd-sec">The swarm</div>'+
         agentBlock(c)+
         swarmBlock(c.key);
       var ii=detail.querySelectorAll('.hd-track > i');
@@ -2611,7 +2609,6 @@
         if(pv==='under')priRead='Widest live gap. Importance '+pc.imp+' vs energy '+pc.en+'.';
         else if(pv==='leak')priRead='Burning more than the cell can metabolise.';
         else if(pv==='dormant')priRead='Quiet, slated for re-engagement.';
-        else if(cellLevel(pc.key)>=3&&!agents[pc.key])priRead='Level '+cellLevel(pc.key)+'. Ready to evolve.';
         else priRead='Holding line. The swarm has it.';
         var memorySnapshot=queenMemorySnapshot(Date.now()),memoryMatch=null;
         memorySnapshot.queen.some(function(memory){
@@ -2954,6 +2951,7 @@
       var el=document.getElementById('hive-today');
       if(!el)return;
       var mv=nextMove(),now=Date.now(),events=(BHIVE.learning&&BHIVE.learning.events)||[];
+      var hideAgentMove=mv&&typeof mv.label==='string'&&mv.label.indexOf('Evolve ')===0;
       /* status line */
       var status;
       if(!history.length){
@@ -3037,7 +3035,7 @@
         '<div class="td-status">'+B.esc(status)+'</div>'+
         (change?'<div class="td-change">'+change+'</div>':'')+
         insight+
-        (todayOwnsNextMove?'':
+        (todayOwnsNextMove||hideAgentMove?'':
           '<button class="td-next" type="button" data-kind="'+mv.kind+'"'+
             (mv.idx!==undefined?' data-idx="'+mv.idx+'"':'')+'>'+
             '<span class="td-next-k">Next move</span>'+
@@ -3045,7 +3043,7 @@
             '<span class="td-next-arrow">&rarr;</span>'+
           '</button>'+
           '<div class="td-why">'+B.esc(whyMove(mv))+'</div>');
-      updateAttentionMarker(todayOwnsNextMove?null:mv);
+      updateAttentionMarker(todayOwnsNextMove||hideAgentMove?null:mv);
     }
 
     function saveMemoryReviewFeedback(item,verdict,correctedText){

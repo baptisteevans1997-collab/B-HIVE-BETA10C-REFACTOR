@@ -153,7 +153,7 @@
           <button class="hive-btn ghost" type="button" id="hive-report-toggle">Report</button>
           <button class="hive-btn ghost" type="button" id="hive-goals-toggle">Goals</button>
           <button class="hive-btn ghost" type="button" id="hive-req-toggle">Requests</button>
-          <button class="hive-btn ghost" type="button" id="hive-evo-toggle">Evolution</button>
+          <button class="hive-btn ghost agent-progression-ui" type="button" id="hive-evo-toggle" hidden>Evolution</button>
           <button class="hive-btn ghost" type="button" id="hive-log-toggle">History</button>
           <button class="hive-btn ghost danger" type="button" id="hive-reset">Reset</button>
         </div>
@@ -190,7 +190,7 @@
             <button class="cmd-tile" type="button" data-cmd="report"><span class="cmd-tile-icon">&#9636;</span><span class="cmd-tile-label">Report</span></button>
             <button class="cmd-tile" type="button" data-cmd="goals"><span class="cmd-tile-icon">&#9678;</span><span class="cmd-tile-label">Goals</span></button>
             <button class="cmd-tile" type="button" data-cmd="requests"><span class="cmd-tile-icon">&#10022;</span><span class="cmd-tile-label">Requests</span></button>
-            <button class="cmd-tile" type="button" data-cmd="evolution"><span class="cmd-tile-icon">&#9650;</span><span class="cmd-tile-label">Evolution</span></button>
+            <button class="cmd-tile agent-progression-ui" type="button" data-cmd="evolution" hidden><span class="cmd-tile-icon">&#9650;</span><span class="cmd-tile-label">Evolution</span></button>
             <button class="cmd-tile" type="button" data-cmd="history"><span class="cmd-tile-icon">&#8635;</span><span class="cmd-tile-label">History</span></button>
             <button class="cmd-tile" type="button" data-cmd="manual"><span class="cmd-tile-icon">&#9432;</span><span class="cmd-tile-label">Field Manual</span></button>
           </div>
@@ -241,7 +241,7 @@
         <p class="hive-io-tip">GOALS &middot; What the hive reads you as reaching for, and how close you are. It shifts as your cells do.</p>
         <div id="goals-body"></div>
       </div>
-      <div class="hive-io" id="hive-evo" hidden>
+      <div class="hive-io agent-progression-ui" id="hive-evo" hidden>
         <p class="hive-io-tip">EVOLUTION &middot; Every bee bloodline grows from the hive's root. Teach a cell to push its bees up the branch.</p>
         <div id="evo-body"></div>
       </div>
@@ -597,8 +597,8 @@
         <div class="man-grp">Workers &amp; learning</div>
         <div class="man-entry"><h4>Workers</h4><p>The little <b>bees</b> in each cell are what the hive has learned about you there. The better it knows that part of your life, the bigger the swarm.</p></div>
         <div class="man-entry"><h4>Teaching the hive</h4><p>Open a cell and <b>teach it</b> something true, or answer the short <b>question</b> it asks you. Every answer becomes a new worker — this is how the hive gets sharper.</p></div>
-        <div class="man-entry"><h4>Levels &amp; Agents</h4><p>Cells gain <b>levels</b> as they learn. At cell level&nbsp;3 a cell evolves into an <b>Agent</b> — a sharper form that can act on that area, not just hold facts about it. The whole hive levels up alongside them.</p></div>
-        <div class="man-entry"><h4>Evolution</h4><p>The <b>Evolution</b> panel traces every bee bloodline up its branch from the hive's root. Teaching a cell pushes its bees further up.</p></div>
+        <div class="man-entry agent-progression-ui" hidden><h4>Levels &amp; Agents</h4><p>Cells gain <b>levels</b> as they learn. At cell level&nbsp;3 a cell evolves into an <b>Agent</b> — a sharper form that can act on that area, not just hold facts about it. The whole hive levels up alongside them.</p></div>
+        <div class="man-entry agent-progression-ui" hidden><h4>Evolution</h4><p>The <b>Evolution</b> panel traces every bee bloodline up its branch from the hive's root. Teaching a cell pushes its bees further up.</p></div>
 
         <div class="man-grp">The bees</div>
         <div class="man-entry"><h4>Each caste moves differently</h4><p>Every cell is worked by one of six castes, and each has its own tempo. <b>Nurses</b> stay close and careful. <b>Builders</b> work the comb edge. <b>Foragers</b> ferry outward and back. <b>Guards</b> orbit slow on a wide perimeter. <b>Scouts</b> roam fast and far. <b>Drones</b> drift low and lazy.</p></div>
