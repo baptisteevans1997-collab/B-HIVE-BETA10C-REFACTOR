@@ -1254,7 +1254,11 @@
       if(s!==g)g.appendChild(s);
       return g;
     }
-    /* ── the queen: a larger crowned bee at the heart of the hive ── */
+    /* ── the queen: the original v88 queen beneath the Lifted Premium crown.
+       Body is verbatim v88 (codex queen-variants card 01) — wings, antennae,
+       colours, bands, head, proportions untouched. Only the crown changed:
+       narrower, suspended clear of the head, soft shadow, slow sub-pixel
+       hover (.queen-crown-lifted in bhive-atmos.css). ── */
     function queenBee(cx,cy){
       var g=B.el('g',{'class':'hive-queen',transform:'translate('+cx+','+cy+')'});
       g.appendChild(B.el('ellipse',{cx:'-7.5',cy:'-3.5',rx:'7',ry:'3.7',fill:'#fdf6e3',
@@ -1273,8 +1277,9 @@
       g.appendChild(B.el('ellipse',{cx:'0',cy:'-4.5',rx:'4.3',ry:'4',fill:'#3a2a12',
         stroke:'#241a0b','stroke-width':'0.7'}));
       g.appendChild(B.el('circle',{cx:'0',cy:'-11',r:'3.4',fill:'#2a1d0b'}));
-      g.appendChild(B.el('polygon',{points:'-5.6,-13.5 -5.6,-19 -2.8,-15.2 0,-21 2.8,-15.2 5.6,-19 5.6,-13.5',
-        fill:'#f9e4a6',stroke:'#7a5a1e','stroke-width':'0.7','stroke-linejoin':'round'}));
+      g.appendChild(B.el('polygon',{
+        points:'-5,-16.6 -5,-20.2 -2.3,-17.8 0,-22.8 2.3,-17.8 5,-20.2 5,-16.6',
+        'class':'queen-crown-lifted'}));
       return g;
     }
     /* ── v57: Wasp Bodyguard — replaces the envoy bee (boldest from each cell).
@@ -2893,16 +2898,26 @@
        Visualises accrued growth from already-persisted data only (cellLevel←learnings, agents).
        Adds CSS-only classes to existing .hive-cell nodes; never touches geometry/schema/storage. */
     function markCells(){
-      var allCells=svg.querySelectorAll('.hive-cell'),i,c,lv,el;
+      var allCells=svg.querySelectorAll('.hive-cell'),i,c,lv,el,core,hv;
       for(i=0;i<allCells.length;i++){
         el=allCells[i];
-        el.classList.remove('cm-1','cm-2','cm-3','cm-apex');
+        el.classList.remove('cm-1','cm-2','cm-3','cm-apex',
+          'hv-aligned','hv-under','hv-leak','hv-dormant');
         c=cells[i]; if(!c)continue;
         lv=cellLevel(c.key);
         if(lv>=7)el.classList.add('cm-3');
         else if(lv>=5)el.classList.add('cm-2');
         else if(lv>=3)el.classList.add('cm-1');
         if(agents&&agents[c.key])el.classList.add('cm-apex');
+        /* atmos: expose vitality to CSS so cell states are styleable */
+        el.classList.add('hv-'+B.cellVitality(c));
+      }
+      /* atmos: the Core answers to the hive's overall condition */
+      core=svg.querySelector('.hive-core');
+      if(core){
+        core.classList.remove('hc-low','hc-mid','hc-high');
+        hv=hiveVitality();
+        core.classList.add(hv>=72?'hc-high':hv>=46?'hc-mid':'hc-low');
       }
     }
     /* Option A wiring: wrap renderHive so every render re-applies the marks,
