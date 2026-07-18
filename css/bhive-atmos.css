@@ -266,7 +266,7 @@ body{ background:var(--atmos-void); }
    glow, controlled pulse, and a state that answers to hive condition.
    ═══════════════════════════════════════════════════════════════ */
 
-.hive-core polygon{
+.hive-core > polygon{
   transition:fill var(--t-step) var(--ease-out),
              stroke var(--t-step) var(--ease-out);
 }
@@ -277,7 +277,7 @@ body{ background:var(--atmos-void); }
   animation:core-pulse var(--t-pulse) ease-in-out infinite;
 }
 /* the chamber wall — dark body, bright rim: silhouette over surface */
-.hive-core polygon:not(.hc-glow){
+.hive-core > polygon:not(.hc-glow){
   fill:#1a1408;
   stroke:var(--neon-gold);
   stroke-width:2.2;
@@ -293,13 +293,13 @@ body{ background:var(--atmos-void); }
 
 /* Core answers to the hive's overall condition (class set in markCells) */
 .hive-core.hc-high .hc-glow{ opacity:.42; animation-duration:2.6s; }
-.hive-core.hc-high polygon:not(.hc-glow){
+.hive-core.hc-high > polygon:not(.hc-glow){
   stroke:var(--neon-cream);
   filter:drop-shadow(0 0 10px rgba(255,217,138,.72));
 }
 .hive-core.hc-mid .hc-glow{ animation-duration:3.6s; }
 .hive-core.hc-low .hc-glow{ opacity:.16; animation-duration:5.4s; }
-.hive-core.hc-low polygon:not(.hc-glow){
+.hive-core.hc-low > polygon:not(.hc-glow){
   fill:#120e06;
   stroke:var(--gold);
   stroke-width:1.8;
@@ -308,8 +308,8 @@ body{ background:var(--atmos-void); }
 .hive-core.hc-low .hc-label{ fill:var(--ink-3); }
 
 /* the Core is the most important object in the world — say so on hover */
-.hive-core:hover polygon:not(.hc-glow),
-.hive-core:focus-visible polygon:not(.hc-glow){
+.hive-core:hover > polygon:not(.hc-glow),
+.hive-core:focus-visible > polygon:not(.hc-glow){
   stroke:var(--neon-cream);
   filter:drop-shadow(0 0 12px rgba(255,244,218,.85));
 }
@@ -364,7 +364,7 @@ body{ background:var(--atmos-void); }
   .hive-cell.alive .hive-glow{ animation:none; opacity:.22; }
   .hive-core .hc-glow{ animation:none; opacity:.34; }
   .hive-cell .hive-frame,.hive-cell .hive-glow,.hive-cell .hive-fill,
-  .hive-core polygon{ transition:none; }
+  .hive-core > polygon{ transition:none; }
 }
 
 /* ═══ 6. MOBILE ════════════════════════════════════════════════════
@@ -605,11 +605,14 @@ input:focus,textarea:focus,select:focus,.hive-io-box:focus,.queen-in:focus{
    Movement remains owned by app-main.js. This layer only changes the
    rendering: crisp silhouettes, caste signatures, and stepped wings.
    ═══════════════════════════════════════════════════════════════ */
-.hive-bee,.hive-queen{shape-rendering:crispEdges}
-.hive-bee path,.hive-bee line,.hive-bee polygon,
-.hive-queen path,.hive-queen line,.hive-queen polygon{
+.hive-bee{shape-rendering:crispEdges}
+.hive-bee path,.hive-bee line,.hive-bee polygon{
   stroke-linecap:square;stroke-linejoin:miter;
 }
+/* the v88 queen body is soft ellipses — crispEdges/miter would serrate her.
+   Fidelity overrides per codex queen-variants card 01 (.queen--v88). */
+.hive-queen{shape-rendering:auto}
+.hive-queen path,.hive-queen polygon{stroke-linecap:round;stroke-linejoin:round}
 .hive-bee{filter:drop-shadow(0 1px 0 rgba(0,0,0,.9)) drop-shadow(0 0 2px rgba(255,199,107,.14))}
 .hive-bee-wing{
   transform-box:fill-box;transform-origin:center;
@@ -623,7 +626,18 @@ input:focus,textarea:focus,select:focus,.hive-io-box:focus,.queen-in:focus{
 .bee-drones{filter:drop-shadow(0 0 2px rgba(70,215,230,.34))}
 .bee-elder{filter:drop-shadow(0 0 4px rgba(255,217,138,.48))}
 
-.hive-queen{filter:drop-shadow(0 0 4px rgba(255,217,138,.55))}
+.hive-queen{filter:none} /* v88 fidelity: her colours carry the presence, not a glow */
+/* Lifted Premium crown (codex card 01): narrower, suspended clear of the
+   head. Soft drop shadow reads as floating; slow sub-pixel hover keeps her
+   alive without ever leaving the design's quiet register. */
+.queen-crown-lifted{
+  fill:#f9e4a6;fill-opacity:.9;stroke:#c9ae78;stroke-width:.8;
+  stroke-linejoin:round;
+  filter:drop-shadow(0 2px 1px rgba(42,29,11,.78)) drop-shadow(0 0 2px rgba(201,174,120,.42));
+  transform-box:fill-box;transform-origin:center;
+  animation:queen-crown-hover 3.4s ease-in-out infinite;
+}
+@keyframes queen-crown-hover{50%{transform:translateY(-.8px)}}
 .queen-aura{fill:var(--neon-gold);opacity:.13;transform-box:fill-box;transform-origin:center;animation:queen-aura 3.6s steps(6,end) infinite}
 .queen-wing{fill:#fff4da;stroke:var(--neon-gold);stroke-width:.55;opacity:.72;transform-box:fill-box;transform-origin:center bottom;animation:queen-wing .52s steps(2,end) infinite alternate}
 .queen-shell{fill:#171108;stroke:var(--neon-gold);stroke-width:1}
@@ -669,6 +683,7 @@ input:focus,textarea:focus,select:focus,.hive-io-box:focus,.queen-in:focus{
   .nav a,.card,.bp-card,.hive-btn,.tr-next,.tour-open,.bhpr-go,.bhpr-next,
   .bhtm-btn,.bhtm-fin,.bhtm-add,.bhtm-mc,.cmd,.cmd-tile,.cq-chip,
   input,textarea,select{transition:none}
-  .queen-think,.queen-aura,.queen-wing,.hive-bee-wing,.hive-bee-glow{animation:none}
+  .queen-think,.queen-aura,.queen-wing,.hive-bee-wing,.hive-bee-glow,
+  .queen-crown-lifted{animation:none}
   .queen-aura{opacity:.2}.queen-wing{opacity:.7}
 }

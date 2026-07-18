@@ -1254,43 +1254,32 @@
       if(s!==g)g.appendChild(s);
       return g;
     }
-    /* ── the queen: a larger crowned bee at the heart of the hive ── */
+    /* ── the queen: the original v88 queen beneath the Lifted Premium crown.
+       Body is verbatim v88 (codex queen-variants card 01) — wings, antennae,
+       colours, bands, head, proportions untouched. Only the crown changed:
+       narrower, suspended clear of the head, soft shadow, slow sub-pixel
+       hover (.queen-crown-lifted in bhive-atmos.css). ── */
     function queenBee(cx,cy){
       var g=B.el('g',{'class':'hive-queen',transform:'translate('+cx+','+cy+')'});
-      /* angular aura + segmented wings: original ancient-tech silhouette */
-      g.appendChild(B.el('polygon',{points:'0,-23 9,-16 15,-5 13,10 6,21 -6,21 -13,10 -15,-5 -9,-16',
-        'class':'queen-aura'}));
-      g.appendChild(B.el('polygon',{points:'-3,-5 -16,-14 -20,-7 -13,1 -4,2',
-        'class':'queen-wing'}));
-      g.appendChild(B.el('polygon',{points:'3,-5 16,-14 20,-7 13,1 4,2',
-        'class':'queen-wing'}));
-      g.appendChild(B.el('polygon',{points:'-4,1 -14,4 -15,11 -7,10 -2,5',
-        'class':'queen-wing',opacity:'.54'}));
-      g.appendChild(B.el('polygon',{points:'4,1 14,4 15,11 7,10 2,5',
-        'class':'queen-wing',opacity:'.54'}));
-      /* antennae terminate in emissive square receivers */
-      g.appendChild(B.el('path',{d:'M-2,-10 L-6,-16 L-9,-17',stroke:'#ffd98a',
-        'stroke-width':'1',fill:'none'}));
-      g.appendChild(B.el('path',{d:'M2,-10 L6,-16 L9,-17',stroke:'#ffd98a',
-        'stroke-width':'1',fill:'none'}));
-      g.appendChild(B.el('rect',{x:'-10',y:'-18',width:'2',height:'2','class':'queen-band'}));
-      g.appendChild(B.el('rect',{x:'8',y:'-18',width:'2',height:'2','class':'queen-band'}));
-      /* long plated abdomen; bands are deliberately rectangular */
-      g.appendChild(B.el('polygon',{points:'-5,-1 -7,5 -6,14 0,20 6,14 7,5 5,-1',
-        'class':'queen-shell'}));
-      g.appendChild(B.el('rect',{x:'-5.8',y:'3',width:'11.6',height:'2.4','class':'queen-band'}));
-      g.appendChild(B.el('rect',{x:'-5.5',y:'8',width:'11',height:'2.2','class':'queen-band'}));
-      g.appendChild(B.el('rect',{x:'-4.7',y:'13',width:'9.4',height:'2','class':'queen-band'}));
-      /* armoured thorax and visor */
-      g.appendChild(B.el('polygon',{points:'-5,-7 -3,-11 3,-11 5,-7 4,0 -4,0',
-        'class':'queen-shell'}));
-      g.appendChild(B.el('polygon',{points:'-4,-12 -2,-15 2,-15 4,-12 3,-8 -3,-8',
-        'class':'queen-shell'}));
-      g.appendChild(B.el('rect',{x:'-2.2',y:'-12.3',width:'1.5',height:'1.2','class':'queen-eye'}));
-      g.appendChild(B.el('rect',{x:'.7',y:'-12.3',width:'1.5',height:'1.2','class':'queen-eye'}));
-      /* crown doubles as the Core's signal antenna */
-      g.appendChild(B.el('polygon',{points:'-6,-14 -6,-19 -3,-16 0,-22 3,-16 6,-19 6,-14',
-        'class':'queen-crown'}));
+      g.appendChild(B.el('ellipse',{cx:'-7.5',cy:'-3.5',rx:'7',ry:'3.7',fill:'#fdf6e3',
+        opacity:'0.7',transform:'rotate(-37 -7.5 -3.5)'}));
+      g.appendChild(B.el('ellipse',{cx:'7.5',cy:'-3.5',rx:'7',ry:'3.7',fill:'#fdf6e3',
+        opacity:'0.7',transform:'rotate(37 7.5 -3.5)'}));
+      g.appendChild(B.el('path',{d:'M-1.7,-13 Q-3.6,-17 -5.4,-18.4',stroke:'#2a1d0b',
+        'stroke-width':'1',fill:'none','stroke-linecap':'round'}));
+      g.appendChild(B.el('path',{d:'M1.7,-13 Q3.6,-17 5.4,-18.4',stroke:'#2a1d0b',
+        'stroke-width':'1',fill:'none','stroke-linecap':'round'}));
+      g.appendChild(B.el('ellipse',{cx:'0',cy:'7',rx:'5.7',ry:'10.2',fill:'#46320f',
+        stroke:'#241a0b','stroke-width':'0.8'}));
+      g.appendChild(B.el('ellipse',{cx:'0',cy:'1.6',rx:'4.7',ry:'1.7',fill:'#f7df9e'}));
+      g.appendChild(B.el('ellipse',{cx:'0',cy:'7',rx:'5',ry:'1.8',fill:'#f7df9e'}));
+      g.appendChild(B.el('ellipse',{cx:'0',cy:'12.3',rx:'4.1',ry:'1.6',fill:'#f7df9e'}));
+      g.appendChild(B.el('ellipse',{cx:'0',cy:'-4.5',rx:'4.3',ry:'4',fill:'#3a2a12',
+        stroke:'#241a0b','stroke-width':'0.7'}));
+      g.appendChild(B.el('circle',{cx:'0',cy:'-11',r:'3.4',fill:'#2a1d0b'}));
+      g.appendChild(B.el('polygon',{
+        points:'-5,-16.6 -5,-20.2 -2.3,-17.8 0,-22.8 2.3,-17.8 5,-20.2 5,-16.6',
+        'class':'queen-crown-lifted'}));
       return g;
     }
     /* ── v57: Wasp Bodyguard — replaces the envoy bee (boldest from each cell).
