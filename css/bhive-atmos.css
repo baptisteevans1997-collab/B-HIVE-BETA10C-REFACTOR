@@ -375,7 +375,11 @@ body{ background:var(--atmos-void); }
 @media (max-width:760px){
   .glow-bg::before{ height:26vh; opacity:.7; }
   .glow-bg::after{ animation-duration:72s; background-size:260px 260px; }
-  .grid-bg{ opacity:.6; background-size:34px 59px,34px 59px,34px 59px; }
+  .grid-bg{
+    opacity:.6;
+    background-size:100% 100%,34px 59px,34px 59px,34px 59px;
+    background-repeat:no-repeat,repeat,repeat,repeat;
+  }
   .hive-frame{ stroke-width:1.7; }
   .hive-cell.on .hive-frame{ stroke-width:3; }
   .hive-cell.alive .hive-frame{ stroke-width:2; }
@@ -512,7 +516,7 @@ input:focus,textarea:focus,select:focus,.hive-io-box:focus,.queen-in:focus{
   background:rgba(8,10,18,.98);
   box-shadow:inset 3px 0 0 var(--neon-gold),var(--glow-1);
 }
-::placeholder{color:#77705f;opacity:1}
+::placeholder{color:#8f8776;opacity:1}
 
 /* tactile controls: sharp, bright, and stateful */
 .hive-btn,.tr-next,.tour-open,.bhpr-go,.bhpr-next,.bhtm-btn,.bhtm-fin,

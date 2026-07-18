@@ -3193,7 +3193,7 @@
         if(c[f]!==before)BHIVE.recordEvent('cell_value_changed',{
           cellKey:c.key,payload:{field:f,from:before,to:c[f],source:'cell_control'}
         });
-        patchHiveCell(sel);patchCellPanel(sel);updateEnv();
+        patchHiveCell(sel);markCells();patchCellPanel(sel);updateEnv();
         renderMismatch();renderReadout();save();
       }else if(b.classList.contains('hd-evolve')){
         var ek=b.getAttribute('data-k');
