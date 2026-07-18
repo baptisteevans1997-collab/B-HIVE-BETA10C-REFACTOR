@@ -2710,8 +2710,9 @@
     }
     function refreshLevel(){
       var info=levelInfo();
+      var banner=document.getElementById('hive-level');
       renderLevelBanner(info);
-      if(shownLevel!==null&&info.level>shownLevel)playLevelUp(info);
+      if(banner&&!banner.hidden&&shownLevel!==null&&info.level>shownLevel)playLevelUp(info);
       shownLevel=info.level;
     }
 
