@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>B HIVE — app-main Integration Tests</title>
+<style>
+  body { background:#15120c; color:#ece4d2; font:14px/1.6 system-ui,sans-serif; max-width:760px; margin:40px auto; padding:0 20px; }
+  h1 { color:#c9ae78; font-size:20px; border-bottom:1px solid rgba(237,228,210,.1); padding-bottom:10px; }
+  .test { padding:6px 10px; margin:3px 0; border-radius:4px; font:12px/1.5 ui-monospace,monospace; }
+  .pass { background:rgba(148,160,109,.15); color:#a3b07f; }
+  .fail { background:rgba(207,140,84,.2); color:#cf8c54; }
+  .summary { margin-top:24px; padding:12px; border:1px solid #c9ae78; border-radius:8px; }
+  iframe { position:absolute; width:1px; height:1px; border:0; clip:rect(0 0 0 0); }
+</style>
+</head>
+<body>
+<h1>B HIVE app-main Integration Tests</h1>
+<div id="results"></div>
+<div id="summary" class="summary">Running controlled browser scenarios…</div>
+<script>
+(function () {
+  'use strict';
+  var results = document.getElementById('results');
+  var summary = document.getElementById('summary');
+  var passed = 0, failed = 0, uncaught = [];
+  var scenarios = ['evolve','widest'];
+  var reports = {};
+
+  window.addEventListener('error', function (event) { uncaught.push(event.message); });
+  window.addEventListener('unhandledrejection', function (event) { uncaught.push(String(event.reason)); });
+
+  function test(name, ok, detail) {
+    var row = document.createElement('div');
+    row.className = 'test ' + (ok ? 'pass' : 'fail');
+    row.textContent = (ok ? '✓ ' : '✗ ') + name + (ok || !detail ? '' : ' — ' + detail);
+    results.appendChild(row);
+    if (ok) passed++; else failed++;
+  }
+
+  function runScenario(index) {
+    if (index >= scenarios.length) return finish();
+    var frame = document.createElement('iframe');
+    frame.src = 'app-main-harness.html?scenario=' + scenarios[index] + '&run=' + Date.now();
+    frame.title = 'controlled ' + scenarios[index] + ' scenario';
+    document.body.appendChild(frame);
+  }
+
+  window.addEventListener('message', function (event) {
+    if (event.origin !== location.origin || !event.data || event.data.type !== 'bhive-app-main-result') return;
+    var report = event.data.result;
+    reports[report.scenario] = report;
+    var frames = document.querySelectorAll('iframe');
+    if (frames.length) frames[frames.length - 1].remove();
+    runScenario(Object.keys(reports).length);
+  });
+
+  function finish() {
+    var evolve = reports.evolve, widest = reports.widest;
+    test('app-main loads without an uncaught JavaScript error',
+      uncaught.length === 0 && evolve.errors.length === 0 && widest.errors.length === 0,
+      uncaught.concat(evolve.errors, widest.errors).join('; '));
+    test('deterministic state contains all 14 cells', evolve.stateCount === 14 && widest.stateCount === 14);
+    test('all 14 cells render in both controlled scenarios', evolve.cellCount === 14 && widest.cellCount === 14);
+    test('hidden progression: level-3 cell without Agent suppresses the current Evolve recommendation',
+      evolve.growthClass && !evolve.nextButtonPresent,
+      'growth=' + evolve.growthClass + ', next=' + evolve.nextMove);
+    test('without a hidden Evolve candidate, genuine widest gap is recommended',
+      widest.nextMove === 'Feed Health', widest.nextMove);
+    test('legacy agents/mbti/swarms/learnings state loads intact', widest.legacyLoaded);
+    test('legacy-compatible state can save again with all four fields', widest.savedAgain);
+    test('legitimate non-Agent priority path remains visible and targetable',
+      widest.nextButtonPresent && widest.priorityClass);
+    test('legacy cellLevel and Agent visual growth classes remain observable',
+      widest.growthClass && widest.apexClass);
+
+    window.__BHIVE_TEST_RESULTS = {passed:passed,failed:failed,reports:reports,uncaught:uncaught};
+    document.documentElement.dataset.testStatus = failed ? 'failed' : 'passed';
+    summary.innerHTML = '<b>' + passed + '/' + (passed + failed) + ' passed</b>' +
+      (failed ? ' — integration scaffold failed' : ' — app-main integration scaffold passed');
+    try {
+      localStorage.removeItem('lw-brainmap-hive-v1');
+      localStorage.removeItem('lw-brainmap-queen-v1');
+    } catch (_) {}
+  }
+
+  runScenario(0);
+})();
+</script>
+</body>
+</html>

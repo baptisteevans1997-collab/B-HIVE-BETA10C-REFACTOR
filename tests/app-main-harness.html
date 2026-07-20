@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>B HIVE app-main controlled harness</title>
+</head>
+<body>
+<header class="masthead" id="home"><span id="clock"></span></header>
+<section class="section" id="energy">
+  <div id="hive-today"></div>
+  <div id="hive-level"></div>
+  <div id="hive-mood"></div>
+  <div id="hive-mbti"></div>
+  <div class="hive-card">
+    <svg id="hivesvg" viewBox="0 0 600 600"></svg>
+  </div>
+  <div id="hive-sheet-backdrop"></div>
+  <div id="hive-sheet"><button class="hd-sheet-close" type="button">close</button>
+    <div id="hive-detail"></div>
+  </div>
+</section>
+
+<script>
+(function () {
+  'use strict';
+  var scenario = new URLSearchParams(location.search).get('scenario') || 'widest';
+  var storageKey = 'lw-brainmap-hive-v1';
+  var keys = ['lw','free','craft','money','career','growth','finance','health','people','identity','clients','ink','side','recruit'];
+  var current = {};
+  keys.forEach(function (key) { current[key] = { imp: 50, en: 50 }; });
+  current.health = { imp: 90, en: 20 };
+  current.people = { imp: 70, en: 55 };
+
+  var learnings = {};
+  if (scenario === 'evolve') {
+    learnings.lw = [
+      {t:'fixture learning one',s:'you'}, {t:'fixture learning two',s:'you'},
+      {t:'fixture learning three',s:'you'}, {t:'fixture learning four',s:'you'}
+    ];
+  } else {
+    learnings.craft = [
+      {t:'legacy craft one',s:'you'}, {t:'legacy craft two',s:'you'},
+      {t:'legacy craft three',s:'you'}, {t:'legacy craft four',s:'you'}
+    ];
+    learnings.health = [{t:'legacy health note',s:'you'}];
+  }
+
+  var fixture = {
+    v: 3,
+    ts: Date.now(),
+    current: current,
+    history: [{ts:Date.now(),cells:current}],
+    learnings: learnings,
+    agents: scenario === 'evolve' ? {} : {craft:true},
+    mbti: ['E','N','T','J'],
+    swarms: {lw:[{age:4,b:0.5,p:0.5}],craft:[{age:5,b:0.6,p:0.4}]},
+    unlocks: keys.slice()
+  };
+  localStorage.removeItem(storageKey);
+  localStorage.removeItem('lw-brainmap-queen-v1');
+  localStorage.setItem(storageKey, JSON.stringify(fixture));
+
+  window.__APP_MAIN_ERRORS = [];
+  window.addEventListener('error', function (event) {
+    window.__APP_MAIN_ERRORS.push(event.message || String(event.error));
+  });
+  window.addEventListener('unhandledrejection', function (event) {
+    window.__APP_MAIN_ERRORS.push('unhandled rejection: ' + String(event.reason));
+  });
+  window.scrollTo = function () {};
+  window.matchMedia = function () {
+    return {matches:true,addListener:function(){},removeListener:function(){}};
+  };
+  window.BHIVE_DATA = {
+    DAYS:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
+    MON:['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+    SCREEN_NAMES:{energy:'Hive Mind'},
+    MBTI_CLASS:{ENTJ:'Fixture class'},
+    TOUR:[],
+    WANDER:{
+      'Builder Bees':{ax:0.5,ay:0.5,sBase:0.0001},
+      'Scout Bees':{ax:0.5,ay:0.5,sBase:0.0001},
+      'Forager Bees':{ax:0.5,ay:0.5,sBase:0.0001},
+      'Guard Bees':{ax:0.5,ay:0.5,sBase:0.0001},
+      'Nurse Bees':{ax:0.5,ay:0.5,sBase:0.0001},
+      'Drones':{ax:0.5,ay:0.5,sBase:0.0001}
+    }
+  };
+})();
+</script>
+<script src="../js/bhive-engine.js"></script>
+<script src="../js/app-main.js"></script>
+<script>
+window.addEventListener('load', function () {
+  setTimeout(function () {
+    var scenario = new URLSearchParams(location.search).get('scenario') || 'widest';
+    var storageKey = 'lw-brainmap-hive-v1';
+    var cells = document.querySelectorAll('#hivesvg .hive-cell');
+    var result = {
+      scenario: scenario,
+      errors: window.__APP_MAIN_ERRORS.slice(),
+      cellCount: cells.length,
+      stateCount: window.BHIVE && window.BHIVE.cells ? window.BHIVE.cells.length : 0,
+      nextMove: (document.querySelector('.td-next-l') || {}).textContent || '',
+      nextButtonPresent: !!document.querySelector('.td-next'),
+      growthClass: !!document.querySelector('#hivesvg .hive-cell.cm-1'),
+      apexClass: !!document.querySelector('#hivesvg .hive-cell.cm-apex'),
+      legacyLoaded: !!(window.BHIVE && window.BHIVE.agents.craft &&
+        window.BHIVE.mbti.join('') === 'ENTJ' && window.BHIVE.swarms.craft &&
+        window.BHIVE.learnings.health),
+      savedAgain: false,
+      priorityClass: false
+    };
+
+    if (scenario === 'widest') {
+      var mbtiButton = document.querySelector('#hive-mbti .mb-ax');
+      if (mbtiButton) mbtiButton.click();
+      var saved = JSON.parse(localStorage.getItem(storageKey));
+      result.savedAgain = !!(saved && saved.agents && saved.mbti && saved.swarms && saved.learnings);
+      var core = document.querySelector('#hivesvg .hive-core');
+      if (core) core.dispatchEvent(new MouseEvent('click', {bubbles:true}));
+      result.priorityClass = !!document.querySelector('#hivesvg .hive-cell.priority-on');
+    }
+    parent.postMessage({type:'bhive-app-main-result',result:result}, location.origin);
+  }, 60);
+});
+</script>
+</body>
+</html>
