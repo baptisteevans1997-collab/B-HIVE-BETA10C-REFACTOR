@@ -2888,7 +2888,8 @@
       for(i=0;i<allCells.length;i++)allCells[i].classList.remove('priority-on');
       if(!coreOn)return;
       var mv=nextMove();
-      if(!mv||mv.kind!=='cell'||mv.idx==null)return;
+      if(!mv||mv.kind!=='cell'||mv.idx==null||
+        (typeof mv.label==='string'&&mv.label.indexOf('Evolve ')===0))return;
       var target=allCells[mv.idx];
       if(target)target.classList.add('priority-on');
     }
