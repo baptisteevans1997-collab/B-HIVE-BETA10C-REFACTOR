@@ -25,6 +25,7 @@
   var passed = 0, failed = 0, uncaught = [];
   var scenarios = ['evolve','widest'];
   var reports = {};
+  var activeFrame = null, activeScenario = '', scenarioTimer = 0, nextScenario = 0;
 
   window.addEventListener('error', function (event) { uncaught.push(event.message); });
   window.addEventListener('unhandledrejection', function (event) { uncaught.push(String(event.reason)); });
@@ -40,18 +41,37 @@
   function runScenario(index) {
     if (index >= scenarios.length) return finish();
     var frame = document.createElement('iframe');
-    frame.src = 'app-main-harness.html?scenario=' + scenarios[index] + '&run=' + Date.now();
-    frame.title = 'controlled ' + scenarios[index] + ' scenario';
+    activeScenario = scenarios[index];
+    activeFrame = frame;
+    nextScenario = index + 1;
+    frame.src = 'app-main-harness.html?scenario=' + activeScenario + '&run=' + Date.now();
+    frame.title = 'controlled ' + activeScenario + ' scenario';
     document.body.appendChild(frame);
+    scenarioTimer = window.setTimeout(function () {
+      completeScenario({
+        scenario: activeScenario,
+        errors: ['Scenario timed out before returning a valid result'],
+        cellCount: 0,
+        stateCount: 0
+      });
+    }, 3000);
+  }
+
+  function completeScenario(report) {
+    window.clearTimeout(scenarioTimer);
+    scenarioTimer = 0;
+    reports[activeScenario] = report;
+    if (activeFrame && activeFrame.parentNode) activeFrame.parentNode.removeChild(activeFrame);
+    activeFrame = null;
+    activeScenario = '';
+    runScenario(nextScenario);
   }
 
   window.addEventListener('message', function (event) {
     if (event.origin !== location.origin || !event.data || event.data.type !== 'bhive-app-main-result') return;
     var report = event.data.result;
-    reports[report.scenario] = report;
-    var frames = document.querySelectorAll('iframe');
-    if (frames.length) frames[frames.length - 1].remove();
-    runScenario(Object.keys(reports).length);
+    if (!activeFrame || !report || report.scenario !== activeScenario || !Array.isArray(report.errors)) return;
+    completeScenario(report);
   });
 
   function finish() {
