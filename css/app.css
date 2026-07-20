@@ -516,7 +516,8 @@ em{font-style:italic}
   border:1px solid var(--line-2);
   background:linear-gradient(120deg,rgba(201,174,120,.13),rgba(33,28,20,.6));
 }
-.hive-level[hidden],.levelup[hidden],.agent-progression-ui[hidden]{display:none!important}
+.hive-level[hidden],.levelup[hidden],.agent-progression-ui[hidden],
+.hive-mbti[hidden],.fixed-personality-ui[hidden]{display:none!important}
 .hl-badge{
   flex:none;width:62px;height:62px;border-radius:13px;
   display:flex;flex-direction:column;align-items:center;justify-content:center;

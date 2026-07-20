@@ -1800,7 +1800,7 @@
       var temper='';
       if(tn){
         var mb=tb/tn,mp=tp/tn;
-        temper='<div class="sw-temper">Temperament &middot; <b>'+
+        temper='<div class="sw-temper fixed-personality-ui" hidden>Temperament &middot; <b>'+
           (mb>0.58?'bold':mb<0.42?'close-knit':'even-keeled')+', '+
           (mp>0.58?'restless':mp<0.42?'calm':'steady')+'</b></div>';
       }
@@ -1822,8 +1822,8 @@
           focusHTML='<div class="si-focus">'+
             '<div class="si-focus-head">Focus</div>'+
             '<div class="si-focus-id">'+B.esc(rs)+' '+B.esc(stageLabel)+' &middot; '+beeName(fb.b,fb.p)+
-              ' &middot; <em>'+B.esc(beeMoniker(fb.b,fb.p))+'</em></div>'+
-            '<div class="si-focus-trait">'+B.esc(beeTraits(fb.b,fb.p))+'. '+B.esc(beeAction(race,fs))+'</div>'+
+              '<span class="fixed-personality-ui" hidden> &middot; <em>'+B.esc(beeMoniker(fb.b,fb.p))+'</em></span></div>'+
+            '<div class="si-focus-trait"><span class="fixed-personality-ui" hidden>'+B.esc(beeTraits(fb.b,fb.p))+'. </span>'+B.esc(beeAction(race,fs))+'</div>'+
           '</div>';
         }
         intelHTML='<div class="sw-intel">'+
@@ -2026,7 +2026,7 @@
       detail.innerHTML=
         '<div class="hk">'+B.esc(M.race)+'</div>'+
         '<h3>'+c.full+'</h3>'+
-        ((M.cls||M.trait)?'<p class="hd-persona"><b>'+B.esc(M.cls)+'</b> &middot; '+B.esc(M.trait)+'</p>':'')+
+        ((M.cls||M.trait)?'<p class="hd-persona fixed-personality-ui" hidden><b>'+B.esc(M.cls)+'</b> &middot; '+B.esc(M.trait)+'</p>':'')+
         (c.desc?'<div class="hd-sec">What this cell is</div><p class="hd-what">'+B.esc(c.desc)+'</p>':'')+
         '<div class="hd-sec">Current state</div>'+
         '<span class="hd-verdict '+VCLASS[v]+'">'+VNAME[v]+'</span>'+
