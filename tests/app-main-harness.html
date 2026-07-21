@@ -240,6 +240,13 @@
     }}, location.origin);
   }
 
+  function finishControlReady() {
+    var finish = document.getElementById('bhtm-fin');
+    return document.querySelectorAll('#bhtm-fin').length === 1 &&
+      finish instanceof HTMLButtonElement && finish.matches('button.bhtm-fin[type="button"]') &&
+      finish.textContent.trim() === 'Finish Beta' && !finish.disabled;
+  }
+
   function ready() {
     return document.readyState !== 'loading' &&
       window.__INDEX_SIGNATURE &&
@@ -247,7 +254,7 @@
       document.querySelectorAll('#hivesvg .hive-cell').length === 14 &&
       document.querySelector('#hivesvg .hive-core') &&
       document.querySelector('#hive-today .td-status') &&
-      document.getElementById('bhtm-fin');
+      finishControlReady();
   }
 
   function finishWhenReady() {
@@ -259,7 +266,7 @@
       if (Date.now() < deadline) {
         window.setTimeout(finishWhenReady, 10);
       } else {
-        postFailure('Harness readiness timed out before app-main initialized 14 cells');
+        postFailure('Harness readiness timed out before app-main initialized 14 cells and the Finish Beta control');
       }
       return;
     }
