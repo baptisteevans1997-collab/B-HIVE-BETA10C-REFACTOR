@@ -965,7 +965,7 @@
           :vit>=52?'warm and steady'
           :vit>=36?'quiet, holding on'
           :'dim and still';
-        mood.innerHTML='<b>'+txt+'</b><span>vit '+vit+'</span>';
+        mood.innerHTML='<b>'+txt+'</b>';
         mood.className='hive-mood '+(vit>=66?'hm-good':vit>=40?'hm-mid':'hm-low');
       }
     }
@@ -2130,8 +2130,7 @@
         var info=levelInfo(),totL=0,k,ag=0;
         for(k in learnings)totL+=(learnings[k]||[]).length;
         for(k in agents)if(agents[k])ag++;
-        return 'Level '+info.level+', '+info.title+'. '+totL+' things learned'+
-          (ag?', '+ag+' cells evolved into agents':'')+'.';
+        return totL+' thing'+(totL===1?'':'s')+' learned so far.';
       }}
     ];
     function showCore(){
@@ -2144,8 +2143,8 @@
       }).join('');
       detail.innerHTML=
         '<div class="hk">The Core &middot; queen of the hive</div>'+
-        '<h3>Overview <span class="hd-clv">LV '+info.level+'</span></h3>'+
-        '<p class="hd-persona">'+B.esc(info.title)+', she watches all 14 cells at once.</p>'+
+        '<h3>Overview</h3>'+
+        '<p class="hd-persona">She watches all 14 cells at once.</p>'+
         hiveBrief()+
         '<div class="queen-card">'+
           '<div class="cq-h">&#128081; The Queen&rsquo;s Read</div>'+
@@ -2579,7 +2578,7 @@
         obs.push('Log a couple of check-ins and the hive can watch how you shift over time.');
       }
       var info=levelInfo();
-      obs.push('So far it has learned '+totL+' things about you, Level '+info.level+', '+info.title+'.');
+      obs.push('So far it has learned '+totL+' things about you.');
       return obs;
     }
     /* ── pass 5A: hive brief — the Queen's offline read of the whole swarm ── */
@@ -2784,8 +2783,6 @@
         '<div class="rp-h">Starved, matters most, fed least</div>'+
         (gapRows||'<div class="rp-none">Nothing badly starved right now.</div>')+
         '<div class="rp-h">The hive</div>'+
-        '<div class="rp-row"><span class="rp-lbl">Level</span><span class="rp-bar">'+
-          repBar(info.pct)+'</span><span class="rp-v">'+info.level+'</span></div>'+
         '<div class="rp-row"><span class="rp-lbl">Knows you</span><span class="rp-bar">'+
           repBar(Math.min(100,totL*2.5))+'</span><span class="rp-v">'+totL+'</span></div>'+
         '<div class="rp-row"><span class="rp-lbl">Life balance</span><span class="rp-bar">'+
