@@ -311,7 +311,6 @@
     if(!svg)return;
     var NS=B.NS;  /* aliased to engine */
     var STORAGE_KEY='lw-brainmap-hive-v1';  /* was STORE */
-    var QUESTION_VERSION=3;  /* was QUESTION_VERSION */  /* question-set version, bump to re-seed questions on next load (3 = Phase 1.3 behaviour-revealing bank) */
     var MO=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
     /* beta10c: state lives on BHIVE — init + alias */
@@ -2566,24 +2565,8 @@
             ' &middot; ~'+info.toNext+' more learnings</div>'+
         '</div>';
     }
-    var shownLevel=null;
-    function playLevelUp(info){
-      var el=document.getElementById('levelup');
-      if(!el)return;
-      var ln=document.getElementById('lu-lv'),lt=document.getElementById('lu-title');
-      if(ln)ln.textContent=info.level;
-      if(lt)lt.textContent=info.title;
-      el.hidden=false;
-      el.classList.remove('show');void el.offsetWidth;el.classList.add('show');
-      clearTimeout(el._t);
-      el._t=setTimeout(function(){el.classList.remove('show');el.hidden=true;},2600);
-    }
     function refreshLevel(){
-      var info=levelInfo();
-      var banner=document.getElementById('hive-level');
-      renderLevelBanner(info);
-      if(banner&&!banner.hidden&&shownLevel!==null&&info.level>shownLevel)playLevelUp(info);
-      shownLevel=info.level;
+      renderLevelBanner(levelInfo());
     }
 
     /* ── the bees ask you random short questions ── */
