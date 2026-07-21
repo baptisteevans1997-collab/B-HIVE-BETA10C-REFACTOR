@@ -24,6 +24,7 @@
   var screens=homeScreen?[homeScreen].concat(sections):sections;
   /* screen id → display name moved to js/bhive-data.js at E3; read site below unchanged. */
   var SCREEN_NAMES = window.BHIVE_DATA.SCREEN_NAMES;
+  var NAV_HIDDEN={projects:1,strengths:1,risks:1,opportunities:1,summary:1};
   var curScreen=0;
 
   function markIn(el){
@@ -80,8 +81,13 @@
   (function(){
     var prev=document.getElementById('nav-prev'),
         next=document.getElementById('nav-next');
-    if(prev)prev.addEventListener('click',function(){showScreen(curScreen-1);});
-    if(next)next.addEventListener('click',function(){showScreen(curScreen+1);});
+    function stepScreen(dir){
+      var i=curScreen+dir;
+      while(i>=0&&i<screens.length&&NAV_HIDDEN[screens[i].id])i+=dir;
+      showScreen(i);
+    }
+    if(prev)prev.addEventListener('click',function(){stepScreen(-1);});
+    if(next)next.addEventListener('click',function(){stepScreen(1);});
   })();
 
   /* ── pass 5C: mobile horizontal page drag guard (v61) ──
@@ -898,6 +904,7 @@
       localTs = BHIVE.localTs;
       refreshLevel();
       renderReport();
+      renderGoals();
       renderBrain();
       renderToday();
       cloudPushSoon();
@@ -2761,9 +2768,22 @@
       for(i=0;i<10;i++)s+=(i<f?'█':'░');
       return s;
     }
+    function hasMeaningfulUserInput(){
+      var i,j,ls;
+      if(history.length)return true;
+      for(i=0;i<cells.length;i++){
+        ls=learnings[cells[i].key]||[];
+        for(j=0;j<ls.length;j++)if(ls[j]&&ls[j].s==='you')return true;
+      }
+      return false;
+    }
     function renderReport(){
       var el=document.getElementById('report-body');
       if(!el)return;
+      if(!hasMeaningfulUserInput()){
+        el.innerHTML='<div class="rp-none">The hive is still listening. Check in or teach a cell to begin your report.</div>';
+        return;
+      }
       var rows=cells.slice().sort(function(a,b){return b.en-a.en;}).map(function(c){
         return '<div class="rp-row"><span class="rp-lbl">'+B.esc(c.label)+'</span>'+
           '<span class="rp-bar">'+repBar(c.en)+'</span><span class="rp-v">'+c.en+'</span></div>';
@@ -2795,6 +2815,10 @@
     function renderGoals(){
       var el=document.getElementById('goals-body');
       if(!el)return;
+      if(!hasMeaningfulUserInput()){
+        el.innerHTML='<div class="goal-sum">The hive needs a little more signal before it can reflect your goals.</div>';
+        return;
+      }
       var GOAL_MAP={
         free:'Build income that is not just hours',
         lw:'Get the main project launched',
@@ -3643,7 +3667,7 @@
     }
     function repaint(){
       renderHive(false);renderMismatch();renderReadout();showCell(sel);
-      renderBrain();renderQuiz();renderMbti();renderRequests();renderReport();refreshLevel();
+      renderBrain();renderQuiz();renderMbti();renderRequests();renderReport();renderGoals();refreshLevel();
     }
     function cloudPush(){
       if(!sb||!cloudUser)return;
@@ -3741,12 +3765,14 @@
     (function(){
       var cbCheckin=document.getElementById('cmd-checkin');
       if(cbCheckin)cbCheckin.addEventListener('click',logCheckin);
-      var cbSync=document.getElementById('cmd-sync');
-      if(cbSync)cbSync.addEventListener('click',function(){
-        var t=document.getElementById('hive-sync-toggle');if(t)t.click();
+      var cbReport=document.getElementById('cmd-report');
+      if(cbReport)cbReport.addEventListener('click',function(){
+        var t=document.getElementById('hive-report-toggle');if(t)t.click();
       });
-      var cbQueen=document.getElementById('cmd-queen');
-      if(cbQueen)cbQueen.addEventListener('click',selectCore);
+      var cbHistory=document.getElementById('cmd-history');
+      if(cbHistory)cbHistory.addEventListener('click',function(){
+        var t=document.getElementById('hive-log-toggle');if(t)t.click();
+      });
       var menu=document.getElementById('hive-cmdmenu');
       var cbMore=document.getElementById('cmd-more');
       function openMenu(){if(menu){menu.hidden=false;document.body.style.overflow='hidden';}}

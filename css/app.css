@@ -716,7 +716,7 @@ em{font-style:italic}
 }
 .tr-next:hover{filter:brightness(1.08)}
 .tour-open{
-  position:fixed;right:16px;bottom:16px;z-index:120;
+  position:fixed;right:16px;bottom:68px;z-index:120;
   width:38px;height:38px;border-radius:50%;cursor:pointer;
   border:1px solid var(--line-2);color:#1a1409;
   background:linear-gradient(135deg,#d8bd84,#c9ae78);
@@ -1621,7 +1621,7 @@ em{font-style:italic}
 .hive-mood.hm-low b{color:#bd9069}
 /* ── first-run start-here strip ── */
 .hive-starthere{
-  display:flex;align-items:flex-start;gap:10px;
+  display:none !important;align-items:flex-start;gap:10px;
   margin:0 0 16px;padding:11px 13px;border-radius:11px;
   border:1px solid var(--line-2);
   background:linear-gradient(120deg,rgba(201,174,120,.13),rgba(33,28,20,.6));
