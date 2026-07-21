@@ -82,7 +82,6 @@
     </div>
   </div>
 </div>
-<div class="navmenu" id="navmenu" hidden></div>
 <div class="tour" id="tour" hidden><div class="tr-card"></div></div>
 <button class="tour-open" id="tour-open" type="button">?</button>
 
@@ -197,7 +196,7 @@
         navbarIds: values('#navbar > button', 'id'),
         navbarLabels: values('#navbar .navbar-action-label'),
         commandBarCount: page.querySelectorAll('.hive-cmdbar').length,
-        legacyTriggerCount: page.querySelectorAll('#navmenu-btn').length,
+        legacyNavCount: page.querySelectorAll('#navmenu, #navmenu-btn').length,
         menuCount: page.querySelectorAll('#hive-cmdmenu').length,
         menuTopLevel: !!(productionMenu && !productionMenu.closest('.section')),
         mainCommands: values('#hive-cmdmenu [aria-label="Main"] [data-cmd]', 'data-cmd'),
@@ -336,7 +335,7 @@
         clickRail('#bestiary');
         document.getElementById('cmd-more').click();
         var visibleMenus = Array.prototype.filter.call(
-          document.querySelectorAll('#hive-cmdmenu, #navmenu'), visible).length;
+          document.querySelectorAll('#hive-cmdmenu'), visible).length;
         var menuFromOtherScreen = activeScreen() === 'bestiary' && visible(menu);
         var menuLabels = Array.prototype.map.call(menu.querySelectorAll('.cmd-tile-label'),
           function (label) { return label.textContent.trim(); });
@@ -398,7 +397,6 @@
           labels: Array.prototype.map.call(navbar.querySelectorAll('.navbar-action-label'),
             function (label) { return label.textContent.trim(); }),
           commandBarCount: document.querySelectorAll('.hive-cmdbar').length,
-          legacyMenuHidden: !visible(document.getElementById('navmenu')),
           menuCount: document.querySelectorAll('#hive-cmdmenu').length,
           visibleMenus: visibleMenus,
           menuFromOtherScreen: menuFromOtherScreen,

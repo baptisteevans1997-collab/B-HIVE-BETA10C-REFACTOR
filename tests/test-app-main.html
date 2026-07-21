@@ -104,9 +104,11 @@
         production.navbarCount === 1 &&
         production.navbarIds.join('|') === 'mobile-nav-hive|mobile-nav-today|cmd-checkin|cmd-more' &&
         production.navbarLabels.join('|') === 'Hive|Today|Check In|More');
-    test('mobile command bar and legacy menu trigger are removed from the visible interface',
-      mobile && mobile.commandBarCount === 0 && mobile.legacyMenuHidden && production &&
-        production.commandBarCount === 0 && production.legacyTriggerCount === 0);
+    test('mobile command bar is removed from the visible interface',
+      mobile && mobile.commandBarCount === 0 && production &&
+        production.commandBarCount === 0);
+    test('legacy navigation markup (#navmenu / #navmenu-btn) cannot silently return',
+      production && production.legacyNavCount === 0);
     test('one canonical More menu opens without rerouting from another screen',
       mobile && mobile.menuCount === 1 && mobile.visibleMenus === 1 && mobile.menuFromOtherScreen &&
         production && production.menuCount === 1 && production.menuTopLevel);

@@ -19,13 +19,9 @@
 
   /* ── screen router: one section at a time, flip like a game app ── */
   var sections=Array.prototype.slice.call(document.querySelectorAll('.section'));
-  var navLinks=Array.prototype.slice.call(document.querySelectorAll('.nav a, .navmenu-row'));
+  var navLinks=Array.prototype.slice.call(document.querySelectorAll('.nav a'));
   var homeScreen=document.querySelector('.masthead');
   var screens=homeScreen?[homeScreen].concat(sections):sections;
-  /* screen id → display name moved to js/bhive-data.js at E3; read site below unchanged. */
-  var SCREEN_NAMES = window.BHIVE_DATA.SCREEN_NAMES;
-  var NAV_HIDDEN={projects:1,strengths:1,risks:1,opportunities:1,summary:1};
-  var curScreen=0;
 
   function markIn(el){
     el.classList.add('in-view');
@@ -36,7 +32,6 @@
     if(i<0)for(k=0;k<screens.length;k++)if(screens[k].id===t)i=k;
     if(i<0)i=0;
     if(i>screens.length-1)i=screens.length-1;
-    curScreen=i;
     for(k=0;k<screens.length;k++)screens[k].classList.toggle('screen-on',k===i);
     var on=screens[i];
     markIn(on);
@@ -44,51 +39,15 @@
     window.scrollTo(0,0);
     var id=on.id;
     navLinks.forEach(function(a){a.classList.toggle('active',a.getAttribute('href')==='#'+id);});
-    var lbl=document.getElementById('navbar-label');
-    if(lbl)lbl.textContent=(i===0)?'HOME':((i<10?'0':'')+i+'  '+((SCREEN_NAMES[id]||'').toUpperCase()));
   }
   document.addEventListener('click',function(e){
-    var a=e.target&&e.target.closest&&e.target.closest('.nav a, .navmenu-row');
+    var a=e.target&&e.target.closest&&e.target.closest('.nav a');
     if(!a)return;
     var href=a.getAttribute('href')||'';
     if(href.charAt(0)==='#'){e.preventDefault();showScreen(href.slice(1));}
   });
-  (function(){var fp=document.getElementById('fontpick');if(homeScreen&&fp)homeScreen.appendChild(fp);})();
   /* default landing: Hive Mind (the live app). Home stays in nav as the title/overview. URL hash still wins. */
   showScreen(((location.hash||'').slice(1))||'energy');
-
-  /* ── mobile section menu ── */
-  (function(){
-    var btn=document.getElementById('navmenu-btn'),
-        ov=document.getElementById('navmenu');
-    if(!btn||!ov)return;
-    function setOpen(o){
-      ov.hidden=!o;
-      document.body.style.overflow=o?'hidden':'';
-    }
-    btn.addEventListener('click',function(){setOpen(true);});
-    ov.addEventListener('click',function(e){
-      var t=e.target;
-      if(t===ov||(t.closest&&t.closest('.navmenu-close'))){setOpen(false);return;}
-      if(t.closest&&t.closest('.navmenu-row'))setOpen(false);
-    });
-    document.addEventListener('keydown',function(e){
-      if(e.key==='Escape'&&!ov.hidden)setOpen(false);
-    });
-  })();
-
-  /* ── navigation: prev/next bottom-bar buttons (swipe-to-change-screen removed) ── */
-  (function(){
-    var prev=document.getElementById('nav-prev'),
-        next=document.getElementById('nav-next');
-    function stepScreen(dir){
-      var i=curScreen+dir;
-      while(i>=0&&i<screens.length&&NAV_HIDDEN[screens[i].id])i+=dir;
-      showScreen(i);
-    }
-    if(prev)prev.addEventListener('click',function(){stepScreen(-1);});
-    if(next)next.addEventListener('click',function(){stepScreen(1);});
-  })();
 
   /* ── pass 5C: mobile horizontal page drag guard (v61) ──
      Leaves native page zoom, text typing, vertical scroll, and taps alone.
@@ -2449,7 +2408,7 @@
       var listHtml=list.length
         ?'<div class="se-cells">'+list.map(function(c){return '<span class="se-cell">'+B.esc(c.label)+'</span>';}).join('')+'</div>'
         :'<div class="se-empty">No cells in this state right now.</div>';
-      /* readout: same logic as the old renderReadout, but rephrased for the new vocabulary */
+      /* summarize the current state with the new vocabulary */
       var u=0,a=0,d=0,l=0,worst=null,wg=-1;
       cells.forEach(function(c){
         var v=displayVitality(c);
@@ -2471,23 +2430,6 @@
         listHtml+
         '<div class="se-readout">'+s+'</div>';
       el.hidden=false;
-    }
-
-    /* ── live readout ── */
-    function renderReadout(){
-      var el=document.getElementById('hive-readout');if(!el)return;
-      var u=0,a=0,d=0,l=0,worst=null,wg=-1;
-      cells.forEach(function(c){
-        var v=displayVitality(c);
-        if(v==='under'){u++;var g=c.imp-c.en;if(g>wg){wg=g;worst=c;}}
-        else if(v==='aligned')a++;else if(v==='dormant')d++;else l++;
-      });
-      var s='Right now, <em>'+u+' drained</em>, '+a+' optimal, '+d+' on standby'+
-        (l?', <em>'+l+' overclocked</em>':'')+'. ';
-      if(worst)s+='The most drained cell is <em>'+worst.label+'</em>. ';
-      s+=(u>a?'The pattern still holds, feed the cells that decide your life, not just the ones that feel good.'
-            :'Better balance than the baseline, keep the cells that matter fed.');
-      el.innerHTML=s;
     }
 
     /* ── check-in log ── */
@@ -2536,7 +2478,7 @@
         'KEPT: your check-ins, learnings, hive level, questions and bees.\n\n'+
         'This can’t be undone.'))return;
       cells.forEach(function(c){c.imp=cellDefaults[c.key].imp;c.en=cellDefaults[c.key].en;});
-      renderHive(false);renderMismatch();renderReadout();showCell(sel);save();
+      renderHive(false);renderMismatch();showCell(sel);save();
     }
 
     /* ── the brain: a playbook of how best to help you ── */
@@ -3096,7 +3038,6 @@
     buildEnv();
     renderHive(true);
     renderMismatch();
-    renderReadout();
     renderLast();
     renderLog();
     renderBrain();
@@ -3215,7 +3156,7 @@
           cellKey:c.key,payload:{field:f,from:before,to:c[f],source:'cell_control'}
         });
         patchHiveCell(sel);markCells();patchCellPanel(sel);updateEnv();
-        renderMismatch();renderReadout();save();
+        renderMismatch();save();
       }else if(b.classList.contains('hd-evolve')){
         var ek=b.getAttribute('data-k');
         if(ek&&!agents[ek]){agents[ek]=true;renderHive(false);showCell(sel);save();}
@@ -3545,7 +3486,7 @@
         }
       });
       if(!n&&!learned&&!asked&&!coached&&!typed&&!wished)return{ok:false,msg:'No matching cells in that blob.'};
-      renderHive(false);renderMismatch();renderReadout();showCell(sel);renderBrain();renderQuiz();renderMbti();renderRequests();save();
+      renderHive(false);renderMismatch();showCell(sel);renderBrain();renderQuiz();renderMbti();renderRequests();save();
       var m='Applied '+n+' cells.';
       if(learned)m+=' +'+learned+' learned.';
       if(asked)m+=' +'+asked+' questions.';
@@ -3666,7 +3607,7 @@
       }
     }
     function repaint(){
-      renderHive(false);renderMismatch();renderReadout();showCell(sel);
+      renderHive(false);renderMismatch();showCell(sel);
       renderBrain();renderQuiz();renderMbti();renderRequests();renderReport();renderGoals();refreshLevel();
     }
     function cloudPush(){
