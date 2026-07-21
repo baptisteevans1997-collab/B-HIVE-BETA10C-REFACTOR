@@ -419,87 +419,27 @@
        Claude sharpens the set on every Sync. ── */
     /* playbook → now in BHIVE.init() */
 
-    /* ── each cell is its own creature: a bee race, a persona, its own level ── */
-    var META={
-      lw:{race:'Builder Bees',body:'#f0cd72',size:1.05,
-          cls:'The Prodigy',trait:'brilliant, nearly ready, addicted to polishing.'},
-      free:{race:'Scout Bees',body:'#e6dba6',size:0.9,
-          cls:'The Dreamer',trait:'wants the open road, rarely walks toward it.'},
-      craft:{race:'Builder Bees',body:'#f0cd72',size:1.05,
-          cls:'The Artisan',trait:'your surest, safest power.'},
-      money:{race:'Forager Bees',body:'#f7d23e',size:1.0,
-          cls:'The Worrier',trait:'strong, but frets instead of acting.'},
-      career:{race:'Guard Bees',body:'#c08a4e',size:1.12,
-          cls:'The Veteran',trait:"holds the line. Mustn't fall asleep."},
-      growth:{race:'Nurse Bees',body:'#aebd6b',size:0.96,
-          cls:'The Scholar',trait:'reads the map more than it walks it.'},
-      finance:{race:'Scout Bees',body:'#e6dba6',size:0.9,
-          cls:'The Strategist',trait:'a plan still waiting for its first move.'},
-      health:{race:'Nurse Bees',body:'#aebd6b',size:0.96,
-          cls:'The Guardian',trait:'keeps everyone standing, kept on rations.'},
-      people:{race:'Guard Bees',body:'#c08a4e',size:1.12,
-          cls:'The Heartwood',trait:'quiet strength you lean on too lightly.'},
-      identity:{race:'Nurse Bees',body:'#aebd6b',size:0.96,
-          cls:'The Shapeshifter',trait:'becomes whatever you actually finish.'},
-      clients:{race:'Forager Bees',body:'#f7d23e',size:1.0,
-          cls:'The Mercenary',trait:'resting on purpose until you call it up.'},
-      ink:{race:'Builder Bees',body:'#f0cd72',size:1.05,
-          cls:'The Wanderer',trait:'plays for the joy of it. Keep it free.'},
-      side:{race:'Drones',body:'#9d9079',size:1.14,
-          cls:'The Inventor',trait:'a near-finished marvel, parked in the shed.'},
-      recruit:{race:'Drones',body:'#9d9079',size:1.14,
-          cls:'The Recruit',trait:'eager and early; benched for now.'}
-    };
+    /* ── each cell is its own creature: a bee race, a persona, its own level ──
+       Cleanup Batch B: table now sourced from BHIVE.META (js/bhive-engine.js). */
+    var META = BHIVE.META;
     /* ── pass 3: how each caste reads in each cell state (caste × verdict) ── */
-    var SWARM_ACT={
-      'Nurse Bees':   {aligned:'tending the brood with care',  under:'feeding what little they have', leak:'fussing, overworked',                dormant:'resting beside the cells'},
-      'Builder Bees': {aligned:'shipping fresh comb',          under:'comb half-built, stalled',     leak:'over-polishing the comb',            dormant:'tools down, idle'},
-      'Forager Bees': {aligned:'returning with full baskets',  under:'flying empty, slim pickings',  leak:'hauling more than the cell can hold',dormant:'wings folded, parked'},
-      'Guard Bees':   {aligned:'holding the line',             under:'thin guard, tired',            leak:'pacing too hard',                    dormant:'on quiet watch'},
-      'Scout Bees':   {aligned:'mapping new ground',           under:'scouting cold, faint signals', leak:'ranging too far, too fast',          dormant:'wings down, waiting'},
-      'Drones':       {aligned:'on standby, ready',            under:'cold reserve',                 leak:'restless, no role',                  dormant:'sleeping it off'}
-    };
+    var SWARM_ACT = BHIVE.SWARM_ACT;
     /* ── pass 3: caste motion modifiers (subtle-to-medium, applied in placeWorker) ── */
-    var CASTE_MOD={
-      'Nurse Bees':   {paceMul:0.85, radMul:0.78, wobMul:0.70, ferry:0},
-      'Builder Bees': {paceMul:1.00, radMul:1.00, wobMul:1.00, ferry:0},
-      'Forager Bees': {paceMul:1.05, radMul:1.00, wobMul:1.00, ferry:1},
-      'Guard Bees':   {paceMul:1.30, radMul:1.30, wobMul:1.50, ferry:0}, /* v59: alert patrol */
-      'Scout Bees':   {paceMul:1.35, radMul:1.25, wobMul:1.25, ferry:0},
-      'Drones':       {paceMul:0.55, radMul:0.88, wobMul:0.50, ferry:0}
-    };
+    var CASTE_MOD = BHIVE.CASTE_MOD;
     /* v60 per-caste home-wander parameters — moved to js/bhive-data.js at E1.
        WANDER stays a local alias here, so the bee-movement read site below is unchanged. */
     var WANDER = window.BHIVE_DATA.WANDER;
     /* ── the six bee orders: real hive castes; every cell is worked by one ── */
-    var BEE_TYPES=[
-      {name:'Nurse Bees',body:'#aebd6b',size:0.96,
-       role:'In a real hive, nurse bees feed and tend the brood. Yours work the cells where you grow into who you are.'},
-      {name:'Builder Bees',body:'#f0cd72',size:1.05,
-       role:'The wax-makers that raise the comb itself. Yours work the cells where you make and ship real things.'},
-      {name:'Forager Bees',body:'#f7d23e',size:1.0,
-       role:'They range out and carry food home. Yours work the cells that bring resources into your life.'},
-      {name:'Guard Bees',body:'#c08a4e',size:1.12,
-       role:'They hold the entrance and keep the hive standing. Yours work the steady cells everything else rests on.'},
-      {name:'Scout Bees',body:'#e6dba6',size:0.9,
-       role:'They fly farthest, hunting the next bloom and the next home. Yours work the cells you are aiming toward.'},
-      {name:'Drones',body:'#9d9079',size:1.14,
-       role:'The reserve caste, kept idle until the hive calls them up. Yours hold the cells you have parked on purpose.'}
-    ];
+    var BEE_TYPES = BHIVE.BEE_TYPES;
     function cellLevel(key){return 1+Math.floor((learnings[key]||[]).length/2);}
 
     /* ── character class, MBTI, the hive's best guess, editable ── */
-    var MBTI_AXES=[['E','I'],['S','N'],['T','F'],['J','P']];
+    var MBTI_AXES = BHIVE.MBTI_AXES;
     /* MBTI type → class name moved to js/bhive-data.js at E2; read site below unchanged. */
     var MBTI_CLASS = window.BHIVE_DATA.MBTI_CLASS;
     var mbti=['','','',''];
     /* reasoning lenses the hive thinks through */
-    var LENSES=[
-      {name:'48 Laws of Power · Robert Greene',
-       gist:'strategy, leverage, positioning and timing, read situations as power moves'},
-      {name:'The Hour Between Dog and Wolf · John Coates',
-       gist:'the biology of risk, stress, confidence and gut-feel are physical states that drive decisions'}
-    ];
+    var LENSES = BHIVE.LENSES;
     /* ── the bees' wishlist, each cluster can hold one app-improvement request ── */
     var SEED_REQUESTS={};
     var requests={};
@@ -757,24 +697,9 @@
       var box=document.getElementById('evo-body');
       if(!box)return;
       /* renamed stage labels: Drone (st3) -> Agent, Agent (st4) -> Apex */
-      var STAGES=['Larva','Worker','Agent','Apex'];
+      var STAGES = BHIVE.STAGES;
       /* per-cell bloodline subtitle — display only, no schema change */
-      var BLOODLINES={
-        lw:'The Combwright Bloodline',
-        craft:'The Honeycraft Bloodline',
-        ink:'The Quillwing Bloodline',
-        free:'The Far Signal Bloodline',
-        finance:'The Far-Compass Bloodline',
-        money:'The Golden Yield Bloodline',
-        clients:'The Patron Bloodline',
-        career:'The Vanguard Bloodline',
-        people:'The Keepkin Bloodline',
-        growth:'The Bloomward Bloodline',
-        health:'The Pulsekeeper Bloodline',
-        identity:'The Sigil-Bearer Bloodline',
-        side:'The Sparkmaker Bloodline',
-        recruit:'The Herald Bloodline'
-      };
+      var BLOODLINES = BHIVE.BLOODLINES;
       var CASTE_SHORT={'Builder Bees':'BUILDER','Forager Bees':'FORAGER','Guard Bees':'GUARD','Scout Bees':'SCOUT','Nurse Bees':'NURSE','Drones':'DRONE'};
       var CASTE_CLASS={'Builder Bees':'cs-builder','Forager Bees':'cs-forager','Guard Bees':'cs-guard','Scout Bees':'cs-scout','Nurse Bees':'cs-nurse','Drones':'cs-drone'};
       var spread=[0,0,0,0];
