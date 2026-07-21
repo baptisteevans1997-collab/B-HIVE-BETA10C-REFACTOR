@@ -3,22 +3,88 @@
 <head>
 <meta charset="utf-8">
 <title>B HIVE app-main controlled harness</title>
+<link rel="stylesheet" href="../css/app.css?navigation-consolidation">
+<link rel="stylesheet" href="../css/beta-mobile-polish.css?navigation-consolidation">
+<link rel="stylesheet" href="../css/beta-overlays.css?navigation-consolidation">
 </head>
 <body>
-<header class="masthead" id="home"><span id="clock"></span></header>
-<section class="section" id="energy">
-  <div id="hive-today"></div>
-  <div id="hive-level"></div>
-  <div id="hive-mood"></div>
-  <div id="hive-mbti"></div>
-  <div class="hive-card">
-    <svg id="hivesvg" viewBox="0 0 600 600"></svg>
+<div class="shell">
+  <aside class="rail">
+    <div class="id-block">B HIVE fixture</div>
+    <nav class="nav" aria-label="Dashboard sections">
+      <a href="#home">Home</a>
+      <a href="#energy">Hive Mind</a>
+      <a href="#system">Operating System</a>
+      <a href="#brainmap">Brain Map</a>
+      <a href="#bestiary">The Bestiary</a>
+      <a href="#manual">Field Manual</a>
+      <a href="#blueprints">Blueprints</a>
+    </nav>
+  </aside>
+  <main class="main">
+    <header class="masthead" id="home"><span id="clock"></span></header>
+    <section class="section" id="energy">
+      <div id="hive-today"></div>
+      <div id="hive-level"></div>
+      <div id="hive-mood"></div>
+      <div id="hive-mbti"></div>
+      <div class="hive-card">
+        <svg id="hivesvg" viewBox="0 0 600 600"></svg>
+      </div>
+      <div id="hive-sheet-backdrop"></div>
+      <div id="hive-sheet"><button class="hd-sheet-close" type="button">close</button>
+        <div id="hive-detail"></div>
+      </div>
+      <div class="hive-bar">
+        <button id="hive-log-btn" type="button">Check In</button>
+        <span id="hive-last"></span>
+        <button id="hive-manual-link" type="button">Field Manual</button>
+        <button id="hive-report-toggle" type="button">Report</button>
+        <button id="hive-log-toggle" type="button">History</button>
+        <button id="hive-reset" type="button">Reset</button>
+      </div>
+      <div class="hive-io" id="hive-report" hidden><div id="report-body"></div></div>
+      <div class="hive-log" id="hive-log" hidden></div>
+    </section>
+    <section class="section" id="system"></section>
+    <section class="section" id="brainmap"></section>
+    <section class="section" id="bestiary"><div id="bestiary-body"></div></section>
+    <section class="section" id="manual"></section>
+    <section class="section" id="blueprints"></section>
+  </main>
+</div>
+
+<nav class="navbar" id="navbar" aria-label="Primary mobile navigation">
+  <button class="navbar-action" id="mobile-nav-hive" type="button"><span class="navbar-action-label">Hive</span></button>
+  <button class="navbar-action" id="mobile-nav-today" type="button"><span class="navbar-action-label">Today</span></button>
+  <button class="navbar-action navbar-checkin" id="cmd-checkin" type="button"><span class="navbar-action-label">Check In</span></button>
+  <button class="navbar-action" id="cmd-more" type="button" aria-haspopup="dialog" aria-controls="hive-cmdmenu" aria-expanded="false"><span class="navbar-action-label">More</span></button>
+</nav>
+<div class="hive-cmdmenu" id="hive-cmdmenu" role="dialog" aria-modal="true" aria-label="More" hidden>
+  <div class="hive-cmdmenu-panel">
+    <button class="hive-cmdmenu-close" type="button" aria-label="Close More menu">close</button>
+    <div class="hive-cmdmenu-section" aria-label="Main">
+      <div class="hive-cmdmenu-grid">
+        <button class="cmd-tile" type="button" data-cmd="report"><span class="cmd-tile-label">Report</span></button>
+        <button class="cmd-tile" type="button" data-cmd="history"><span class="cmd-tile-label">History</span></button>
+        <button class="cmd-tile" type="button" data-cmd="bestiary"><span class="cmd-tile-label">Bestiary</span></button>
+        <button class="cmd-tile" type="button" data-cmd="manual"><span class="cmd-tile-label">Field Manual</span></button>
+      </div>
+    </div>
+    <div class="hive-cmdmenu-section hive-cmdmenu-support" aria-label="Support">
+      <div class="hive-cmdmenu-support-grid">
+        <button class="cmd-tile cmd-tile-wide" type="button" data-cmd="help"><span class="cmd-tile-label">Help / Restart Tour</span></button>
+        <button class="cmd-tile cmd-tile-wide" type="button" data-cmd="finish"><span class="cmd-tile-label">Finish Beta &amp; Send Feedback</span></button>
+      </div>
+    </div>
+    <div class="hive-cmdmenu-danger" aria-label="Danger">
+      <button class="cmd-tile cmd-danger" type="button" data-cmd="reset"><span class="cmd-tile-label">Reset Hive</span></button>
+    </div>
   </div>
-  <div id="hive-sheet-backdrop"></div>
-  <div id="hive-sheet"><button class="hd-sheet-close" type="button">close</button>
-    <div id="hive-detail"></div>
-  </div>
-</section>
+</div>
+<div class="navmenu" id="navmenu" hidden></div>
+<div class="tour" id="tour" hidden><div class="tr-card"></div></div>
+<button class="tour-open" id="tour-open" type="button">?</button>
 
 <script>
 (function () {
@@ -59,8 +125,14 @@
   localStorage.removeItem(storageKey);
   localStorage.removeItem('lw-brainmap-queen-v1');
   localStorage.setItem(storageKey, JSON.stringify(fixture));
+  localStorage.setItem('lw-brainmap-tour-v2', '1');
 
   window.__APP_MAIN_ERRORS = [];
+  window.__CONFIRM_COUNT = 0;
+  window.__CONFIRM_MESSAGE = '';
+  window.__TODAY_SCROLLS = 0;
+  window.__INDEX_SIGNATURE = null;
+  window.__INDEX_ERROR = '';
   window.addEventListener('error', function (event) {
     window.__APP_MAIN_ERRORS.push(event.message || String(event.error));
   });
@@ -68,15 +140,35 @@
     window.__APP_MAIN_ERRORS.push('unhandled rejection: ' + String(event.reason));
   });
   window.scrollTo = function () {};
-  window.matchMedia = function () {
-    return {matches:true,addListener:function(){},removeListener:function(){}};
+  Element.prototype.scrollIntoView = function () {
+    if (this.id === 'hive-today') window.__TODAY_SCROLLS++;
+  };
+  window.confirm = function (message) {
+    window.__CONFIRM_COUNT++;
+    window.__CONFIRM_MESSAGE = String(message || '');
+    return false;
+  };
+  window.matchMedia = function (query) {
+    var max = /max-width\s*:\s*(\d+)px/.exec(query);
+    var min = /min-width\s*:\s*(\d+)px/.exec(query);
+    var matches = query.indexOf('prefers-reduced-motion') !== -1;
+    if (max) matches = innerWidth <= Number(max[1]);
+    if (min) matches = innerWidth >= Number(min[1]);
+    return {
+      matches: matches,
+      addEventListener: function () {}, removeEventListener: function () {},
+      addListener: function () {}, removeListener: function () {}
+    };
   };
   window.BHIVE_DATA = {
     DAYS:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
     MON:['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
-    SCREEN_NAMES:{energy:'Hive Mind'},
+    SCREEN_NAMES:{
+      home:'Home',energy:'Hive Mind',system:'Operating System',brainmap:'Brain Map',
+      bestiary:'The Bestiary',manual:'Field Manual',blueprints:'Blueprints'
+    },
     MBTI_CLASS:{ENTJ:'Fixture class'},
-    TOUR:[],
+    TOUR:[{t:'Fixture tour',d:'Fixture help'}],
     WANDER:{
       'Builder Bees':{ax:0.5,ay:0.5,sBase:0.0001},
       'Scout Bees':{ax:0.5,ay:0.5,sBase:0.0001},
@@ -86,10 +178,54 @@
       'Drones':{ax:0.5,ay:0.5,sBase:0.0001}
     }
   };
+
+  fetch('../index.html?navigation-consolidation=' + Date.now(), {cache:'no-store'})
+    .then(function (response) {
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      return response.text();
+    })
+    .then(function (html) {
+      var page = new DOMParser().parseFromString(html, 'text/html');
+      function values(selector, attribute) {
+        return Array.prototype.map.call(page.querySelectorAll(selector), function (element) {
+          return attribute ? element.getAttribute(attribute) : element.textContent.trim();
+        });
+      }
+      var productionMenu = page.getElementById('hive-cmdmenu');
+      window.__INDEX_SIGNATURE = {
+        navbarCount: page.querySelectorAll('#navbar').length,
+        navbarIds: values('#navbar > button', 'id'),
+        navbarLabels: values('#navbar .navbar-action-label'),
+        commandBarCount: page.querySelectorAll('.hive-cmdbar').length,
+        legacyTriggerCount: page.querySelectorAll('#navmenu-btn').length,
+        menuCount: page.querySelectorAll('#hive-cmdmenu').length,
+        menuTopLevel: !!(productionMenu && !productionMenu.closest('.section')),
+        mainCommands: values('#hive-cmdmenu [aria-label="Main"] [data-cmd]', 'data-cmd'),
+        supportCommands: values('#hive-cmdmenu [aria-label="Support"] [data-cmd]', 'data-cmd'),
+        dangerCommands: values('#hive-cmdmenu [aria-label="Danger"] [data-cmd]', 'data-cmd'),
+        menuLabels: values('#hive-cmdmenu .cmd-tile-label'),
+        placeholderCount: page.querySelectorAll(
+          '#navbar [href="#projects"], #navbar [href="#strengths"], #navbar [href="#risks"], ' +
+          '#navbar [href="#opportunities"], #navbar [href="#summary"], ' +
+          '#hive-cmdmenu [href="#projects"], #hive-cmdmenu [href="#strengths"], ' +
+          '#hive-cmdmenu [href="#risks"], #hive-cmdmenu [href="#opportunities"], ' +
+          '#hive-cmdmenu [href="#summary"]').length,
+        railRoutes: values('.rail .nav a', 'href'),
+        manualProxyCount: page.querySelectorAll('#hive-manual-link').length,
+        proxyTargetsPresent: [
+          '#hive-log-btn','#hive-report-toggle','#hive-report.hive-io','#hive-log-toggle',
+          '#hive-log.hive-log','#hive-manual-link','#tour-open','#hive-reset'
+        ].every(function (selector) { return page.querySelectorAll(selector).length === 1; }),
+        routeTargetsPresent: [
+          '#home','#energy','#hive-today','#system','#brainmap','#bestiary','#manual','#blueprints'
+        ].every(function (selector) { return page.querySelectorAll(selector).length === 1; })
+      };
+    })
+    .catch(function (error) { window.__INDEX_ERROR = error.message; });
 })();
 </script>
 <script src="../js/bhive-engine.js"></script>
-<script src="../js/app-main.js"></script>
+<script src="../js/app-main.js?navigation-consolidation"></script>
 <script>
 ((function () {
   'use strict';
@@ -105,13 +241,20 @@
   }
 
   function ready() {
-    return window.BHIVE && Array.isArray(window.BHIVE.cells) && window.BHIVE.cells.length === 14 &&
+    return document.readyState !== 'loading' &&
+      window.__INDEX_SIGNATURE &&
+      window.BHIVE && Array.isArray(window.BHIVE.cells) && window.BHIVE.cells.length === 14 &&
       document.querySelectorAll('#hivesvg .hive-cell').length === 14 &&
       document.querySelector('#hivesvg .hive-core') &&
-      document.querySelector('#hive-today .td-status');
+      document.querySelector('#hive-today .td-status') &&
+      document.getElementById('bhtm-fin');
   }
 
   function finishWhenReady() {
+    if (window.__INDEX_ERROR) {
+      postFailure('Production index check failed: ' + window.__INDEX_ERROR);
+      return;
+    }
     if (!ready()) {
       if (Date.now() < deadline) {
         window.setTimeout(finishWhenReady, 10);
@@ -136,8 +279,163 @@
         window.BHIVE.mbti.join('') === 'ENTJ' && window.BHIVE.swarms.craft &&
         window.BHIVE.learnings.health),
       savedAgain: false,
-      priorityClass: false
+      priorityClass: false,
+      navigation: {mobile:null,desktop:null,production:window.__INDEX_SIGNATURE}
     };
+
+    function visible(el) {
+      return !!(el && !el.hidden && getComputedStyle(el).display !== 'none' &&
+        getComputedStyle(el).visibility !== 'hidden' && el.getClientRects().length);
+    }
+    function activeScreen() {
+      var on = document.querySelector('.masthead.screen-on, .section.screen-on');
+      return on ? on.id : '';
+    }
+    function clickRail(href) {
+      var link = document.querySelector('.nav a[href="' + href + '"]');
+      if (link) link.click();
+      return activeScreen();
+    }
+    function openCommand(command) {
+      var more = document.getElementById('cmd-more');
+      var menu = document.getElementById('hive-cmdmenu');
+      if (more && menu && menu.hidden) more.click();
+      var tile = menu && menu.querySelector('[data-cmd="' + command + '"]');
+      if (tile) tile.click();
+    }
+
+    try {
+      if (scenario === 'evolve') {
+        var navbar = document.getElementById('navbar');
+        var menu = document.getElementById('hive-cmdmenu');
+        var help = document.getElementById('tour-open');
+        var finish = document.getElementById('bhtm-fin');
+        clickRail('#bestiary');
+        document.getElementById('mobile-nav-hive').click();
+        var hiveRoute = activeScreen() === 'energy';
+
+        clickRail('#bestiary');
+        document.getElementById('mobile-nav-today').click();
+        var todayRoute = activeScreen() === 'energy' && window.__TODAY_SCROLLS === 1;
+
+        var beforeCheckin = JSON.parse(localStorage.getItem(storageKey));
+        clickRail('#bestiary');
+        document.getElementById('cmd-checkin').click();
+        var afterCheckin = JSON.parse(localStorage.getItem(storageKey));
+        var checkinRoute = activeScreen() === 'energy' &&
+          afterCheckin.history.length === beforeCheckin.history.length + 1 &&
+          !!document.getElementById('hive-last').textContent.trim();
+
+        clickRail('#bestiary');
+        document.getElementById('cmd-more').click();
+        var visibleMenus = Array.prototype.filter.call(
+          document.querySelectorAll('#hive-cmdmenu, #navmenu'), visible).length;
+        var menuFromOtherScreen = activeScreen() === 'bestiary' && visible(menu);
+        var menuLabels = Array.prototype.map.call(menu.querySelectorAll('.cmd-tile-label'),
+          function (label) { return label.textContent.trim(); });
+        var menuTilesVisible = Array.prototype.every.call(menu.querySelectorAll('[data-cmd]'), visible);
+        var mainCommands = Array.prototype.map.call(
+          menu.querySelectorAll('[aria-label="Main"] [data-cmd]'),
+          function (tile) { return tile.getAttribute('data-cmd'); });
+        var supportCommands = Array.prototype.map.call(
+          menu.querySelectorAll('[aria-label="Support"] [data-cmd]'),
+          function (tile) { return tile.getAttribute('data-cmd'); });
+        var dangerCommands = Array.prototype.map.call(
+          menu.querySelectorAll('[aria-label="Danger"] [data-cmd]'),
+          function (tile) { return tile.getAttribute('data-cmd'); });
+        var resetTile = menu.querySelector('[data-cmd="reset"]');
+        var resetSeparated = !!(resetTile && resetTile.closest('.hive-cmdmenu-danger'));
+        var placeholderLinks = document.querySelectorAll(
+          '#navbar a[href="#projects"], #navbar a[href="#strengths"], #navbar a[href="#risks"], ' +
+          '#navbar a[href="#opportunities"], #navbar a[href="#summary"], ' +
+          '#hive-cmdmenu a[href="#projects"], #hive-cmdmenu a[href="#strengths"], ' +
+          '#hive-cmdmenu a[href="#risks"], #hive-cmdmenu a[href="#opportunities"], ' +
+          '#hive-cmdmenu a[href="#summary"]');
+        menu.querySelector('.hive-cmdmenu-close').click();
+
+        openCommand('report');
+        var reportRoute = activeScreen() === 'energy' && visible(document.getElementById('hive-report'));
+        openCommand('history');
+        var historyRoute = activeScreen() === 'energy' && visible(document.getElementById('hive-log'));
+        openCommand('bestiary');
+        var bestiaryRoute = activeScreen() === 'bestiary';
+        openCommand('manual');
+        var manualRoute = activeScreen() === 'manual';
+
+        openCommand('help');
+        var helpRoute = visible(document.getElementById('tour'));
+        var tourClose = document.querySelector('#tour .tr-skip');
+        if (tourClose) tourClose.click();
+        openCommand('finish');
+        var finishRoute = visible(document.getElementById('bhtm-finish'));
+        var finishCancel = Array.prototype.filter.call(
+          document.querySelectorAll('#bhtm-finish button'),
+          function (button) { return button.textContent.trim() === 'Not yet'; })[0];
+        if (finishCancel) finishCancel.click();
+        var beforeReset = localStorage.getItem(storageKey);
+        var beforeResetCells = JSON.stringify(window.BHIVE.cells.map(function (cell) {
+          return [cell.key,cell.imp,cell.en];
+        }));
+        openCommand('reset');
+        var resetRoute = window.__CONFIRM_COUNT === 1 &&
+          /^Reset/.test(window.__CONFIRM_MESSAGE) && localStorage.getItem(storageKey) === beforeReset &&
+          JSON.stringify(window.BHIVE.cells.map(function (cell) {
+            return [cell.key,cell.imp,cell.en];
+          })) === beforeResetCells;
+
+        result.navigation.mobile = {
+          navbarVisible: visible(navbar),
+          desktopNavHidden: !visible(document.querySelector('.nav')),
+          navbarButtonsVisible: Array.prototype.every.call(
+            navbar.querySelectorAll('.navbar-action'), visible),
+          labels: Array.prototype.map.call(navbar.querySelectorAll('.navbar-action-label'),
+            function (label) { return label.textContent.trim(); }),
+          commandBarCount: document.querySelectorAll('.hive-cmdbar').length,
+          legacyMenuHidden: !visible(document.getElementById('navmenu')),
+          menuCount: document.querySelectorAll('#hive-cmdmenu').length,
+          visibleMenus: visibleMenus,
+          menuFromOtherScreen: menuFromOtherScreen,
+          menuLabels: menuLabels,
+          menuTilesVisible: menuTilesVisible,
+          mainCommands: mainCommands,
+          supportCommands: supportCommands,
+          dangerCommands: dangerCommands,
+          resetSeparated: resetSeparated,
+          placeholdersAbsent: placeholderLinks.length === 0,
+          helpHidden: !visible(help),
+          finishHidden: !!finish && !visible(finish),
+          primaryRoutes: hiveRoute && todayRoute && checkinRoute,
+          mainRoutes: reportRoute && historyRoute && bestiaryRoute && manualRoute,
+          supportRoutes: helpRoute && finishRoute,
+          resetRoute: resetRoute
+        };
+      } else {
+        var rail = document.querySelector('.rail');
+        var desktopNav = document.querySelector('.nav');
+        var routeLinks = Array.prototype.slice.call(desktopNav.querySelectorAll('a'));
+        var expectedRoutes = ['home','energy','system','brainmap','bestiary','manual','blueprints'];
+        var reachedRoutes = routeLinks.map(function (link) {
+          link.click();
+          return activeScreen();
+        });
+        result.navigation.desktop = {
+          railVisible: visible(rail),
+          navVisible: visible(desktopNav),
+          linksVisible: routeLinks.length === 7 && routeLinks.every(visible),
+          navIsColumn: getComputedStyle(desktopNav).flexDirection === 'column',
+          bottomHidden: !visible(document.getElementById('navbar')),
+          commandBarCount: document.querySelectorAll('.hive-cmdbar').length,
+          moreHidden: !visible(document.getElementById('hive-cmdmenu')),
+          helpVisible: visible(document.getElementById('tour-open')),
+          manualProxyHidden: !visible(document.getElementById('hive-manual-link')),
+          finishHidden: !!document.getElementById('bhtm-fin') &&
+            !visible(document.getElementById('bhtm-fin')),
+          liveRoutes: expectedRoutes.join('|') === reachedRoutes.join('|')
+        };
+      }
+    } catch (navigationError) {
+      result.errors.push('navigation: ' + navigationError.message);
+    }
 
     if (scenario === 'widest') {
       var mbtiButton = document.querySelector('#hive-mbti .mb-ax');

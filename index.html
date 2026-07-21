@@ -153,47 +153,6 @@
           <button class="hive-btn ghost danger" type="button" id="hive-reset">Reset</button>
         </div>
       </div>
-      <!-- stage 2: sticky-bottom command bar (mobile only) -->
-      <div class="hive-cmdbar" aria-label="Hive commands">
-        <button class="cmd cmd-primary" type="button" id="cmd-checkin">
-          <span class="cmd-icon">&#10003;</span>
-          <span class="cmd-label">Check In</span>
-        </button>
-        <button class="cmd cmd-report" type="button" id="cmd-report">
-          <span class="cmd-icon">&#9636;</span>
-          <span class="cmd-label">Report</span>
-        </button>
-        <button class="cmd cmd-history" type="button" id="cmd-history">
-          <span class="cmd-icon">&#8635;</span>
-          <span class="cmd-label">History</span>
-        </button>
-        <button class="cmd cmd-more" type="button" id="cmd-more">
-          <span class="cmd-icon">&#8943;</span>
-          <span class="cmd-label">More</span>
-        </button>
-      </div>
-      <!-- stage 2: MORE overlay menu -->
-      <div class="hive-cmdmenu" id="hive-cmdmenu" hidden>
-        <div class="hive-cmdmenu-panel">
-          <div class="hive-cmdmenu-head">
-            <span class="hive-cmdmenu-title">Commands</span>
-            <button class="hive-cmdmenu-close" type="button" aria-label="Close commands menu">&times;</button>
-          </div>
-          <div class="hive-cmdmenu-grid">
-            <button class="cmd-tile" type="button" data-cmd="cloud"><span class="cmd-tile-icon">&#9729;</span><span class="cmd-tile-label">Cloud</span></button>
-            <button class="cmd-tile" type="button" data-cmd="brain"><span class="cmd-tile-icon">&#9680;</span><span class="cmd-tile-label">Brain</span></button>
-            <button class="cmd-tile" type="button" data-cmd="report"><span class="cmd-tile-icon">&#9636;</span><span class="cmd-tile-label">Report</span></button>
-            <button class="cmd-tile" type="button" data-cmd="goals"><span class="cmd-tile-icon">&#9678;</span><span class="cmd-tile-label">Goals</span></button>
-            <button class="cmd-tile" type="button" data-cmd="requests"><span class="cmd-tile-icon">&#10022;</span><span class="cmd-tile-label">Requests</span></button>
-            <button class="cmd-tile agent-progression-ui" type="button" data-cmd="evolution" hidden><span class="cmd-tile-icon">&#9650;</span><span class="cmd-tile-label">Evolution</span></button>
-            <button class="cmd-tile" type="button" data-cmd="history"><span class="cmd-tile-icon">&#8635;</span><span class="cmd-tile-label">History</span></button>
-            <button class="cmd-tile" type="button" data-cmd="manual"><span class="cmd-tile-icon">&#9432;</span><span class="cmd-tile-label">Field Manual</span></button>
-          </div>
-          <div class="hive-cmdmenu-danger">
-            <button class="cmd-tile cmd-danger" type="button" data-cmd="reset"><span class="cmd-tile-icon">&#9888;</span><span class="cmd-tile-label">Reset</span></button>
-          </div>
-        </div>
-      </div>
       <div class="hive-log" id="hive-log" hidden></div>
       <div class="hive-io" id="hive-io" hidden>
         <p class="hive-io-tip">WEEKLY SYNC &middot; Tell Claude your week, then hit Live Sync — it reads the whole hive and re-learns you in one tap.</p>
@@ -645,15 +604,56 @@
   </main>
 </div>
 
-<!-- mobile section menu -->
-<div class="navbar" id="navbar">
-  <button class="navbar-menu" id="navmenu-btn" type="button" aria-label="Open section menu">
-    <span></span><span></span><span></span>
+<!-- consolidated mobile navigation -->
+<nav class="navbar" id="navbar" aria-label="Primary mobile navigation">
+  <button class="navbar-action" id="mobile-nav-hive" type="button">
+    <span class="navbar-action-icon">&#11042;</span>
+    <span class="navbar-action-label">Hive</span>
   </button>
-  <button class="navbar-arrow" id="nav-prev" type="button" aria-label="Previous section">&#10094;</button>
-  <span class="navbar-label" id="navbar-label">Hive Mind</span>
-  <button class="navbar-arrow" id="nav-next" type="button" aria-label="Next section">&#10095;</button>
+  <button class="navbar-action" id="mobile-nav-today" type="button">
+    <span class="navbar-action-icon">&#9673;</span>
+    <span class="navbar-action-label">Today</span>
+  </button>
+  <button class="navbar-action navbar-checkin" id="cmd-checkin" type="button">
+    <span class="navbar-action-icon">&#10003;</span>
+    <span class="navbar-action-label">Check In</span>
+  </button>
+  <button class="navbar-action" id="cmd-more" type="button" aria-haspopup="dialog" aria-controls="hive-cmdmenu" aria-expanded="false">
+    <span class="navbar-action-icon">&#8943;</span>
+    <span class="navbar-action-label">More</span>
+  </button>
+</nav>
+
+<!-- canonical mobile More menu -->
+<div class="hive-cmdmenu" id="hive-cmdmenu" role="dialog" aria-modal="true" aria-labelledby="hive-cmdmenu-title" hidden>
+  <div class="hive-cmdmenu-panel">
+    <div class="hive-cmdmenu-head">
+      <span class="hive-cmdmenu-title" id="hive-cmdmenu-title">More</span>
+      <button class="hive-cmdmenu-close" type="button" aria-label="Close More menu">&times;</button>
+    </div>
+    <div class="hive-cmdmenu-section" aria-label="Main">
+      <div class="hive-cmdmenu-section-title">Main</div>
+      <div class="hive-cmdmenu-grid">
+        <button class="cmd-tile" type="button" data-cmd="report"><span class="cmd-tile-icon">&#9636;</span><span class="cmd-tile-label">Report</span></button>
+        <button class="cmd-tile" type="button" data-cmd="history"><span class="cmd-tile-icon">&#8635;</span><span class="cmd-tile-label">History</span></button>
+        <button class="cmd-tile" type="button" data-cmd="bestiary"><span class="cmd-tile-icon">&#9670;</span><span class="cmd-tile-label">Bestiary</span></button>
+        <button class="cmd-tile" type="button" data-cmd="manual"><span class="cmd-tile-icon">&#9432;</span><span class="cmd-tile-label">Field Manual</span></button>
+      </div>
+    </div>
+    <div class="hive-cmdmenu-section hive-cmdmenu-support" aria-label="Support">
+      <div class="hive-cmdmenu-section-title">Support</div>
+      <div class="hive-cmdmenu-support-grid">
+        <button class="cmd-tile cmd-tile-wide" type="button" data-cmd="help"><span class="cmd-tile-icon">?</span><span class="cmd-tile-label">Help / Restart Tour</span></button>
+        <button class="cmd-tile cmd-tile-wide" type="button" data-cmd="finish"><span class="cmd-tile-icon">&#10003;</span><span class="cmd-tile-label">Finish Beta &amp; Send Feedback</span></button>
+      </div>
+    </div>
+    <div class="hive-cmdmenu-danger" aria-label="Danger">
+      <button class="cmd-tile cmd-danger" type="button" data-cmd="reset"><span class="cmd-tile-icon">&#9888;</span><span class="cmd-tile-label">Reset Hive</span></button>
+    </div>
+  </div>
 </div>
+
+<!-- preserved legacy section menu; no visible trigger -->
 <div class="navmenu" id="navmenu" hidden>
   <div class="navmenu-panel">
     <div class="navmenu-head">

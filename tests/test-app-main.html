@@ -44,6 +44,8 @@
     activeScenario = scenarios[index];
     activeFrame = frame;
     nextScenario = index + 1;
+    frame.style.width = activeScenario === 'evolve' ? '390px' : '1600px';
+    frame.style.height = activeScenario === 'evolve' ? '844px' : '900px';
     frame.src = 'app-main-harness.html?scenario=' + activeScenario + '&run=' + Date.now();
     frame.title = 'controlled ' + activeScenario + ' scenario';
     document.body.appendChild(frame);
@@ -93,6 +95,48 @@
     test('legacy cellLevel and Agent visual growth classes remain observable',
       widest.growthClass && widest.apexClass);
 
+    var mobile = evolve.navigation && evolve.navigation.mobile;
+    var desktop = widest.navigation && widest.navigation.desktop;
+    var production = evolve.navigation && evolve.navigation.production;
+    test('mobile bottom navbar is visible with exactly Hive, Today, Check In and More',
+      mobile && mobile.navbarVisible && mobile.desktopNavHidden && mobile.navbarButtonsVisible &&
+        mobile.labels.join('|') === 'Hive|Today|Check In|More' && production &&
+        production.navbarCount === 1 &&
+        production.navbarIds.join('|') === 'mobile-nav-hive|mobile-nav-today|cmd-checkin|cmd-more' &&
+        production.navbarLabels.join('|') === 'Hive|Today|Check In|More');
+    test('mobile command bar and legacy menu trigger are removed from the visible interface',
+      mobile && mobile.commandBarCount === 0 && mobile.legacyMenuHidden && production &&
+        production.commandBarCount === 0 && production.legacyTriggerCount === 0);
+    test('one canonical More menu opens without rerouting from another screen',
+      mobile && mobile.menuCount === 1 && mobile.visibleMenus === 1 && mobile.menuFromOtherScreen &&
+        production && production.menuCount === 1 && production.menuTopLevel);
+    test('More contains only live grouped actions with Reset separated and placeholders absent',
+      mobile && mobile.menuLabels.join('|') ===
+        'Report|History|Bestiary|Field Manual|Help / Restart Tour|Finish Beta & Send Feedback|Reset Hive' &&
+        mobile.menuTilesVisible && mobile.mainCommands.join('|') === 'report|history|bestiary|manual' &&
+        mobile.supportCommands.join('|') === 'help|finish' && mobile.dangerCommands.join('|') === 'reset' &&
+        mobile.resetSeparated && mobile.placeholdersAbsent && production &&
+        production.mainCommands.join('|') === 'report|history|bestiary|manual' &&
+        production.supportCommands.join('|') === 'help|finish' &&
+        production.dangerCommands.join('|') === 'reset' &&
+        production.menuLabels.join('|') ===
+          'Report|History|Bestiary|Field Manual|Help / Restart Tour|Finish Beta & Send Feedback|Reset Hive' &&
+        production.placeholderCount === 0);
+    test('mobile Hive, Today, Check In and main More destinations reuse live routes',
+      mobile && mobile.primaryRoutes && mobile.mainRoutes && production &&
+        production.proxyTargetsPresent && production.routeTargetsPresent);
+    test('mobile Help, Finish Beta and confirmation-gated Reset reuse existing flows while floats stay hidden',
+      mobile && mobile.supportRoutes && mobile.resetRoute && mobile.helpHidden && mobile.finishHidden);
+    test('desktop left rail remains the functional column navigation and mobile controls stay hidden',
+      desktop && desktop.railVisible && desktop.navVisible && desktop.linksVisible && desktop.navIsColumn &&
+        desktop.liveRoutes && desktop.bottomHidden && desktop.commandBarCount === 0 && desktop.moreHidden &&
+        production && production.routeTargetsPresent && production.railRoutes.join('|') ===
+          '#home|#energy|#system|#brainmap|#bestiary|#manual|#blueprints');
+    test('desktop retains one visible Help control while floating Finish Beta stays hidden',
+      desktop && desktop.helpVisible && desktop.finishHidden && desktop.manualProxyHidden &&
+        production && production.manualProxyCount === 1);
+
+    document.documentElement.dataset.testReport = JSON.stringify(reports);
     window.__BHIVE_TEST_RESULTS = {passed:passed,failed:failed,reports:reports,uncaught:uncaught};
     document.documentElement.dataset.testStatus = failed ? 'failed' : 'passed';
     summary.innerHTML = '<b>' + passed + '/' + (passed + failed) + ' passed</b>' +
@@ -100,6 +144,7 @@
     try {
       localStorage.removeItem('lw-brainmap-hive-v1');
       localStorage.removeItem('lw-brainmap-queen-v1');
+      localStorage.removeItem('lw-brainmap-tour-v2');
     } catch (_) {}
   }
 

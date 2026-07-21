@@ -3761,34 +3761,55 @@
         if(!document.hidden)cloudAuto();
       });
     }
-    /* ── stage 2: command bar wiring — proxies to existing tool buttons / functions ── */
+    /* ── consolidated mobile navigation — proxies to existing screens and flows ── */
     (function(){
-      var cbCheckin=document.getElementById('cmd-checkin');
-      if(cbCheckin)cbCheckin.addEventListener('click',logCheckin);
-      var cbReport=document.getElementById('cmd-report');
-      if(cbReport)cbReport.addEventListener('click',function(){
-        var t=document.getElementById('hive-report-toggle');if(t)t.click();
+      var cbHive=document.getElementById('mobile-nav-hive');
+      function showHive(){
+        showScreen('energy');
+        closeDetailSheet();
+      }
+      function scrollToSurface(el){
+        if(!el||!el.scrollIntoView)return;
+        el.scrollIntoView({block:'center'});
+      }
+      if(cbHive)cbHive.addEventListener('click',showHive);
+      var cbToday=document.getElementById('mobile-nav-today');
+      if(cbToday)cbToday.addEventListener('click',function(){
+        showHive();
+        scrollToSurface(document.getElementById('hive-today'));
       });
-      var cbHistory=document.getElementById('cmd-history');
-      if(cbHistory)cbHistory.addEventListener('click',function(){
-        var t=document.getElementById('hive-log-toggle');if(t)t.click();
+      var cbCheckin=document.getElementById('cmd-checkin');
+      if(cbCheckin)cbCheckin.addEventListener('click',function(){
+        showHive();
+        var t=document.getElementById('hive-log-btn');if(t)t.click();
       });
       var menu=document.getElementById('hive-cmdmenu');
       var cbMore=document.getElementById('cmd-more');
-      function openMenu(){if(menu){menu.hidden=false;document.body.style.overflow='hidden';}}
-      function closeMenu(){if(menu){menu.hidden=true;document.body.style.overflow='';}}
+      function openMenu(){
+        if(!menu)return;
+        menu.hidden=false;menu.setAttribute('aria-hidden','false');
+        if(cbMore)cbMore.setAttribute('aria-expanded','true');
+        document.body.style.overflow='hidden';
+      }
+      function closeMenu(){
+        if(!menu)return;
+        menu.hidden=true;menu.setAttribute('aria-hidden','true');
+        if(cbMore)cbMore.setAttribute('aria-expanded','false');
+        document.body.style.overflow='';
+      }
       if(cbMore)cbMore.addEventListener('click',openMenu);
       var CMD_MAP={
-        cloud:'hive-cloud-toggle',
-        brain:'hive-brain-toggle',
-        report:'hive-report-toggle',
-        goals:'hive-goals-toggle',
-        requests:'hive-req-toggle',
-        evolution:'hive-evo-toggle',
-        history:'hive-log-toggle',
         manual:'hive-manual-link',
+        help:'tour-open',
+        finish:'bhtm-fin',
         reset:'hive-reset'
       };
+      function openHivePanel(toggleId,panelId){
+        showHive();
+        var panel=document.getElementById(panelId),btn=document.getElementById(toggleId);
+        if(panel&&panel.hidden&&btn)btn.click();
+        scrollToSurface(panel);
+      }
       if(menu){
         menu.addEventListener('click',function(ev){
           var t=ev.target;
@@ -3796,14 +3817,21 @@
           var tile=t.closest&&t.closest('.cmd-tile');
           if(!tile)return;
           var cmd=tile.getAttribute('data-cmd');
-          var btn=document.getElementById(CMD_MAP[cmd]);
           closeMenu();
+          if(cmd==='report'){openHivePanel('hive-report-toggle','hive-report');return;}
+          if(cmd==='history'){openHivePanel('hive-log-toggle','hive-log');return;}
+          if(cmd==='bestiary'){showScreen('bestiary');return;}
+          var btn=document.getElementById(CMD_MAP[cmd]);
           if(btn)btn.click();
         });
       }
       document.addEventListener('keydown',function(ev){
         if(ev.key==='Escape'&&menu&&!menu.hidden)closeMenu();
       });
+      var desktopMq=window.matchMedia&&window.matchMedia('(min-width:981px)');
+      function closeOnDesktop(ev){if(ev.matches)closeMenu();}
+      if(desktopMq&&desktopMq.addEventListener)desktopMq.addEventListener('change',closeOnDesktop);
+      else if(desktopMq&&desktopMq.addListener)desktopMq.addListener(closeOnDesktop);
     })();
     /* ── stage 4: bottom-sheet close button + backdrop + Escape ── */
     (function(){
