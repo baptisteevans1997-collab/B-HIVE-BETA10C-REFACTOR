@@ -56,6 +56,23 @@
     var payload=X.decisionPayload(sourceData.proposal,'accepted');
     return experimentEvent('experiment_accepted',payload,offset||1);
   }
+  function firstFlightEvent(type,cellKey,payload,offset){
+    return BHIVE.learningTools.createEvent(type,{
+      ts:F.NOW+(offset||0),cellKey:cellKey||null,payload:payload
+    });
+  }
+  function firstFlightProgress(cellKey){
+    return [
+      firstFlightEvent('first_flight_available',null,{version:1},-4000),
+      firstFlightEvent('first_flight_cell_selected',cellKey,{version:1},-3000),
+      firstFlightEvent('first_flight_answered',cellKey,{
+        version:1,question:1,answer:'The part that matters most'
+      },-2000),
+      firstFlightEvent('first_flight_answered',cellKey,{
+        version:1,question:2,answer:'Take one small concrete step'
+      },-1000)
+    ];
+  }
   function choice(strategyId){
     return {strategyId:strategyId,action:'Try '+strategyId,measure:'Measure '+strategyId,durationDays:3};
   }
@@ -81,6 +98,129 @@
       }
     };
   }
+
+  test('First Flight publishes the approved foundation questions and titles',function(){
+    var flight=X.FIRST_FLIGHT;
+    return flight.lw.title==='Make the first move'&&
+      flight.lw.questions[0]==='What feels most important in your work or direction right now?'&&
+      flight.lw.questions[1]==='What is one small step you can take toward it today?'&&
+      flight.health.title==='Support your health'&&
+      flight.health.questions[0]==='How are your body and energy feeling right now?'&&
+      flight.health.questions[1]==='What is one small thing you can do for your health today?'&&
+      flight.people.title==='Strengthen the connection'&&
+      flight.people.questions[0]==='Which relationship or connection needs your attention most right now?'&&
+      flight.people.questions[1]==='What is one small, respectful step you can take today?';
+  });
+  test('First Flight mission generation requires two valid foundation answers',function(){
+    return X.firstFlightMission('lw',['context'],F.NOW)===null&&
+      X.firstFlightMission('money',['context','action'],F.NOW)===null&&
+      X.firstFlightMission('health',['','action'],F.NOW)===null&&
+      X.firstFlightMission('people',['context',''],F.NOW)===null;
+  });
+  test('First Flight mission preserves normalized context and uses answer two directly',function(){
+    var mission=X.firstFlightMission('lw',[
+      '  Finish   the beta well ',
+      '  Open the notes\n and choose one fix  '
+    ],F.NOW);
+    return mission&&mission.sourceRead==='Finish the beta well'&&
+      mission.action==='Open the notes and choose one fix'&&mission.title==='Make the first move'&&
+      mission.strategyId==='first_flight_v1_lw'&&mission.observationKind==='first_flight'&&
+      mission.firstFlightVersion===1&&X.isFirstFlight(mission);
+  });
+  test('First Flight mission generation is deterministic and leaves answers untouched',function(){
+    var answers=['Protect my energy','Take a short walk'],before=JSON.stringify(answers);
+    var first=X.firstFlightMission('health',answers,F.NOW);
+    var second=X.firstFlightMission('health',answers,F.NOW);
+    return JSON.stringify(first)===JSON.stringify(second)&&JSON.stringify(answers)===before&&
+      first.experimentId.indexOf('exp_first_flight_v1_')===0;
+  });
+  test('First Flight mission rejects answers beyond the 280-character contract',function(){
+    var tooLong=new Array(282).join('x');
+    return X.firstFlightMission('people',[tooLong,'Send a message'],F.NOW)===null&&
+      X.firstFlightMission('people',['Reconnect',tooLong],F.NOW)===null;
+  });
+  test('First Flight reducer distinguishes every recoverable progress state',function(){
+    var events=firstFlightProgress('lw');
+    return X.firstFlightState([])===null&&
+      X.firstFlightState(events.slice(0,1)).status==='available'&&
+      X.firstFlightState(events.slice(0,2)).status==='cell_selected'&&
+      X.firstFlightState(events.slice(0,3)).status==='first_answer_recorded'&&
+      X.firstFlightState(events).status==='mission_ready';
+  });
+  test('First Flight reducer recovers deterministically from persisted event order',function(){
+    var events=firstFlightProgress('health'),before=JSON.stringify(events);
+    var shuffled=[events[3],events[1],events[0],events[2]];
+    var state=X.firstFlightState(shuffled);
+    return state.status==='mission_ready'&&state.cellKey==='health'&&state.answers.length===2&&
+      state.mission.title==='Support your health'&&JSON.stringify(events)===before;
+  });
+  test('First Flight reducer rejects out-of-order and mismatched progress safely',function(){
+    var available=firstFlightEvent('first_flight_available',null,{version:1},-5000);
+    var selected=firstFlightEvent('first_flight_cell_selected','lw',{version:1},-4000);
+    var second=firstFlightEvent('first_flight_answered','lw',{
+      version:1,question:2,answer:'Move second'
+    },-3000);
+    var mismatch=firstFlightEvent('first_flight_answered','health',{
+      version:1,question:1,answer:'Wrong cell'
+    },-2000);
+    var first=firstFlightEvent('first_flight_answered','lw',{
+      version:1,question:1,answer:'Move first'
+    },-1000);
+    var state=X.firstFlightState([available,selected,second,mismatch,first]);
+    return state.status==='first_answer_recorded'&&state.cellKey==='lw'&&
+      state.answers.length===1&&state.answers[0]==='Move first';
+  });
+  test('First Flight reducer ignores malformed progress events and later cell changes',function(){
+    var events=firstFlightProgress('people').slice(0,2);
+    var forged=JSON.parse(JSON.stringify(firstFlightEvent('first_flight_answered','people',{
+      version:1,question:1,answer:'Reach out kindly'
+    },-2000)));
+    forged.id='forged_first_flight_event';
+    events.push(firstFlightEvent('first_flight_cell_selected','health',{version:1},-1500),forged);
+    var state=X.firstFlightState(events);
+    return state.status==='cell_selected'&&state.cellKey==='people'&&state.answers.length===0;
+  });
+  test('First Flight requires explicit matching acceptance before completion',function(){
+    var events=firstFlightProgress('lw'),ready=X.firstFlightState(events),mission=ready.mission;
+    var completion=experimentEvent('experiment_completed',X.completionPayload(mission,'completed'),2);
+    var beforeAccept=X.firstFlightState(events.concat(completion));
+    var accept=experimentEvent('experiment_accepted',X.decisionPayload(mission,'accepted'),1);
+    var active=X.firstFlightState(events.concat(accept));
+    var forged=JSON.parse(JSON.stringify(X.completionPayload(mission,'completed')));
+    forged.action='A mismatched completion';
+    var mismatch=experimentEvent('experiment_completed',forged,1.5);
+    var afterMismatch=X.firstFlightState(events.concat(accept,mismatch));
+    var completed=X.firstFlightState(events.concat(accept,completion));
+    return beforeAccept.status==='mission_ready'&&active.status==='mission_active'&&
+      afterMismatch.status==='mission_active'&&
+      completed.status==='mission_completed'&&completed.completedEventId===completion.id;
+  });
+  test('First Flight cannot use the normal experiment editor or a mismatched mission',function(){
+    var events=firstFlightProgress('lw'),mission=X.firstFlightState(events).mission;
+    var forged=JSON.parse(JSON.stringify(mission));forged.action='A different action';forged.decision='accepted';
+    var accept=experimentEvent('experiment_accepted',forged,1);
+    return X.decisionPayload(mission,'edited',{action:'Changed',measure:'Changed'})===null&&
+      X.firstFlightState(events.concat(accept)).status==='mission_ready';
+  });
+  test('neutral completed is permitted only for First Flight',function(){
+    var mission=X.firstFlightState(firstFlightProgress('people')).mission;
+    var normal=source().proposal;
+    return X.completionPayload(mission,'completed').outcome==='completed'&&
+      X.completionPayload(mission,'helped')===null&&
+      X.completionPayload(normal,'completed')===null&&
+      X.completionPayload(normal,'helped').outcome==='helped';
+  });
+  test('First Flight completion creates no outcome score or strategy evidence',function(){
+    var mission=X.firstFlightState(firstFlightProgress('health')).mission;
+    var complete=experimentEvent('experiment_completed',X.completionPayload(mission,'completed'),1);
+    var stats=X.strategyStats([complete],mission.strategyId,mission.cellKey);
+    var normal=source(),helped=experimentEvent(
+      'experiment_completed',X.completionPayload(normal.proposal,'helped'),2);
+    var normalStats=X.strategyStats([helped],normal.proposal.strategyId,normal.proposal.cellKey);
+    return stats.completed===0&&stats.declined===0&&stats.score===0&&
+      normalStats.completed===1&&normalStats.score>0&&
+      JSON.stringify(X.OUTCOMES)===JSON.stringify({helped:2,partly:0.75,no_change:-0.75,made_worse:-2});
+  });
 
   test('true feedback creates one evidence-linked proposal',function(){
     var data=source(),proposal=data.proposal;

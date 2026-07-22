@@ -12,6 +12,31 @@
     experiment_completed:1
   };
   var OUTCOMES={helped:2,partly:0.75,no_change:-0.75,made_worse:-2};
+  var FIRST_FLIGHT_VERSION=1;
+  var FIRST_FLIGHT_MEASURE='Complete this one small step today.';
+  var FIRST_FLIGHT={
+    lw:{
+      title:'Make the first move',
+      questions:[
+        'What feels most important in your work or direction right now?',
+        'What is one small step you can take toward it today?'
+      ]
+    },
+    health:{
+      title:'Support your health',
+      questions:[
+        'How are your body and energy feeling right now?',
+        'What is one small thing you can do for your health today?'
+      ]
+    },
+    people:{
+      title:'Strengthen the connection',
+      questions:[
+        'Which relationship or connection needs your attention most right now?',
+        'What is one small, respectful step you can take today?'
+      ]
+    }
+  };
 
   function clone(value){try{return JSON.parse(JSON.stringify(value));}catch(e){return null;}}
   function validNow(value){return typeof value==='number'&&isFinite(value)&&value>0;}
@@ -31,6 +56,22 @@
   }
   function cleanId(value,max){
     return typeof value==='string'&&value&&value.length<=(max||160)?value:'';
+  }
+  function cleanFirstFlightAnswer(value){
+    var text=typeof value==='string'?value.replace(/\s+/g,' ').trim():'';
+    return text&&text.length<=280?text:'';
+  }
+  function isFirstFlightStrategy(strategyId){
+    return typeof strategyId==='string'&&strategyId.indexOf('first_flight_v1_')===0;
+  }
+  function firstFlightAnswerEventId(cellKey,question){
+    if(B.learningTools&&typeof B.learningTools.firstFlightEventId==='function')
+      return B.learningTools.firstFlightEventId('first_flight_answered',cellKey,question);
+    return FIRST_FLIGHT[cellKey]&&(question===1||question===2)?
+      'evt_first_flight_v1_answered_'+cellKey+'_'+question:'';
+  }
+  function firstFlightExperimentId(cellKey,context,action){
+    return 'exp_first_flight_v1_'+hash(cellKey+'|'+context+'|'+action);
   }
   function cellMap(cells){
     var out={};
@@ -189,9 +230,14 @@
   }
   function normalizedPayload(raw){
     if(!raw||typeof raw!=='object')return null;
-    var action=cleanText(raw.action,180),measure=cleanText(raw.measure,180);
+    var firstFlight=isFirstFlightStrategy(raw.strategyId);
+    var action=firstFlight?cleanFirstFlightAnswer(raw.action):cleanText(raw.action,180);
+    var sourceRead=firstFlight?cleanFirstFlightAnswer(raw.sourceRead):(cleanText(raw.sourceRead,240)||'');
+    var measure=cleanText(raw.measure,180);
     var duration=Math.floor(raw.durationDays),dueAt=Math.floor(raw.dueAt);
     var guidance=normalizedGuidance(raw.memoryGuidance);
+    if(firstFlight&&(!validNow(raw.createdAt)||raw.sourceVerdict!=='true'||
+       raw.classification!==null||raw.themeId!==null||(guidance&&guidance.length)))return null;
     if(typeof raw.experimentId!=='string'||!raw.experimentId||typeof raw.insightId!=='string'||!raw.insightId||
        typeof raw.evidenceKey!=='string'||!raw.evidenceKey||typeof raw.strategyId!=='string'||!raw.strategyId||
        !action||!measure||!isFinite(duration)||duration<1||duration>14||!validNow(dueAt)||guidance===null)return null;
@@ -211,16 +257,68 @@
       createdAt:validNow(raw.createdAt)?Math.floor(raw.createdAt):dueAt-duration*DAY,
       dueAt:dueAt,
       sourceVerdict:raw.sourceVerdict==='partly'?'partly':'true',
-      sourceRead:cleanText(raw.sourceRead,240)||''
+      sourceRead:sourceRead
     };
+    if(firstFlight){
+      payload.firstFlightVersion=raw.firstFlightVersion;
+      payload.title=cleanText(raw.title,80);
+      if(!isFirstFlightPayload(payload))return null;
+    }
     if(guidance.length)payload.memoryGuidance=guidance;
     return payload;
+  }
+  function isFirstFlightPayload(payload){
+    var cell=payload&&FIRST_FLIGHT[payload.cellKey],ids,createdAt;
+    if(!cell||payload.firstFlightVersion!==FIRST_FLIGHT_VERSION||
+       payload.strategyId!=='first_flight_v1_'+payload.cellKey||
+       payload.observationKind!=='first_flight'||payload.classification!==null||payload.themeId!==null||
+       payload.title!==cell.title||
+       !cleanFirstFlightAnswer(payload.sourceRead)||!cleanFirstFlightAnswer(payload.action)||
+       payload.measure!==FIRST_FLIGHT_MEASURE||payload.durationDays!==1||
+       payload.insightId!=='first_flight_v1_'+payload.cellKey||payload.sourceVerdict!=='true')return false;
+    ids=[firstFlightAnswerEventId(payload.cellKey,1),firstFlightAnswerEventId(payload.cellKey,2)];
+    createdAt=Math.floor(payload.createdAt);
+    return !!ids[0]&&!!ids[1]&&Array.isArray(payload.evidenceEventIds)&&
+      payload.evidenceEventIds.length===2&&payload.evidenceEventIds[0]===ids[0]&&
+      payload.evidenceEventIds[1]===ids[1]&&payload.evidenceKey===ids.join('|')&&
+      payload.experimentId===firstFlightExperimentId(payload.cellKey,payload.sourceRead,payload.action)&&
+      validNow(createdAt)&&payload.dueAt===createdAt+DAY;
+  }
+  function firstFlightMission(cellKey,answers,now){
+    var cell=FIRST_FLIGHT[cellKey],context,action,createdAt,ids;
+    if(!cell||!Array.isArray(answers)||answers.length!==2||!validNow(now))return null;
+    context=cleanFirstFlightAnswer(answers[0]);
+    action=cleanFirstFlightAnswer(answers[1]);
+    if(!context||!action)return null;
+    createdAt=Math.floor(now);
+    ids=[firstFlightAnswerEventId(cellKey,1),firstFlightAnswerEventId(cellKey,2)];
+    if(!ids[0]||!ids[1])return null;
+    return normalizedPayload({
+      experimentId:firstFlightExperimentId(cellKey,context,action),
+      insightId:'first_flight_v1_'+cellKey,
+      evidenceKey:ids.join('|'),
+      evidenceEventIds:ids,
+      observationKind:'first_flight',
+      classification:null,
+      themeId:null,
+      cellKey:cellKey,
+      strategyId:'first_flight_v1_'+cellKey,
+      action:action,
+      measure:FIRST_FLIGHT_MEASURE,
+      durationDays:1,
+      createdAt:createdAt,
+      dueAt:createdAt+DAY,
+      sourceVerdict:'true',
+      sourceRead:context,
+      firstFlightVersion:FIRST_FLIGHT_VERSION,
+      title:cell.title
+    });
   }
   function strategyStats(events,strategyId,cellKey){
     var result={strategyId:strategyId,completed:0,declined:0,score:0},weight=0;
     (events||[]).forEach(function(event){
       var payload=event&&event.payload;
-      if(!event||!payload||payload.strategyId!==strategyId)return;
+      if(!event||!payload||payload.strategyId!==strategyId||isFirstFlightStrategy(payload.strategyId))return;
       var scope=cellKey&&payload.cellKey===cellKey?1.5:1;
       if(event.type==='experiment_completed'&&OUTCOMES[payload.outcome]!==undefined){
         result.completed++;weight+=scope;result.score+=OUTCOMES[payload.outcome]*scope;
@@ -364,6 +462,7 @@
   function decisionPayload(experiment,decision,edits,memoryContext){
     var payload=normalizedPayload(experiment);
     if(!payload||(decision!=='accepted'&&decision!=='edited'))return null;
+    if(isFirstFlightPayload(payload)&&decision!=='accepted')return null;
     if(payload.memoryGuidance&&!validGuidance(payload.memoryGuidance,memoryContext))return null;
     if(decision==='edited'){
       edits=edits||{};
@@ -382,9 +481,66 @@
   }
   function completionPayload(experiment,outcome){
     var payload=normalizedPayload(experiment);
-    if(!payload||OUTCOMES[outcome]===undefined)return null;
+    if(!payload)return null;
+    if(isFirstFlightPayload(payload)){
+      if(outcome!=='completed')return null;
+    }else if(outcome==='completed'||OUTCOMES[outcome]===undefined)return null;
     payload.outcome=outcome;
     return payload;
+  }
+  function sameFirstFlightMission(raw,mission){
+    var normalized=normalizedPayload(raw);
+    return !!normalized&&isFirstFlightPayload(normalized)&&
+      JSON.stringify(normalized)===JSON.stringify(mission);
+  }
+  function firstFlightState(events){
+    var state=null,ordered=(events||[]).map(function(event,index){return {event:event,index:index};});
+    ordered.sort(function(a,b){
+      var at=a.event&&typeof a.event.ts==='number'?a.event.ts:Infinity;
+      var bt=b.event&&typeof b.event.ts==='number'?b.event.ts:Infinity;
+      return at-bt||a.index-b.index;
+    });
+    ordered.forEach(function(item){
+      var event=item.event,clean,payload,mission;
+      if(!event||!validNow(event.ts))return;
+      if(event.type==='first_flight_available'||event.type==='first_flight_cell_selected'||
+         event.type==='first_flight_answered'){
+        if(!B.learningTools)return;
+        clean=B.learningTools.normalizeState({modelVersion:1,events:[event]}).events[0];
+        if(!clean)return;
+        if(clean.type==='first_flight_available'){
+          if(!state)state={version:FIRST_FLIGHT_VERSION,status:'available',cellKey:null,answers:[]};
+          return;
+        }
+        if(!state)return;
+        if(clean.type==='first_flight_cell_selected'){
+          if(state.status==='available'){
+            state.status='cell_selected';state.cellKey=clean.cellKey;state.selectedEventId=clean.id;
+          }
+          return;
+        }
+        if(clean.cellKey!==state.cellKey)return;
+        if(clean.payload.question===1&&state.status==='cell_selected'){
+          state.answers=[clean.payload.answer];state.status='first_answer_recorded';
+          state.answerEventIds=[clean.id];
+        }else if(clean.payload.question===2&&state.status==='first_answer_recorded'){
+          state.answers.push(clean.payload.answer);state.answerEventIds.push(clean.id);
+          mission=firstFlightMission(state.cellKey,state.answers,clean.ts);
+          if(mission){state.mission=mission;state.status='mission_ready';}
+        }
+        return;
+      }
+      if(!state||!state.mission)return;
+      payload=event.payload;
+      if(event.type==='experiment_accepted'&&state.status==='mission_ready'&&
+         payload&&payload.decision==='accepted'&&sameFirstFlightMission(payload,state.mission)){
+        state.status='mission_active';state.acceptedEventId=event.id;
+      }else if(event.type==='experiment_completed'&&state.status==='mission_active'&&
+               payload&&payload.outcome==='completed'&&sameFirstFlightMission(payload,state.mission)){
+        state.status='mission_completed';state.completedEventId=event.id;
+      }
+    });
+    return state?clone(state):null;
   }
   function lifecycle(events,experimentId){
     var state=null,status='unknown',last=null,outcome=null;
@@ -429,6 +585,8 @@
   B.experiments={
     DAY:DAY,
     OUTCOMES:clone(OUTCOMES),
+    FIRST_FLIGHT_VERSION:FIRST_FLIGHT_VERSION,
+    FIRST_FLIGHT:clone(FIRST_FLIGHT),
     candidatesFor:candidatesFor,
     strategyStats:strategyStats,
     rankCandidates:rankCandidates,
@@ -438,6 +596,9 @@
     decisionPayload:decisionPayload,
     declinePayload:declinePayload,
     completionPayload:completionPayload,
+    firstFlightMission:firstFlightMission,
+    firstFlightState:firstFlightState,
+    isFirstFlight:isFirstFlightPayload,
     lifecycle:lifecycle,
     activeExperiment:activeExperiment,
     latestClosedToday:latestClosedToday

@@ -50,6 +50,74 @@
     var s=T.emptyState(),e=T.createEvent('checkin_completed',{ts:ts(1),payload:{source:'test'}});
     return !!T.appendEvent(s,e)&&T.appendEvent(s,e)===false&&s.events.length===1;
   });
+  test('First Flight v1 event types use deterministic IDs',function(){
+    var available=T.createEvent('first_flight_available',{ts:ts(1),payload:{version:1}});
+    var selected=T.createEvent('first_flight_cell_selected',{ts:ts(2),cellKey:'health',payload:{version:1}});
+    var answered=T.createEvent('first_flight_answered',{
+      ts:ts(3),cellKey:'health',payload:{version:1,question:1,answer:'Steady energy'}
+    });
+    return available.id==='evt_first_flight_v1_available'&&
+      selected.id==='evt_first_flight_v1_selected_health'&&
+      answered.id==='evt_first_flight_v1_answered_health_1';
+  });
+  test('First Flight repeated clicks are append-only idempotent across timestamps',function(){
+    var s=T.emptyState();
+    var first=T.createEvent('first_flight_answered',{
+      ts:ts(2),cellKey:'lw',payload:{version:1,question:1,answer:'Ship the beta'}
+    });
+    var repeated=T.createEvent('first_flight_answered',{
+      ts:ts(3),cellKey:'lw',payload:{version:1,question:1,answer:'Ship the beta'}
+    });
+    return first.id===repeated.id&&!!T.appendEvent(s,first)&&T.appendEvent(s,repeated)===false&&s.events.length===1;
+  });
+  test('First Flight accepts only its three foundation cells',function(){
+    function selected(key){return T.createEvent('first_flight_cell_selected',{
+      ts:ts(1),cellKey:key,payload:{version:1}
+    });}
+    return !!selected('lw')&&!!selected('health')&&!!selected('people')&&selected('money')===null;
+  });
+  test('First Flight requires exact version-1 payloads',function(){
+    var missing=T.createEvent('first_flight_available',{ts:ts(1),payload:{}});
+    var future=T.createEvent('first_flight_available',{ts:ts(1),payload:{version:2}});
+    var extra=T.createEvent('first_flight_cell_selected',{
+      ts:ts(1),cellKey:'lw',payload:{version:1,extra:true}
+    });
+    return missing===null&&future===null&&extra===null;
+  });
+  test('First Flight answers are trimmed, normalized and bounded to 280 characters',function(){
+    var long=new Array(301).join('x');
+    var clean=T.createEvent('first_flight_answered',{
+      ts:ts(1),cellKey:'people',payload:{version:1,question:2,answer:'  Send\n a   kind message  '}
+    });
+    var bounded=T.createEvent('first_flight_answered',{
+      ts:ts(1),cellKey:'people',payload:{version:1,question:2,answer:long}
+    });
+    return clean.payload.answer==='Send a kind message'&&bounded.payload.answer.length===280;
+  });
+  test('First Flight rejects blank answers and unsupported question numbers',function(){
+    var blank=T.createEvent('first_flight_answered',{
+      ts:ts(1),cellKey:'lw',payload:{version:1,question:1,answer:'   '}
+    });
+    var third=T.createEvent('first_flight_answered',{
+      ts:ts(1),cellKey:'lw',payload:{version:1,question:3,answer:'A step'}
+    });
+    return blank===null&&third===null;
+  });
+  test('persisted First Flight events fail closed if IDs or canonical answers are forged',function(){
+    var event=T.createEvent('first_flight_answered',{
+      ts:ts(1),cellKey:'lw',payload:{version:1,question:1,answer:'One clear priority'}
+    });
+    var wrongId=JSON.parse(JSON.stringify(event)),unclean=JSON.parse(JSON.stringify(event));
+    wrongId.id='forged';unclean.payload.answer=' One clear priority ';
+    return T.normalizeState({events:[wrongId]}).events.length===0&&
+      T.normalizeState({events:[unclean]}).events.length===0;
+  });
+  test('old learning states normalize without inventing First Flight progress',function(){
+    var old={modelVersion:1,events:[T.createEvent('checkin_completed',{ts:ts(1),payload:{source:'test'}})]};
+    var normalized=T.normalizeState(old);
+    return normalized.events.length===1&&normalized.events[0].type==='checkin_completed'&&
+      T.selectEvents(normalized,{type:'first_flight_available'}).length===0;
+  });
   test('event selectors return defensive copies',function(){
     var s=T.emptyState(),e=T.createEvent('learning_added',{ts:ts(1),cellKey:'lw',payload:{text:'one'}});
     T.appendEvent(s,e);var selected=T.selectEvents(s,{type:'learning_added'});selected[0].payload.text='changed';

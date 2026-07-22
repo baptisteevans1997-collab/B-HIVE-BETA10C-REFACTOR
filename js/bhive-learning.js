@@ -15,10 +15,15 @@
     experiment_edited:1,
     experiment_declined:1,
     experiment_completed:1,
+    first_flight_available:1,
+    first_flight_cell_selected:1,
+    first_flight_answered:1,
     memory_feedback:1,
     weekly_review_started:1,
     weekly_review_completed:1
   };
+  var FIRST_FLIGHT_VERSION=1;
+  var FIRST_FLIGHT_CELLS={lw:1,health:1,people:1};
 
   function isObject(v){return !!v&&typeof v==='object'&&!Array.isArray(v);}
   function clone(v){
@@ -53,12 +58,62 @@
   function validCellKey(key){
     return !key||(typeof key==='string'&&(!B.CELL_DEFAULTS||!!B.CELL_DEFAULTS[key]));
   }
+  function exactKeys(value,keys){
+    if(!isObject(value))return false;
+    var actual=Object.keys(value).sort(),expected=keys.slice().sort(),i;
+    if(actual.length!==expected.length)return false;
+    for(i=0;i<actual.length;i++)if(actual[i]!==expected[i])return false;
+    return true;
+  }
+  function normalizeFirstFlightAnswer(value,truncate){
+    var text=typeof value==='string'?value.replace(/\s+/g,' ').trim():'';
+    if(!text)return '';
+    if(text.length>280){
+      if(!truncate)return '';
+      text=text.slice(0,280).trim();
+    }
+    return text;
+  }
+  function firstFlightEventId(type,cellKey,question){
+    if(type==='first_flight_available')return 'evt_first_flight_v1_available';
+    if(type==='first_flight_cell_selected'&&FIRST_FLIGHT_CELLS[cellKey])
+      return 'evt_first_flight_v1_selected_'+cellKey;
+    if(type==='first_flight_answered'&&FIRST_FLIGHT_CELLS[cellKey]&&(question===1||question===2))
+      return 'evt_first_flight_v1_answered_'+cellKey+'_'+question;
+    return '';
+  }
+  function normalizeFirstFlightPayload(type,cellKey,payload,creating){
+    if(type==='first_flight_available'){
+      if(cellKey||!exactKeys(payload,['version'])||payload.version!==FIRST_FLIGHT_VERSION)return null;
+      return {version:FIRST_FLIGHT_VERSION};
+    }
+    if(!FIRST_FLIGHT_CELLS[cellKey])return null;
+    if(type==='first_flight_cell_selected'){
+      if(!exactKeys(payload,['version'])||payload.version!==FIRST_FLIGHT_VERSION)return null;
+      return {version:FIRST_FLIGHT_VERSION};
+    }
+    if(type==='first_flight_answered'){
+      if(!exactKeys(payload,['version','question','answer'])||payload.version!==FIRST_FLIGHT_VERSION||
+         (payload.question!==1&&payload.question!==2))return null;
+      var answer=normalizeFirstFlightAnswer(payload.answer,creating);
+      if(!answer||(!creating&&answer!==payload.answer))return null;
+      return {version:FIRST_FLIGHT_VERSION,question:payload.question,answer:answer};
+    }
+    return null;
+  }
+  function isFirstFlightType(type){
+    return type==='first_flight_available'||type==='first_flight_cell_selected'||type==='first_flight_answered';
+  }
   function normalizeEvent(raw){
     if(!isObject(raw)||typeof raw.id!=='string'||!raw.id||raw.id.length>120)return null;
     if(!TYPES[raw.type]||typeof raw.ts!=='number'||!isFinite(raw.ts)||raw.ts<=0)return null;
     if(!validCellKey(raw.cellKey))return null;
     var payload=isObject(raw.payload)?clone(raw.payload):{};
     if(payload===null)return null;
+    if(isFirstFlightType(raw.type)){
+      payload=normalizeFirstFlightPayload(raw.type,raw.cellKey||null,payload,false);
+      if(!payload||raw.id!==firstFlightEventId(raw.type,raw.cellKey||null,payload.question))return null;
+    }
     return {
       id:raw.id,
       type:raw.type,
@@ -74,6 +129,14 @@
     var cellKey=details.cellKey||null;
     var payload=isObject(details.payload)?clone(details.payload):{};
     if(!isFinite(ts)||ts<=0||!validCellKey(cellKey)||payload===null)return null;
+    if(isFirstFlightType(type)){
+      payload=normalizeFirstFlightPayload(type,cellKey,payload,true);
+      if(!payload)return null;
+      return normalizeEvent({
+        id:firstFlightEventId(type,cellKey,payload.question),
+        type:type,ts:ts,cellKey:cellKey,payload:payload
+      });
+    }
     var base=type+'|'+ts+'|'+(cellKey||'')+'|'+stable(payload);
     return normalizeEvent({
       id:details.id||('evt_'+ts+'_'+hash(base)),
@@ -161,6 +224,8 @@
 
   B.learningTools={
     TYPES:TYPES,
+    FIRST_FLIGHT_VERSION:FIRST_FLIGHT_VERSION,
+    FIRST_FLIGHT_CELLS:Object.keys(FIRST_FLIGHT_CELLS),
     emptyState:emptyState,
     normalizeState:normalizeState,
     createEvent:createEvent,
@@ -169,6 +234,8 @@
     migrateV3:migrateV3,
     selectEvents:selectEvents,
     activeDays:activeDays,
-    dayKey:dayKey
+    dayKey:dayKey,
+    firstFlightEventId:firstFlightEventId,
+    normalizeFirstFlightAnswer:function(value){return normalizeFirstFlightAnswer(value,true);}
   };
 })(window);
