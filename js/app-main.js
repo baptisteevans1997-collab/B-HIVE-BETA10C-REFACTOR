@@ -421,8 +421,6 @@
     /* ── each cell is its own creature: a bee race, a persona, its own level ──
        Cleanup Batch B: table now sourced from BHIVE.META (js/bhive-engine.js). */
     var META = BHIVE.META;
-    /* ── pass 3: how each caste reads in each cell state (caste × verdict) ── */
-    var SWARM_ACT = BHIVE.SWARM_ACT;
     /* ── pass 3: caste motion modifiers (subtle-to-medium, applied in placeWorker) ── */
     var CASTE_MOD = BHIVE.CASTE_MOD;
     /* v60 per-caste home-wander parameters — moved to js/bhive-data.js at E1.

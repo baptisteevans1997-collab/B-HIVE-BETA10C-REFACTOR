@@ -121,15 +121,6 @@ BHIVE.META = {
   recruit: { race: 'Drones',       body: '#9d9079', size: 1.14, cls: 'The Recruit',     trait: 'eager and early; benched for now.' }
 };
 
-BHIVE.SWARM_ACT = {
-  'Nurse Bees':   { aligned: 'tending the brood with care',  under: 'feeding what little they have', leak: 'fussing, overworked',                dormant: 'resting beside the cells' },
-  'Builder Bees': { aligned: 'shipping fresh comb',          under: 'comb half-built, stalled',     leak: 'over-polishing the comb',            dormant: 'tools down, idle' },
-  'Forager Bees': { aligned: 'returning with full baskets',  under: 'flying empty, slim pickings',  leak: 'hauling more than the cell can hold', dormant: 'wings folded, parked' },
-  'Guard Bees':   { aligned: 'holding the line',             under: 'thin guard, tired',            leak: 'pacing too hard',                    dormant: 'on quiet watch' },
-  'Scout Bees':   { aligned: 'mapping new ground',           under: 'scouting cold, faint signals', leak: 'ranging too far, too fast',          dormant: 'wings down, waiting' },
-  'Drones':       { aligned: 'on standby, ready',            under: 'cold reserve',                 leak: 'restless, no role',                  dormant: 'sleeping it off' }
-};
-
 BHIVE.CASTE_MOD = {
   'Nurse Bees':   { paceMul: 0.85, radMul: 0.78, wobMul: 0.70, ferry: 0 },
   'Builder Bees': { paceMul: 1.00, radMul: 1.00, wobMul: 1.00, ferry: 0 },
@@ -281,33 +272,12 @@ BHIVE.seedSwarms = function() {
   });
 };
 
-/* ── ensureTraits: give a bee b (boldness) and p (pace) if missing ── */
-BHIVE.ensureTraits = function(bee, race) {
-  if (bee.b === undefined) bee.b = 0.5 + Math.random() * 0.5;
-  if (bee.p === undefined) bee.p = 0.4 + Math.random() * 0.6;
-};
-
 /* ── stageOf: age → stage index (0=egg,1=larva,2=worker,3=elder) ── */
 BHIVE.stageOf = function(age) {
   if (age < 1) return 0;
   if (age < 3) return 1;
   if (age < 9) return 2;
   return 3;
-};
-
-/* ── tickSwarms: age every bee by N days ── */
-BHIVE.tickSwarms = function(days) {
-  var B = BHIVE;
-  for (var k in B.swarms) {
-    var s = B.swarms[k];
-    for (var i = s.length - 1; i >= 0; i--) {
-      s[i].age += days;
-      if (s[i].age > 14) s.splice(i, 1); /* bees die of old age */
-    }
-    /* keep at least one brood */
-    if (!s.length) s.push({ age: 0, b: 0.5 + Math.random() * 0.5, p: 0.4 + Math.random() * 0.6 });
-  }
-  B.lastTick = Date.now();
 };
 
 /* ── cellLevel: 1 + floor(learnings count / 2) ── */
