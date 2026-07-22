@@ -23,7 +23,7 @@
   var results = document.getElementById('results');
   var summary = document.getElementById('summary');
   var passed = 0, failed = 0, uncaught = [];
-  var scenarios = ['evolve','widest'];
+  var scenarios = ['evolve','widest','locked'];
   var reports = {};
   var activeFrame = null, activeScenario = '', scenarioTimer = 0, nextScenario = 0;
 
@@ -44,8 +44,8 @@
     activeScenario = scenarios[index];
     activeFrame = frame;
     nextScenario = index + 1;
-    frame.style.width = activeScenario === 'evolve' ? '390px' : '1600px';
-    frame.style.height = activeScenario === 'evolve' ? '844px' : '900px';
+    frame.style.width = activeScenario === 'widest' ? '1600px' : '390px';
+    frame.style.height = activeScenario === 'widest' ? '900px' : '844px';
     frame.src = 'app-main-harness.html?scenario=' + activeScenario + '&run=' + Date.now();
     frame.title = 'controlled ' + activeScenario + ' scenario';
     document.body.appendChild(frame);
@@ -77,12 +77,31 @@
   });
 
   function finish() {
-    var evolve = reports.evolve, widest = reports.widest;
+    var evolve = reports.evolve, widest = reports.widest, locked = reports.locked;
     test('app-main loads without an uncaught JavaScript error',
-      uncaught.length === 0 && evolve.errors.length === 0 && widest.errors.length === 0,
-      uncaught.concat(evolve.errors, widest.errors).join('; '));
-    test('deterministic state contains all 14 cells', evolve.stateCount === 14 && widest.stateCount === 14);
-    test('all 14 cells render in both controlled scenarios', evolve.cellCount === 14 && widest.cellCount === 14);
+      uncaught.length === 0 && evolve.errors.length === 0 && widest.errors.length === 0 &&
+        locked.errors.length === 0,
+      uncaught.concat(evolve.errors, widest.errors, locked.errors).join('; '));
+    test('deterministic state contains all 14 cells',
+      evolve.stateCount === 14 && widest.stateCount === 14 && locked.stateCount === 14);
+    test('all 14 cells render in both all-unlocked scenarios',
+      evolve.cellCount === 14 && widest.cellCount === 14);
+    test('locked cells and their workers are not rendered',
+      locked.cellCount === 3 && locked.lockedVisibility && locked.lockedVisibility.lockedHidden);
+    test('unlocked cells remain visible',
+      locked.lockedVisibility && locked.lockedVisibility.unlockedVisible);
+    test('dormant-but-unlocked cells remain visible',
+      locked.lockedVisibility && locked.lockedVisibility.dormantUnlockedVisible);
+    test('a locked cell appears on the normal refresh after the engine unlocks it',
+      locked.lockedVisibility && locked.lockedVisibility.appearedAfterUnlock &&
+        locked.lockedVisibility.appearedInteractive);
+    test('hidden locked cells cannot be clicked or keyboard-focused',
+      locked.lockedVisibility && locked.lockedVisibility.hiddenNotInteractive);
+    test('Core stays visible while locked cells are hidden',
+      locked.lockedVisibility && locked.lockedVisibility.coreVisible);
+    test('unlocking keeps complete cell state and saves through the existing schema',
+      locked.lockedVisibility && locked.lockedVisibility.stateStillComplete &&
+        locked.lockedVisibility.savePreservedUnlocks);
     test('hidden progression: level-3 cell without Agent suppresses the current Evolve recommendation',
       evolve.growthClass && !evolve.nextButtonPresent,
       'growth=' + evolve.growthClass + ', next=' + evolve.nextMove);

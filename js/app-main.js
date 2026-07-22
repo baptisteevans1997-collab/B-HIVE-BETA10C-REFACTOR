@@ -861,9 +861,11 @@
       var old=svg.querySelectorAll('.hive-cell'),i;
       for(i=0;i<old.length;i++)old[i].parentNode.removeChild(old[i]);
       cells.forEach(function(c,idx){
+        if(!isUnlocked(c.key))return;
         var v=B.cellVitality(c),ri=B.hexRadius(c.en),ro=B.hexRadius(c.imp);
         var g=B.el('g',{'class':'hive-cell'+(c.en>=58?' alive':'')+(idx===sel?' on':''),
-          tabindex:'0','role':'button','aria-label':c.full});
+          tabindex:'0','role':'button','aria-label':c.full,
+          'data-cell-index':idx,'data-cell-key':c.key});
         g.appendChild(B.el('polygon',{points:B.hex(c.x,c.y,ri),fill:CORE[v],
           opacity:(0.10+c.en/100*0.34).toFixed(2),filter:'url(#hiveGlow)','class':'hive-glow'}));
         g.appendChild(B.el('polygon',{points:B.hex(c.x,c.y,ri),fill:CORE[v],
@@ -1368,6 +1370,7 @@
       var now=(window.performance&&performance.now)?performance.now():0;
       function rnd(){return Math.random()<0.5?-1:1;}
       cells.forEach(function(c,idx){
+        if(!isUnlocked(c.key))return;
         var ro=B.hexRadius(c.imp),maxR=Math.max(3,ro*0.86-7);   /* wider safe roam area — bees explore more of the cell (still inside the hex) */
         var race=(META[c.key]||{}).race;
         var sw=swarms[c.key]||[],grown=[],k;
@@ -1377,6 +1380,7 @@
           if(stg<2){
             // eggs and larvae rest in the comb
             var ey=bee(META[c.key],false,stg);
+            ey.setAttribute('data-cell-key',c.key);
             var yo=orbitCache&&orbitCache.get(sw[k]);
             if(!yo||!yo.young){
               var ysid=(((idx+1)*911+(k+1)*7)>>>0), YH=function(kk){return B.hsh(ysid+kk*40503);};
@@ -1396,6 +1400,7 @@
         grown.forEach(function(b,j){
           var st=stageOf(b.age);
           var el=bee(META[c.key],agents[c.key],st);
+          el.setAttribute('data-cell-key',c.key);
           var o=orbitCache&&orbitCache.get(b);
           if(!o||o.young||typeof o.hxAmp==='undefined'){
             var pace=b.p*(st===3?0.6:1);
@@ -1943,7 +1948,7 @@
     }
     /* ── in-place patches: keep the panel + hexagon live without a flickering rebuild ── */
     function patchHiveCell(idx){
-      var g=svg.querySelectorAll('.hive-cell')[idx];
+      var g=svg.querySelector('.hive-cell[data-cell-index="'+idx+'"]');
       if(!g)return;
       var c=cells[idx],v=B.cellVitality(c),ri=B.hexRadius(c.en),ro=B.hexRadius(c.imp);
       var glow=g.querySelector('.hive-glow'),fill=g.querySelector('.hive-fill'),
@@ -2089,7 +2094,8 @@
     function select(idx){
       sel=idx;coreOn=false;coreAnswer=null;
       var gs=svg.querySelectorAll('.hive-cell'),i;
-      for(i=0;i<gs.length;i++)gs[i].classList.toggle('on',i===idx);
+      for(i=0;i<gs.length;i++)gs[i].classList.toggle('on',
+        parseInt(gs[i].getAttribute('data-cell-index'),10)===idx);
       var cg=svg.querySelector('.hive-core');if(cg)cg.classList.remove('on');
       showCell(idx);
       openDetailSheet();
@@ -2759,19 +2765,20 @@
       var mv=nextMove();
       if(!mv||mv.kind!=='cell'||mv.idx==null||
         (typeof mv.label==='string'&&mv.label.indexOf('Evolve ')===0))return;
-      var target=allCells[mv.idx];
+      var target=svg.querySelector('.hive-cell[data-cell-index="'+mv.idx+'"]');
       if(target)target.classList.add('priority-on');
     }
     /* ── Stage D2: cell memory marks — additive post-render pass (mirrors applyPriorityPulse).
        Visualises accrued growth from already-persisted data only (cellLevel←learnings, agents).
        Adds CSS-only classes to existing .hive-cell nodes; never touches geometry/schema/storage. */
     function markCells(){
-      var allCells=svg.querySelectorAll('.hive-cell'),i,c,lv,el,core,hv;
+      var allCells=svg.querySelectorAll('.hive-cell'),i,idx,c,lv,el,core,hv;
       for(i=0;i<allCells.length;i++){
         el=allCells[i];
         el.classList.remove('cm-1','cm-2','cm-3','cm-apex',
           'hv-aligned','hv-under','hv-leak','hv-dormant');
-        c=cells[i]; if(!c)continue;
+        idx=parseInt(el.getAttribute('data-cell-index'),10);
+        c=cells[idx]; if(!c)continue;
         lv=cellLevel(c.key);
         if(lv>=7)el.classList.add('cm-3');
         else if(lv>=5)el.classList.add('cm-2');
@@ -2794,9 +2801,10 @@
        pattern as markCells(). The dormant/open/next looks live in css/app.css;
        taught cells keep the existing verdict/growth styling untouched. ── */
     function applyLockStates(){
-      var els=svg.querySelectorAll('.hive-cell'),i,c,st;
+      var els=svg.querySelectorAll('.hive-cell'),i,idx,c,st;
       for(i=0;i<els.length;i++){
-        c=cells[i];if(!c)continue;
+        idx=parseInt(els[i].getAttribute('data-cell-index'),10);
+        c=cells[idx];if(!c)continue;
         st=cellState(c.key);
         els[i].classList.remove('st-dormant','st-open','st-taught','st-next');
         els[i].classList.add('st-'+st);
