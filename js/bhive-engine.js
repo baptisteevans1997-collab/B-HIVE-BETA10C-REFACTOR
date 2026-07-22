@@ -92,6 +92,7 @@ BHIVE.CELL_DEFAULTS = {};
 BHIVE.CELL_DEFS.forEach(function(c) { BHIVE.CELL_DEFAULTS[c.key] = { imp: c.imp, en: c.en }; });
 
 BHIVE.UNLOCK_START = ['lw', 'health', 'people'];
+BHIVE.UNLOCK_REVEAL_VERSION = 1;
 
 BHIVE.SIG_RULES = [
   { re: /\b(stress|overwhelm|tired|burn\s?out|burnout|stuck|pressure|anxious|drained|exhaust)/, next: ['free', 'growth', 'health'] },
@@ -213,6 +214,7 @@ BHIVE.init = function() {
 
   /* ── unlock state ── */
   B.unlocks = B.UNLOCK_START.slice();
+  B.unlockRevealVersion = B.UNLOCK_REVEAL_VERSION;
 
   /* ── learned truths ── */
   B.learnings = {};
@@ -298,6 +300,20 @@ BHIVE.isTaught = function(key) {
   return false;
 };
 
+/* Proven activation is existing durable user activity, not current vitality.
+   It is used to migrate ambiguous all-unlocked legacy saves and does not create
+   a second reveal state: BHIVE.unlocks remains the only visibility authority. */
+BHIVE.hasProvenActivation = function(key) {
+  var B = BHIVE, events, i, event;
+  if (B.isTaught(key) || (B.agents && B.agents[key])) return true;
+  events = B.learning && Array.isArray(B.learning.events) ? B.learning.events : [];
+  for (i = 0; i < events.length; i++) {
+    event = events[i];
+    if (event && event.type === 'cell_value_changed' && event.cellKey === key) return true;
+  }
+  return false;
+};
+
 BHIVE.cellState = function(key) {
   if (!BHIVE.isUnlocked(key)) return 'dormant';
   return BHIVE.isTaught(key) ? 'taught' : 'open';
@@ -371,6 +387,64 @@ BHIVE.addLearning = function(key, text, src, q) {
   return true;
 };
 
+/* One-time reveal migration.
+   - Partial legacy trails are preserved.
+   - Only an unversioned all-unlocked save is ambiguous enough to prune.
+   - Foundation cells and cells with proven activation remain revealed.
+   - Historical unlock evidence is retained in the append-only event store.
+   After this migration, unlocks is append-only again and is never auto-pruned. */
+BHIVE.migrateUnlockReveal = function(snapshot) {
+  var B = BHIVE, d = snapshot || {}, original = B.unlocks.slice(), events, known = {};
+  var i, key, event, ts, allUnlocked = true, keep = {}, seen = {}, migrated = [];
+  if (d.unlockRevealVersion === B.UNLOCK_REVEAL_VERSION) {
+    B.unlockRevealVersion = B.UNLOCK_REVEAL_VERSION;
+    return false;
+  }
+
+  /* Preserve the legacy unlock trail before changing the live reveal set. */
+  events = B.learning && Array.isArray(B.learning.events) ? B.learning.events : [];
+  for (i = 0; i < events.length; i++) {
+    event = events[i];
+    if (event && event.type === 'cell_unlocked' && event.cellKey) known[event.cellKey] = true;
+  }
+  ts = d && typeof d.ts === 'number' && isFinite(d.ts) && d.ts > 0 ? Math.floor(d.ts) : 1;
+  if (B.learningTools && B.learning) {
+    for (i = 0; i < original.length; i++) {
+      key = original[i];
+      if (known[key]) continue;
+      event = B.learningTools.createEvent('cell_unlocked', {
+        id: 'evt_unlock_reveal_v1_legacy_' + key,
+        ts: ts,
+        cellKey: key,
+        payload: { source: 'legacy_unlocks', migrated: true, timestampKnown: false }
+      });
+      if (event) B.learningTools.appendEvent(B.learning, event);
+    }
+  }
+
+  B.unlockRevealVersion = B.UNLOCK_REVEAL_VERSION;
+  for (i = 0; i < B.cells.length; i++) {
+    if (!B.isUnlocked(B.cells[i].key)) { allUnlocked = false; break; }
+  }
+  if (!allUnlocked) return false;
+
+  for (i = 0; i < B.UNLOCK_START.length; i++) keep[B.UNLOCK_START[i]] = true;
+  for (i = 0; i < B.cells.length; i++) {
+    key = B.cells[i].key;
+    if (B.hasProvenActivation(key)) keep[key] = true;
+  }
+  for (i = 0; i < B.UNLOCK_START.length; i++) {
+    key = B.UNLOCK_START[i];
+    if (!seen[key]) { seen[key] = true; migrated.push(key); }
+  }
+  for (i = 0; i < original.length; i++) {
+    key = original[i];
+    if (keep[key] && !seen[key]) { seen[key] = true; migrated.push(key); }
+  }
+  B.unlocks = migrated;
+  return migrated.length !== original.length;
+};
+
 /* ── snapshot: pure serialization ── */
 BHIVE.snapshot = function() {
   var B = BHIVE;
@@ -391,6 +465,7 @@ BHIVE.snapshot = function() {
     swarms: B.swarms,
     lastTick: B.lastTick,
     unlocks: B.unlocks,
+    unlockRevealVersion: B.unlockRevealVersion,
     learning: B.learningTools ? B.learningTools.normalizeState(B.learning) : B.learning
   };
 };
@@ -405,11 +480,12 @@ BHIVE.save = function(storageKey) {
 
 /* ── load: restore from localStorage ── */
 BHIVE.load = function(storageKey) {
-  var B = BHIVE;
+  var B = BHIVE, revealNeedsMigration = false;
   try {
     var raw = localStorage.getItem(storageKey);
     if (!raw) return false;
     var d = JSON.parse(raw);
+    revealNeedsMigration = d.unlockRevealVersion !== B.UNLOCK_REVEAL_VERSION;
     if (d && d.current) {
       B.cells.forEach(function(c) {
         var s = d.current[c.key];
@@ -446,10 +522,10 @@ BHIVE.load = function(storageKey) {
       });
     }
     if (B.learningTools) B.learning = B.learningTools.ensureState(d && d.learning, d || {});
-    /* dormant cells: sleeping pair only */
-    B.cells.forEach(function(c) {
-      if (!B.isUnlocked(c.key) && B.swarms[c.key]) B.swarms[c.key] = [{ age: 0 }, { age: 2 }];
-    });
+    B.migrateUnlockReveal(d || {});
+    /* Persist the marker and migrated live reveal trail immediately so the
+       one-time migration cannot repeat across reloads before the next UI save. */
+    if (revealNeedsMigration) B.save(storageKey);
     return true;
   } catch(e) {
     console.warn('hive:', e);

@@ -23,7 +23,7 @@
   var results = document.getElementById('results');
   var summary = document.getElementById('summary');
   var passed = 0, failed = 0, uncaught = [];
-  var scenarios = ['evolve','widest','locked'];
+  var scenarios = ['evolve','widest','locked','migration'];
   var reports = {};
   var activeFrame = null, activeScenario = '', scenarioTimer = 0, nextScenario = 0;
 
@@ -77,13 +77,15 @@
   });
 
   function finish() {
-    var evolve = reports.evolve, widest = reports.widest, locked = reports.locked;
+    var evolve = reports.evolve, widest = reports.widest, locked = reports.locked,
+      migration = reports.migration;
     test('app-main loads without an uncaught JavaScript error',
       uncaught.length === 0 && evolve.errors.length === 0 && widest.errors.length === 0 &&
-        locked.errors.length === 0,
-      uncaught.concat(evolve.errors, widest.errors, locked.errors).join('; '));
+        locked.errors.length === 0 && migration.errors.length === 0,
+      uncaught.concat(evolve.errors, widest.errors, locked.errors, migration.errors).join('; '));
     test('deterministic state contains all 14 cells',
-      evolve.stateCount === 14 && widest.stateCount === 14 && locked.stateCount === 14);
+      evolve.stateCount === 14 && widest.stateCount === 14 && locked.stateCount === 14 &&
+        migration.stateCount === 14);
     test('all 14 cells render in both all-unlocked scenarios',
       evolve.cellCount === 14 && widest.cellCount === 14);
     test('locked cells and their workers are not rendered',
@@ -102,6 +104,22 @@
     test('unlocking keeps complete cell state and saves through the existing schema',
       locked.lockedVisibility && locked.lockedVisibility.stateStillComplete &&
         locked.lockedVisibility.savePreservedUnlocks);
+    test('all-unlocked legacy migration retains foundation plus proven activation only',
+      migration.cellCount === 6 && migration.migrationVisibility &&
+        migration.migrationVisibility.exactUnlocks);
+    test('migration hides unused cells without exposing workers or focus targets',
+      migration.migrationVisibility && migration.migrationVisibility.hiddenUnused);
+    test('migration keeps taught and value-changed cells visible when vitality is dormant',
+      migration.migrationVisibility && migration.migrationVisibility.provenDormantVisible);
+    test('migration preserves Core, saved data, events and the one-time version marker',
+      migration.migrationVisibility && migration.migrationVisibility.coreVisible &&
+        migration.migrationVisibility.dataPreserved && migration.migrationVisibility.versioned);
+    test('existing progression immediately reveals a hidden dormant cell and persists it',
+      migration.migrationVisibility && migration.migrationVisibility.newlyRevealedImmediately &&
+        migration.migrationVisibility.revealedDormantVisible &&
+        migration.migrationVisibility.savePreservedReveal);
+    test('revealing one migrated cell leaves other migrated-unused cells hidden',
+      migration.migrationVisibility && migration.migrationVisibility.otherHiddenStillHidden);
     test('hidden progression: level-3 cell without Agent suppresses the current Evolve recommendation',
       evolve.growthClass && !evolve.nextButtonPresent,
       'growth=' + evolve.growthClass + ', next=' + evolve.nextMove);

@@ -96,6 +96,11 @@
   current.health = { imp: 90, en: 20 };
   current.people = { imp: 70, en: 55 };
   if (scenario === 'locked') current.lw = { imp: 40, en: 20 };
+  if (scenario === 'migration') {
+    current.craft = { imp: 24, en: 12 };
+    current.side = { imp: 22, en: 11 };
+    current.recruit = { imp: 18, en: 9 };
+  }
 
   var learnings = {};
   if (scenario === 'evolve') {
@@ -103,6 +108,8 @@
       {t:'fixture learning one',s:'you'}, {t:'fixture learning two',s:'you'},
       {t:'fixture learning three',s:'you'}, {t:'fixture learning four',s:'you'}
     ];
+  } else if (scenario === 'migration') {
+    learnings.craft = [{t:'migration-proven craft activity',s:'you'}];
   } else {
     learnings.craft = [
       {t:'legacy craft one',s:'you'}, {t:'legacy craft two',s:'you'},
@@ -117,10 +124,24 @@
     current: current,
     history: [{ts:Date.now(),cells:current}],
     learnings: learnings,
-    agents: scenario === 'evolve' ? {} : {craft:true},
+    agents: scenario === 'evolve' ? {} :
+      scenario === 'migration' ? {money:true} : {craft:true},
     mbti: ['E','N','T','J'],
-    swarms: {lw:[{age:4,b:0.5,p:0.5}],craft:[{age:5,b:0.6,p:0.4}]},
+    swarms: scenario === 'migration' ?
+      {lw:[{age:4,b:0.5,p:0.5}],craft:[{age:5,b:0.6,p:0.4}],free:[{age:8,b:0.3,p:0.7}]} :
+      {lw:[{age:4,b:0.5,p:0.5}],craft:[{age:5,b:0.6,p:0.4}]},
     unlocks: scenario === 'locked' ? ['lw','health','people'] : keys.slice()
+  };
+  if (scenario === 'evolve' || scenario === 'widest') fixture.unlockRevealVersion = 1;
+  if (scenario === 'migration') fixture.learning = {
+    modelVersion:1,
+    events:[
+      {id:'evt_harness_value_side',type:'cell_value_changed',ts:Date.now()-2,
+        cellKey:'side',payload:{field:'en',from:10,to:11}},
+      {id:'evt_harness_existing',type:'queen_message',ts:Date.now()-1,
+        cellKey:null,payload:{role:'user',content:'preserve harness event'}}
+    ],
+    observations:[],hypotheses:[],experiments:[],feedback:[],insightQueue:[]
   };
   localStorage.removeItem(storageKey);
   localStorage.removeItem('lw-brainmap-queen-v1');
@@ -225,6 +246,7 @@
 })();
 </script>
 <script src="../js/bhive-engine.js"></script>
+<script src="../js/bhive-learning.js"></script>
 <script src="../js/app-main.js?navigation-consolidation"></script>
 <script>
 ((function () {
@@ -248,7 +270,8 @@
   }
 
   function ready() {
-    var expectedRenderedCells = new URLSearchParams(location.search).get('scenario') === 'locked' ? 3 : 14;
+    var readyScenario = new URLSearchParams(location.search).get('scenario');
+    var expectedRenderedCells = readyScenario === 'locked' ? 3 : readyScenario === 'migration' ? 6 : 14;
     return document.readyState !== 'loading' &&
       window.__INDEX_SIGNATURE &&
       window.BHIVE && Array.isArray(window.BHIVE.cells) && window.BHIVE.cells.length === 14 &&
@@ -289,6 +312,7 @@
       savedAgain: false,
       priorityClass: false,
       lockedVisibility: null,
+      migrationVisibility: null,
       navigation: {mobile:null,desktop:null,production:window.__INDEX_SIGNATURE}
     };
 
@@ -491,6 +515,58 @@
         savePreservedUnlocks: !!(savedAfterUnlock && savedAfterUnlock.current &&
           savedAfterUnlock.current[lockedKey] && savedAfterUnlock.unlocks &&
           savedAfterUnlock.unlocks.indexOf(lockedKey) !== -1)
+      };
+    } else if (scenario === 'migration') {
+      var migratedHiddenKey = 'free';
+      var revealKey = 'recruit';
+      var hiddenCellBefore = document.querySelector(
+        '#hivesvg .hive-cell[data-cell-key="' + migratedHiddenKey + '"]');
+      var hiddenWorkerBefore = document.querySelector(
+        '#hivesvg .hive-workers [data-cell-key="' + migratedHiddenKey + '"]');
+      var taughtDormantBefore = document.querySelector(
+        '#hivesvg .hive-cell[data-cell-key="craft"].hv-dormant');
+      var changedDormantBefore = document.querySelector(
+        '#hivesvg .hive-cell[data-cell-key="side"].hv-dormant');
+      var originalEventPreserved = window.BHIVE.learning.events.some(function(event){
+        return event.id === 'evt_harness_existing';
+      });
+      var migratedBefore = {
+        exactUnlocks: window.BHIVE.unlocks.join('|') === 'lw|health|people|craft|money|side',
+        hiddenUnused: !hiddenCellBefore && !hiddenWorkerBefore,
+        provenDormantVisible: !!taughtDormantBefore && !!changedDormantBefore,
+        coreVisible: !!document.querySelector('#hivesvg .hive-core'),
+        versioned: window.BHIVE.unlockRevealVersion === 1,
+        dataPreserved: window.BHIVE.cells.length === 14 &&
+          window.BHIVE.learnings.craft[0].t === 'migration-proven craft activity' &&
+          window.BHIVE.agents.money === true && window.BHIVE.history.length === 1 &&
+          window.BHIVE.swarms.free[0].age === 8 && originalEventPreserved
+      };
+
+      var migrationSource = document.querySelector('#hivesvg .hive-cell[data-cell-key="lw"]');
+      if (migrationSource) migrationSource.dispatchEvent(new MouseEvent('click', {bubbles:true}));
+      var migrationInput = document.querySelector('#hive-detail .hd-learn-in');
+      var migrationTeach = document.querySelector('#hive-detail .hd-learn-add');
+      if (migrationInput) migrationInput.value = 'building a new project';
+      if (migrationTeach) migrationTeach.click();
+
+      var revealedAfter = document.querySelector(
+        '#hivesvg .hive-cell[data-cell-key="' + revealKey + '"].hv-dormant');
+      var hiddenStillAfter = document.querySelector(
+        '#hivesvg .hive-cell[data-cell-key="' + migratedHiddenKey + '"]');
+      var migratedSaved = JSON.parse(localStorage.getItem(storageKey));
+      result.migrationVisibility = {
+        exactUnlocks: migratedBefore.exactUnlocks,
+        hiddenUnused: migratedBefore.hiddenUnused,
+        provenDormantVisible: migratedBefore.provenDormantVisible,
+        coreVisible: migratedBefore.coreVisible,
+        versioned: migratedBefore.versioned && !!migratedSaved &&
+          migratedSaved.unlockRevealVersion === 1,
+        dataPreserved: migratedBefore.dataPreserved,
+        newlyRevealedImmediately: window.BHIVE.isUnlocked(revealKey) && !!revealedAfter,
+        revealedDormantVisible: !!revealedAfter && revealedAfter.getAttribute('tabindex') === '0',
+        otherHiddenStillHidden: !hiddenStillAfter,
+        savePreservedReveal: !!(migratedSaved && migratedSaved.unlocks &&
+          migratedSaved.unlocks.indexOf(revealKey) !== -1)
       };
     }
     parent.postMessage({type:'bhive-app-main-result',result:result}, location.origin);

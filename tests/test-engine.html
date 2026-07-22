@@ -79,6 +79,44 @@ function withProfileStorage(test) {
   }
 }
 
+var HIVE_MIGRATION_KEY = 'bhive_test_unlock_reveal_migration';
+function allCellKeys() {
+  return B.CELL_DEFS.map(function(c){ return c.key; });
+}
+function migrationCurrent() {
+  var current = {};
+  B.CELL_DEFS.forEach(function(c){ current[c.key] = {imp:c.imp,en:c.en}; });
+  current.recruit = {imp:18,en:9};
+  return current;
+}
+function allUnlockedMigrationFixture() {
+  return {
+    v:4,ts:1700000000000,current:migrationCurrent(),
+    history:[{date:'14 Nov 23',ts:1700000000000,cells:migrationCurrent()}],
+    learnings:{
+      craft:[{t:'I deliberately use craft',s:'you'}],
+      free:[{t:'Claude-only context is not activation',s:'claude'}]
+    },
+    agents:{money:true},
+    swarms:{recruit:[{age:9,b:0.77,p:0.33}],free:[{age:4,b:0.4,p:0.6}]},
+    unlocks:allCellKeys(),
+    learning:{modelVersion:1,events:[
+      {id:'evt_existing_value_side',type:'cell_value_changed',ts:1700000000001,
+        cellKey:'side',payload:{field:'en',from:10,to:15}},
+      {id:'evt_existing_queen',type:'queen_message',ts:1700000000002,
+        cellKey:null,payload:{role:'user',content:'preserve me'}}
+    ],observations:[],hypotheses:[],experiments:[],feedback:[],insightQueue:[]}
+  };
+}
+function loadMigrationFixture(snapshot) {
+  localStorage.setItem(HIVE_MIGRATION_KEY, JSON.stringify(snapshot));
+  B.init();
+  var ok = B.load(HIVE_MIGRATION_KEY);
+  var persisted = JSON.parse(localStorage.getItem(HIVE_MIGRATION_KEY));
+  localStorage.removeItem(HIVE_MIGRATION_KEY);
+  return {ok:ok,persisted:persisted};
+}
+
 /* ────────────────────────────────────────────
    1. Pure utility functions
    ──────────────────────────────────────────── */
@@ -220,7 +258,8 @@ suite('addLearning', [
 suite('Persistence', [
   { name: 'snapshot returns object with v:4 learning state', fn: function(){
     var s = B.snapshot();
-    return s && s.v === 4 && typeof s.ts === 'number' && s.learning && Array.isArray(s.learning.events);
+    return s && s.v === 4 && s.unlockRevealVersion === 1 &&
+      typeof s.ts === 'number' && s.learning && Array.isArray(s.learning.events);
   }},
   { name: 'save+load round-trip preserves unlocks', fn: function(){
     B.init();
@@ -245,7 +284,83 @@ suite('Persistence', [
 ]);
 
 /* ────────────────────────────────────────────
-   9. Profile scoring regressions
+   9. Authoritative unlock/reveal migration
+   ──────────────────────────────────────────── */
+suite('Unlock reveal migration', [
+  { name: 'fresh state starts versioned with only the three foundation cells', fn: function(){
+    B.init();
+    return B.unlockRevealVersion===1 &&
+      B.unlocks.join('|')===B.UNLOCK_START.join('|');
+  }},
+  { name: 'versioned all-unlocked save is never automatically pruned', fn: function(){
+    var fixture=allUnlockedMigrationFixture();
+    fixture.unlockRevealVersion=1;
+    fixture.learnings={};fixture.agents={};fixture.learning=B.learningTools.emptyState();
+    var result=loadMigrationFixture(fixture);
+    return result.ok && B.unlocks.length===B.cells.length &&
+      result.persisted.unlocks.length===B.cells.length;
+  }},
+  { name: 'partially unlocked legacy save is preserved and versioned once', fn: function(){
+    var fixture=allUnlockedMigrationFixture();
+    fixture.unlocks=['lw','health','people','craft'];
+    fixture.learnings={};fixture.agents={};fixture.learning=B.learningTools.emptyState();
+    var result=loadMigrationFixture(fixture);
+    return result.ok && B.unlocks.join('|')==='lw|health|people|craft' &&
+      result.persisted.unlockRevealVersion===1 &&
+      result.persisted.unlocks.join('|')==='lw|health|people|craft';
+  }},
+  { name: 'unversioned all-unlocked save retains foundation plus proven activation only', fn: function(){
+    var result=loadMigrationFixture(allUnlockedMigrationFixture());
+    return result.ok &&
+      B.unlocks.join('|')==='lw|health|people|craft|money|side';
+  }},
+  { name: 'migration preserves values, learnings, Agents, history, swarms and existing events', fn: function(){
+    var result=loadMigrationFixture(allUnlockedMigrationFixture());
+    var existing=B.learningTools.selectEvents(B.learning,{}).some(function(e){
+      return e.id==='evt_existing_queen'&&e.payload.content==='preserve me';
+    });
+    return result.ok && B.cells.filter(function(c){return c.key==='recruit';})[0].en===9 &&
+      B.learnings.craft[0].t==='I deliberately use craft' && B.agents.money===true &&
+      B.history.length===1 && B.swarms.recruit[0].age===9 && existing;
+  }},
+  { name: 'migration archives every original unlock and persists its marker immediately', fn: function(){
+    var result=loadMigrationFixture(allUnlockedMigrationFixture());
+    var archived=B.learningTools.selectEvents(B.learning,{type:'cell_unlocked'});
+    return result.ok && archived.length===B.cells.length &&
+      result.persisted.unlockRevealVersion===1 &&
+      result.persisted.learning.events.filter(function(e){return e.type==='cell_unlocked';}).length===B.cells.length;
+  }},
+  { name: 'migration is idempotent after the persisted version marker', fn: function(){
+    var first=loadMigrationFixture(allUnlockedMigrationFixture()).persisted;
+    var beforeUnlocks=first.unlocks.join('|'),beforeEvents=first.learning.events.length;
+    var second=loadMigrationFixture(first);
+    return second.ok && second.persisted.unlocks.join('|')===beforeUnlocks &&
+      second.persisted.learning.events.length===beforeEvents;
+  }},
+  { name: 'every migrated-hidden cell remains reachable through existing progression', fn: function(){
+    loadMigrationFixture(allUnlockedMigrationFixture());
+    var steps=0;
+    while(B.unlocks.length<B.cells.length&&steps<20){
+      if(!B.unlockFromAnswer('ordinary note'))break;
+      steps++;
+    }
+    return steps===8 && B.unlocks.length===B.cells.length &&
+      B.cells.every(function(c){return B.isUnlocked(c.key);});
+  }},
+  { name: 'once re-revealed, a vitality-dormant cell remains visible in saved unlocks', fn: function(){
+    loadMigrationFixture(allUnlockedMigrationFixture());
+    var recruit=B.cells.filter(function(c){return c.key==='recruit';})[0];
+    B.wakeCell('recruit');
+    var snap=B.snapshot();
+    snap.unlockRevealVersion=1;
+    var result=loadMigrationFixture(snap);
+    return result.ok && B.cellVitality(recruit)==='dormant' &&
+      B.isUnlocked('recruit') && result.persisted.unlocks.indexOf('recruit')>=0;
+  }}
+]);
+
+/* ────────────────────────────────────────────
+   10. Profile scoring regressions
    ──────────────────────────────────────────── */
 suite('Profile scoring regressions', [
   { name: 'inactive momentum follow-up is excluded from scoring', fn: function(){

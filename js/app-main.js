@@ -1319,8 +1319,11 @@
     /* stageOf → BHIVE alias */
     function seedSwarms(){
       cells.forEach(function(c){
-        /* beta: dormant cells sleep — one egg + one larva resting in the comb, nothing flies */
-        if(!isUnlocked(c.key)){swarms[c.key]=[{age:0},{age:2}];return;}
+        /* Seed missing locked-cell swarms without replacing saved swarm history. */
+        if(!isUnlocked(c.key)){
+          if(!swarms[c.key]||!swarms[c.key].length)swarms[c.key]=[{age:0},{age:2}];
+          return;
+        }
         if(swarms[c.key]&&swarms[c.key].length!==undefined)return;
         var n=Math.round(2+c.en/22+(learnings[c.key]||[]).length*0.5),k,arr=[];
         if(n<2)n=2;if(n>SWARM_CAP)n=SWARM_CAP;
