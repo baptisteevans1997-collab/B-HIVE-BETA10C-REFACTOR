@@ -1,5 +1,5 @@
 /* Claude Brain Map — service worker · offline app shell */
-var CACHE = 'brainmap-v91-beta10c-integ-hld-stage5c';
+var CACHE = 'brainmap-v92-beta10c-predeploy1';
 var CORE = [
   './', './index.html',
   './css/app.css', './css/beta-mobile-polish.css',

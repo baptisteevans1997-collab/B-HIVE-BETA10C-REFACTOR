@@ -3722,9 +3722,9 @@ var TM=(function(){
      receiver's FEEDBACK_Q must list these 3 then the 8 free-text, same order. */
   var FBM=[
     {q:'Which parts did you enjoy or like?',multi:true,
-     opts:['The hive map','Opening a cell','“This cell asks” questions','The bees’ quiz','Teach the hive','Signal read','Check In','Profile check-in','Levels & XP']},
+     opts:['The hive map','Opening a cell','“This cell asks” questions','The bees’ quiz','Teach the hive','Signal read','Check In','Profile check-in']},
     {q:'Which parts felt confusing or unclear?',multi:true,
-     opts:['The hive map','Opening a cell','“This cell asks” questions','The bees’ quiz','Teach the hive','Signal read','Check In','Profile check-in','Levels & XP','Nothing was confusing']},
+     opts:['The hive map','Opening a cell','“This cell asks” questions','The bees’ quiz','Teach the hive','Signal read','Check In','Profile check-in','Nothing was confusing']},
     {q:'How easy was it to know what to do first?',multi:false,
      opts:['Obvious straight away','Took a minute','Had to poke around','Never got clear']}
   ];

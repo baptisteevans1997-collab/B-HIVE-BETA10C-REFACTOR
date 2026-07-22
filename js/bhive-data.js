@@ -120,5 +120,5 @@ window.BHIVE_DATA.TOUR = [
       {t:'It learns as you teach',
        d:'Everything you teach or answer becomes a worker bee in that cell. The more you feed a cell, the more the hive holds about that part of your life.'},
       {t:'You’re ready',
-       d:'Report shows what the hive currently reads in you. Stuck on a feature? The Field Manual, screen 11, explains them all, and the ? button at bottom-right reopens this guide.'}
+       d:'Report shows what the hive currently reads in you. Stuck on a feature? The Field Manual, screen 10, explains them all. Reopen this guide any time with the ? button, or Help under More on your phone.'}
     ];
