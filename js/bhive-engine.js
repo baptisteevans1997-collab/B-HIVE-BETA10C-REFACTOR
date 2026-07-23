@@ -387,6 +387,166 @@ BHIVE.addLearning = function(key, text, src, q) {
   return true;
 };
 
+/* ── completeFirstFlight: one validated, persisted, idempotent completion ── */
+BHIVE.completeFirstFlight = function(request) {
+  var B = BHIVE, events, state, completion, mission, answers, config, questionList;
+  var questionIndexes = [], backup, unlockedKey = null, completionEvent, now, i, matches;
+
+  function result(ok, reason, extra) {
+    var out = { ok: ok, reason: reason || null };
+    if (extra) for (var key in extra) out[key] = extra[key];
+    return out;
+  }
+  function clone(value) {
+    try { return JSON.parse(JSON.stringify(value)); } catch (e) { return null; }
+  }
+  function same(a, b) {
+    try { return JSON.stringify(a) === JSON.stringify(b); } catch (e) { return false; }
+  }
+  function canonicalMission(value) {
+    if (!B.experiments || !B.experiments.completionPayload) return null;
+    var payload = B.experiments.completionPayload(value, 'completed');
+    if (!payload) return null;
+    delete payload.outcome;
+    return payload;
+  }
+
+  if (!request || typeof request !== 'object' || Array.isArray(request) ||
+      typeof request.storageKey !== 'string' || !request.storageKey ||
+      !B.learningTools || !B.experiments || !B.experiments.firstFlightState ||
+      !B.learning || !Array.isArray(B.learning.events)) {
+    return result(false, 'invalid_request');
+  }
+
+  events = B.learning.events;
+  state = B.experiments.firstFlightState(events);
+  if (!state || (state.status !== 'mission_active' && state.status !== 'mission_completed')) {
+    return result(false, 'mission_not_active');
+  }
+  if (request.cellKey !== state.cellKey || !Array.isArray(request.answers) ||
+      request.answers.length !== 2) {
+    return result(false, 'state_mismatch');
+  }
+  answers = request.answers.map(function(answer) {
+    return B.learningTools.normalizeFirstFlightAnswer(answer);
+  });
+  if (!answers[0] || !answers[1] || !same(answers, state.answers)) {
+    return result(false, 'state_mismatch');
+  }
+  if (request.mission && request.mission.decision &&
+      request.mission.decision !== 'accepted') {
+    return result(false, 'mission_mismatch');
+  }
+  mission = canonicalMission(request.mission);
+  if (!mission || !B.experiments.isFirstFlight(mission) || !same(mission, state.mission)) {
+    return result(false, 'mission_mismatch');
+  }
+
+  /* A matching completion event is the durable idempotency marker. */
+  if (state.status === 'mission_completed') {
+    return result(true, null, {
+      alreadyCompleted: true,
+      cellKey: state.cellKey,
+      completionEventId: state.completedEventId || null
+    });
+  }
+
+  config = B.experiments.FIRST_FLIGHT && B.experiments.FIRST_FLIGHT[state.cellKey];
+  questionList = B.questions && B.questions[state.cellKey];
+  if (!config || !Array.isArray(config.questions) || config.questions.length !== 2 ||
+      !Array.isArray(questionList) || !B.learnings || !Array.isArray(B.swarms[state.cellKey])) {
+    return result(false, 'invalid_live_state');
+  }
+  for (i = 0; i < config.questions.length; i++) {
+    matches = [];
+    questionList.forEach(function(item, index) {
+      if (item && item.q === config.questions[i]) matches.push(index);
+    });
+    if (matches.length !== 1 || questionIndexes.indexOf(matches[0]) >= 0) {
+      return result(false, 'questions_mismatch');
+    }
+    questionIndexes.push(matches[0]);
+  }
+
+  now = typeof request.now === 'number' && isFinite(request.now) && request.now > 0 ?
+    Math.floor(request.now) : Date.now();
+  completion = B.experiments.completionPayload(state.mission, 'completed');
+  if (!completion) return result(false, 'mission_mismatch');
+
+  backup = {
+    learnings: clone(B.learnings),
+    questions: clone(B.questions),
+    swarms: clone(B.swarms),
+    unlocks: clone(B.unlocks),
+    learning: clone(B.learning),
+    localTs: B.localTs
+  };
+  if (!backup.learnings || !backup.questions || !backup.swarms ||
+      !backup.unlocks || !backup.learning) {
+    return result(false, 'invalid_live_state');
+  }
+
+  try {
+    if (!B.learnings[state.cellKey]) B.learnings[state.cellKey] = [];
+    for (i = 0; i < 2; i++) {
+      B.learnings[state.cellKey].push({
+        t: answers[i],
+        s: 'you',
+        q: config.questions[i]
+      });
+      if (!B.recordEvent('learning_added', {
+        id: 'evt_first_flight_v1_learning_' + state.cellKey + '_' + (i + 1),
+        ts: now,
+        cellKey: state.cellKey,
+        payload: {
+          text: answers[i],
+          source: 'you',
+          question: config.questions[i],
+          firstFlightVersion: 1
+        }
+      })) throw new Error('learning_event');
+    }
+
+    questionIndexes.sort(function(a, b) { return b - a; }).forEach(function(index) {
+      questionList.splice(index, 1);
+    });
+
+    B.swarms[state.cellKey].push({ age: 3, b: 0.5, p: 0.5 });
+    unlockedKey = B.unlockFromAnswer(answers.join(' '));
+
+    completionEvent = B.recordEvent('experiment_completed', {
+      id: 'evt_first_flight_v1_completed_' + state.cellKey,
+      ts: now,
+      cellKey: state.cellKey,
+      payload: completion
+    });
+    if (!completionEvent ||
+        B.experiments.firstFlightState(B.learning.events).status !== 'mission_completed') {
+      throw new Error('completion_event');
+    }
+    if (B.save(request.storageKey) !== true) throw new Error('save_failed');
+
+    return result(true, null, {
+      alreadyCompleted: false,
+      cellKey: state.cellKey,
+      learningEventIds: [
+        'evt_first_flight_v1_learning_' + state.cellKey + '_1',
+        'evt_first_flight_v1_learning_' + state.cellKey + '_2'
+      ],
+      completionEventId: completionEvent.id,
+      unlockedKey: unlockedKey
+    });
+  } catch (e) {
+    B.learnings = backup.learnings;
+    B.questions = backup.questions;
+    B.swarms = backup.swarms;
+    B.unlocks = backup.unlocks;
+    B.learning = backup.learning;
+    B.localTs = backup.localTs;
+    return result(false, 'completion_failed');
+  }
+};
+
 /* One-time reveal migration.
    - Partial legacy trails are preserved.
    - Only an unversioned all-unlocked save is ambiguous enough to prune.
@@ -475,7 +635,13 @@ BHIVE.save = function(storageKey) {
   var B = BHIVE;
   var snap = B.snapshot();
   B.localTs = snap.ts;
-  try { localStorage.setItem(storageKey, JSON.stringify(snap)); } catch(e) { console.warn('hive:', e); }
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(snap));
+    return true;
+  } catch(e) {
+    console.warn('hive:', e);
+    return false;
+  }
 };
 
 /* ── load: restore from localStorage ── */
