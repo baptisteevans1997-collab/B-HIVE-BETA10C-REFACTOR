@@ -23,7 +23,10 @@
   var results = document.getElementById('results');
   var summary = document.getElementById('summary');
   var passed = 0, failed = 0, uncaught = [];
-  var scenarios = ['evolve','widest','locked','migration'];
+  var scenarios = [
+    'fresh','fresh-wide','progress','completed',
+    'evolve','widest','locked','migration'
+  ];
   var reports = {};
   var activeFrame = null, activeScenario = '', scenarioTimer = 0, nextScenario = 0;
 
@@ -77,15 +80,88 @@
   });
 
   function finish() {
-    var evolve = reports.evolve, widest = reports.widest, locked = reports.locked,
+    var fresh = reports.fresh, freshWide = reports['fresh-wide'],
+      progress = reports.progress, completed = reports.completed,
+      evolve = reports.evolve, widest = reports.widest, locked = reports.locked,
       migration = reports.migration;
     test('app-main loads without an uncaught JavaScript error',
-      uncaught.length === 0 && evolve.errors.length === 0 && widest.errors.length === 0 &&
+      uncaught.length === 0 && fresh.errors.length === 0 && freshWide.errors.length === 0 &&
+        progress.errors.length === 0 && completed.errors.length === 0 &&
+        evolve.errors.length === 0 && widest.errors.length === 0 &&
         locked.errors.length === 0 && migration.errors.length === 0,
-      uncaught.concat(evolve.errors, widest.errors, locked.errors, migration.errors).join('; '));
+      uncaught.concat(fresh.errors, freshWide.errors, progress.errors, completed.errors,
+        evolve.errors, widest.errors, locked.errors, migration.errors).join('; '));
     test('deterministic state contains all 14 cells',
-      evolve.stateCount === 14 && widest.stateCount === 14 && locked.stateCount === 14 &&
+      fresh.stateCount === 14 && freshWide.stateCount === 14 &&
+        progress.stateCount === 14 && completed.stateCount === 14 &&
+        evolve.stateCount === 14 && widest.stateCount === 14 && locked.stateCount === 14 &&
         migration.stateCount === 14);
+    test('a genuinely fresh load becomes First Flight eligible in memory',
+      fresh.firstFlightStartup && fresh.firstFlightStartup.status === 'available' &&
+        freshWide.firstFlightStartup && freshWide.firstFlightStartup.status === 'available');
+    test('fresh startup records exactly one canonical availability event',
+      fresh.firstFlightStartup.canonicalAvailability &&
+        fresh.firstFlightStartup.availabilityCount === 1 &&
+        freshWide.firstFlightStartup.canonicalAvailability &&
+        freshWide.firstFlightStartup.availabilityCount === 1);
+    test('availability alone does not persist a new blank Hive',
+      fresh.firstFlightStartup.noStartupSave && freshWide.firstFlightStartup.noStartupSave);
+    test('fresh foundation cells start with empty swarms and no rendered cell workers',
+      fresh.firstFlightStartup.foundationSwarmsEmpty &&
+        fresh.firstFlightStartup.cellWorkerCount === 0 &&
+        freshWide.firstFlightStartup.foundationSwarmsEmpty &&
+        freshWide.firstFlightStartup.cellWorkerCount === 0);
+    test('fresh startup leaves the five-bee Queen retinue unchanged',
+      fresh.firstFlightStartup.queenRetinueCount === 5 &&
+        freshWide.firstFlightStartup.queenRetinueCount === 5);
+    test('stored legacy users remain exempt from First Flight availability',
+      [evolve,widest,locked,migration].every(function(report){
+        return report.firstFlightStartup && report.firstFlightStartup.status === null &&
+          report.firstFlightStartup.availabilityCount === 0;
+      }));
+    test('stored First Flight and legacy swarms are preserved rather than cleared or reseeded',
+      progress.firstFlightStartup.foundationSwarmsPreserved &&
+        completed.firstFlightStartup.foundationSwarmsPreserved &&
+        widest.firstFlightStartup.foundationSwarmsPreserved && widest.legacyLoaded &&
+        migration.migrationVisibility && migration.migrationVisibility.dataPreserved);
+    test('an incomplete First Flight resumes with its exact events and derived state',
+      progress.firstFlightStartup.status === 'first_answer_recorded' &&
+        progress.firstFlightStartup.cellKey === 'lw' &&
+        progress.firstFlightStartup.answers.join('|') === 'Finishing the beta matters most' &&
+        progress.firstFlightStartup.availabilityCount === 1 &&
+        progress.firstFlightStartup.storedEventsPreserved);
+    test('a completed First Flight remains completed and receives no duplicate availability',
+      completed.firstFlightStartup.status === 'mission_completed' &&
+        completed.firstFlightStartup.completedEventId === 'evt_first_flight_v1_completed_lw' &&
+        completed.firstFlightStartup.availabilityCount === 1 &&
+        completed.firstFlightStartup.storedEventsPreserved);
+    test('fresh availability is idempotent under a repeated startup event attempt',
+      fresh.firstFlightStartup.duplicateRejected &&
+        fresh.firstFlightStartup.availabilityCount === 1 &&
+        freshWide.firstFlightStartup.duplicateRejected &&
+        freshWide.firstFlightStartup.availabilityCount === 1);
+    test('fresh startup keeps only the foundation reveal trail with Core and all foundations visible',
+      fresh.cellCount === 3 && fresh.firstFlightStartup.exactFoundationUnlocks &&
+        fresh.firstFlightStartup.foundationVisible && fresh.firstFlightStartup.coreVisible &&
+        freshWide.cellCount === 3 && freshWide.firstFlightStartup.exactFoundationUnlocks &&
+        freshWide.firstFlightStartup.foundationVisible && freshWide.firstFlightStartup.coreVisible);
+    test('First Flight startup state activates no interface on fresh, resumable or completed Hives',
+      fresh.firstFlightStartup.interfaceInactive &&
+        freshWide.firstFlightStartup.interfaceInactive &&
+        progress.firstFlightStartup.interfaceInactive &&
+        completed.firstFlightStartup.interfaceInactive);
+    test('quiet-Hive startup behaviour matches at mobile and wide responsive widths',
+      JSON.stringify({
+        cells:fresh.cellCount,
+        swarms:fresh.firstFlightStartup.foundationSwarmsEmpty,
+        workers:fresh.firstFlightStartup.cellWorkerCount,
+        retinue:fresh.firstFlightStartup.queenRetinueCount
+      }) === JSON.stringify({
+        cells:freshWide.cellCount,
+        swarms:freshWide.firstFlightStartup.foundationSwarmsEmpty,
+        workers:freshWide.firstFlightStartup.cellWorkerCount,
+        retinue:freshWide.firstFlightStartup.queenRetinueCount
+      }));
     test('all 14 cells render in both all-unlocked scenarios',
       evolve.cellCount === 14 && widest.cellCount === 14);
     test('locked cells and their workers are not rendered',

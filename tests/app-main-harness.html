@@ -110,7 +110,8 @@
     ];
   } else if (scenario === 'migration') {
     learnings.craft = [{t:'migration-proven craft activity',s:'you'}];
-  } else {
+  } else if (scenario !== 'fresh' && scenario !== 'fresh-wide' &&
+      scenario !== 'progress' && scenario !== 'completed') {
     learnings.craft = [
       {t:'legacy craft one',s:'you'}, {t:'legacy craft two',s:'you'},
       {t:'legacy craft three',s:'you'}, {t:'legacy craft four',s:'you'}
@@ -124,15 +125,19 @@
     current: current,
     history: [{ts:Date.now(),cells:current}],
     learnings: learnings,
-    agents: scenario === 'evolve' ? {} :
-      scenario === 'migration' ? {money:true} : {craft:true},
+    agents: scenario === 'migration' ? {money:true} :
+      (scenario === 'widest' || scenario === 'locked') ? {craft:true} : {},
     mbti: ['E','N','T','J'],
     swarms: scenario === 'migration' ?
       {lw:[{age:4,b:0.5,p:0.5}],craft:[{age:5,b:0.6,p:0.4}],free:[{age:8,b:0.3,p:0.7}]} :
+      (scenario === 'progress' || scenario === 'completed') ?
+      {lw:[{age:6,b:0.4,p:0.6}],health:[{age:7,b:0.5,p:0.5}],people:[{age:8,b:0.6,p:0.4}]} :
       {lw:[{age:4,b:0.5,p:0.5}],craft:[{age:5,b:0.6,p:0.4}]},
-    unlocks: scenario === 'locked' ? ['lw','health','people'] : keys.slice()
+    unlocks: scenario === 'locked' || scenario === 'progress' || scenario === 'completed' ?
+      ['lw','health','people'] : keys.slice()
   };
-  if (scenario === 'evolve' || scenario === 'widest') fixture.unlockRevealVersion = 1;
+  if (scenario === 'evolve' || scenario === 'widest' ||
+      scenario === 'progress' || scenario === 'completed') fixture.unlockRevealVersion = 1;
   if (scenario === 'migration') fixture.learning = {
     modelVersion:1,
     events:[
@@ -145,7 +150,14 @@
   };
   localStorage.removeItem(storageKey);
   localStorage.removeItem('lw-brainmap-queen-v1');
-  localStorage.setItem(storageKey, JSON.stringify(fixture));
+  if (scenario !== 'fresh' && scenario !== 'fresh-wide') {
+    localStorage.setItem(storageKey, JSON.stringify(fixture));
+  }
+  window.__HARNESS_FOUNDATION_SWARMS = JSON.stringify({
+    lw:fixture.swarms.lw||null,
+    health:fixture.swarms.health||null,
+    people:fixture.swarms.people||null
+  });
   localStorage.setItem('lw-brainmap-tour-v2', '1');
 
   window.__APP_MAIN_ERRORS = [];
@@ -247,7 +259,49 @@
 </script>
 <script src="../js/bhive-engine.js"></script>
 <script src="../js/bhive-learning.js"></script>
-<script src="../js/app-main.js?navigation-consolidation"></script>
+<script src="../js/bhive-experiments.js"></script>
+<script>
+(function () {
+  'use strict';
+  var scenario = new URLSearchParams(location.search).get('scenario') || 'widest';
+  var storageKey = 'lw-brainmap-hive-v1';
+  if (scenario === 'progress' || scenario === 'completed') {
+    var fixture = JSON.parse(localStorage.getItem(storageKey));
+    var B = window.BHIVE;
+    var ts = 1700002000000;
+    B.init();
+    B.recordEvent('first_flight_available', {ts:ts,payload:{version:1}});
+    B.recordEvent('first_flight_cell_selected', {
+      ts:ts+1,cellKey:'lw',payload:{version:1}
+    });
+    B.recordEvent('first_flight_answered', {
+      ts:ts+2,cellKey:'lw',
+      payload:{version:1,question:1,answer:'Finishing the beta matters most'}
+    });
+    if (scenario === 'completed') {
+      B.recordEvent('first_flight_answered', {
+        ts:ts+3,cellKey:'lw',
+        payload:{version:1,question:2,answer:'Complete one focused beta task'}
+      });
+      var ready = B.experiments.firstFlightState(B.learning.events);
+      B.recordEvent('experiment_accepted', {
+        id:'evt_harness_first_flight_accepted',ts:ts+4,cellKey:'lw',
+        payload:B.experiments.decisionPayload(ready.mission,'accepted')
+      });
+      B.recordEvent('experiment_completed', {
+        id:'evt_first_flight_v1_completed_lw',ts:ts+5,cellKey:'lw',
+        payload:B.experiments.completionPayload(ready.mission,'completed')
+      });
+    }
+    fixture.learning = B.learning;
+    localStorage.setItem(storageKey, JSON.stringify(fixture));
+  }
+  var stored = localStorage.getItem(storageKey);
+  window.__HARNESS_STORED_EVENTS = stored ?
+    JSON.stringify((JSON.parse(stored).learning||{}).events||[]) : null;
+}());
+</script>
+<script src="../js/app-main.js?first-flight-step3a"></script>
 <script>
 ((function () {
   'use strict';
@@ -271,7 +325,9 @@
 
   function ready() {
     var readyScenario = new URLSearchParams(location.search).get('scenario');
-    var expectedRenderedCells = readyScenario === 'locked' ? 3 : readyScenario === 'migration' ? 6 : 14;
+    var foundationOnly = readyScenario === 'fresh' || readyScenario === 'fresh-wide' ||
+      readyScenario === 'locked' || readyScenario === 'progress' || readyScenario === 'completed';
+    var expectedRenderedCells = foundationOnly ? 3 : readyScenario === 'migration' ? 6 : 14;
     return document.readyState !== 'loading' &&
       window.__INDEX_SIGNATURE &&
       window.BHIVE && Array.isArray(window.BHIVE.cells) && window.BHIVE.cells.length === 14 &&
@@ -313,6 +369,7 @@
       priorityClass: false,
       lockedVisibility: null,
       migrationVisibility: null,
+      firstFlightStartup: null,
       navigation: {mobile:null,desktop:null,production:window.__INDEX_SIGNATURE}
     };
 
@@ -338,6 +395,57 @@
     }
 
     try {
+      var firstFlightEvents = window.BHIVE.learning.events.filter(function(event){
+        return event.type.indexOf('first_flight_') === 0;
+      });
+      var firstFlightState = window.BHIVE.experiments.firstFlightState(
+        window.BHIVE.learning.events);
+      var availableEvent = firstFlightEvents.filter(function(event){
+        return event.type === 'first_flight_available';
+      })[0] || null;
+      var isFreshScenario = scenario === 'fresh' || scenario === 'fresh-wide';
+      var duplicateAvailability = isFreshScenario ?
+        window.BHIVE.recordEvent('first_flight_available',{payload:{version:1}}) : null;
+      var foundationKeys = ['lw','health','people'];
+      var expectedFoundationSwarms = JSON.parse(window.__HARNESS_FOUNDATION_SWARMS);
+      result.firstFlightStartup = {
+        status:firstFlightState&&firstFlightState.status,
+        cellKey:firstFlightState&&firstFlightState.cellKey,
+        answers:firstFlightState&&firstFlightState.answers,
+        completedEventId:firstFlightState&&firstFlightState.completedEventId,
+        availabilityCount:window.BHIVE.learning.events.filter(function(event){
+          return event.type === 'first_flight_available';
+        }).length,
+        canonicalAvailability:!!availableEvent &&
+          availableEvent.id === 'evt_first_flight_v1_available' &&
+          availableEvent.cellKey === null &&
+          availableEvent.payload.version === 1,
+        duplicateRejected:duplicateAvailability === false,
+        noStartupSave:localStorage.getItem(storageKey) === null,
+        foundationSwarmsEmpty:foundationKeys.every(function(key){
+          return Array.isArray(window.BHIVE.swarms[key]) && window.BHIVE.swarms[key].length === 0;
+        }),
+        foundationSwarmsPreserved:foundationKeys.every(function(key){
+          return expectedFoundationSwarms[key] === null ||
+            JSON.stringify(window.BHIVE.swarms[key]) ===
+              JSON.stringify(expectedFoundationSwarms[key]);
+        }),
+        storedEventsPreserved:window.__HARNESS_STORED_EVENTS === null ||
+          JSON.stringify(window.BHIVE.learning.events) === window.__HARNESS_STORED_EVENTS,
+        cellWorkerCount:document.querySelectorAll(
+          '#hivesvg .hive-workers > [data-cell-key]').length,
+        queenRetinueCount:document.querySelectorAll(
+          '#hivesvg .hive-workers > :not([data-cell-key])').length,
+        exactFoundationUnlocks:window.BHIVE.unlocks.join('|') === 'lw|health|people',
+        foundationVisible:foundationKeys.every(function(key){
+          return !!document.querySelector(
+            '#hivesvg .hive-cell[data-cell-key="' + key + '"]');
+        }),
+        coreVisible:!!document.querySelector('#hivesvg .hive-core'),
+        interfaceInactive:!document.querySelector(
+          '#first-flight, .first-flight, [data-first-flight]')
+      };
+
       if (scenario === 'evolve') {
         var navbar = document.getElementById('navbar');
         var menu = document.getElementById('hive-cmdmenu');

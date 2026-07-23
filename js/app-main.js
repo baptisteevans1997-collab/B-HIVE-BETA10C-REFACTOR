@@ -795,6 +795,19 @@
       bindState();
       return ok;
     }
+    function prepareFirstFlightStartup(hadStoredState){
+      var events=BHIVE.learning&&Array.isArray(BHIVE.learning.events)?
+        BHIVE.learning.events:[];
+      var reducer=BHIVE.experiments&&BHIVE.experiments.firstFlightState;
+      var state=typeof reducer==='function'?reducer(events):null;
+      if(hadStoredState||state||typeof reducer!=='function')return state;
+      if(!BHIVE.recordEvent('first_flight_available',{payload:{version:1}}))return null;
+      state=reducer(BHIVE.learning.events);
+      if(!state||state.status!=='available')return null;
+      UNLOCK_START.forEach(function(key){swarms[key]=[];});
+      BHIVE.swarms=swarms;
+      return state;
+    }
 
     var defs=B.el('defs',{});
     var filt=B.el('filter',{id:'hiveGlow',x:'-90%',y:'-90%',width:'280%',height:'280%'});
@@ -2948,6 +2961,7 @@
     /* ── wire it up ── */
     var hadStoredState=load();
     if(!hadStoredState){swarms={};BHIVE.swarms=swarms;}
+    var firstFlightStartupState=prepareFirstFlightStartup(hadStoredState);
     seedSwarms();
     if(lastTick&&Date.now()-lastTick>=86400000)
       tickSwarms(Math.min(8,Math.floor((Date.now()-lastTick)/86400000)));
