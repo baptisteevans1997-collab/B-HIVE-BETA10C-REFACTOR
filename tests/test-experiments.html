@@ -467,6 +467,64 @@
     return X.candidatesFor({kind:'unknown',cellKeys:['lw']},F.cells).length===0;
   });
 
+  test('First Flight available UI shows the exact Queen opening and three accessible choices',function(){
+    var state=X.firstFlightState(firstFlightProgress('lw').slice(0,1));
+    box.innerHTML=U.renderFirstFlight(state);
+    var choices=box.querySelectorAll('.ff-cell-choice');
+    return box.querySelector('.ff-title').textContent==='What needs your attention most right now?'&&
+      choices.length===3&&Array.prototype.map.call(choices,function(button){
+        return button.textContent;
+      }).join('|')==='Life & Work|Health|People'&&
+      box.querySelector('.ff-status').getAttribute('aria-live')==='polite';
+  });
+  test('First Flight question one is exact and labelled for every foundation cell',function(){
+    var expected={
+      lw:'What feels most important in your work or direction right now?',
+      health:'How are your body and energy feeling right now?',
+      people:'Which relationship or connection needs your attention most right now?'
+    };
+    return Object.keys(expected).every(function(cellKey){
+      var state=X.firstFlightState(firstFlightProgress(cellKey).slice(0,2));
+      box.innerHTML=U.renderFirstFlight(state);
+      var input=box.querySelector('.ff-answer'),label=box.querySelector('.ff-question');
+      return label.textContent===expected[cellKey]&&label.getAttribute('for')===input.id&&
+        input.maxLength===280&&input.required&&box.querySelector('.ff-counter').textContent==='0 / 280';
+    });
+  });
+  test('First Flight question two appears only after answer one for every foundation cell',function(){
+    var expected={
+      lw:'What is one small step you can take toward it today?',
+      health:'What is one small thing you can do for your health today?',
+      people:'What is one small, respectful step you can take today?'
+    };
+    return Object.keys(expected).every(function(cellKey){
+      var events=firstFlightProgress(cellKey);
+      box.innerHTML=U.renderFirstFlight(X.firstFlightState(events.slice(0,2)));
+      var before=box.textContent;
+      box.innerHTML=U.renderFirstFlight(X.firstFlightState(events.slice(0,3)));
+      return before.indexOf(expected[cellKey])<0&&
+        box.querySelector('.ff-question').textContent===expected[cellKey]&&
+        box.querySelector('.ff-form').getAttribute('data-question')==='2';
+    });
+  });
+  test('First Flight mission-ready UI is deterministic, read-only and has no lifecycle controls',function(){
+    var state=X.firstFlightState(firstFlightProgress('people'));
+    box.innerHTML=U.renderFirstFlight(state);
+    return box.querySelector('.ff-title').textContent==='Your First Mission is ready.'&&
+      box.querySelector('.ff-mission h3').textContent==='Strengthen the connection'&&
+      box.querySelector('.ff-mission-action').textContent==='Take one small concrete step'&&
+      box.querySelectorAll('button,textarea,input,select').length===0&&
+      !box.querySelector('.td-exp-accept,.td-exp-edit,.td-exp-outcome');
+  });
+  test('First Flight renderer stays inactive for active or completed missions',function(){
+    var events=firstFlightProgress('lw'),ready=X.firstFlightState(events);
+    var accept=experimentEvent('experiment_accepted',X.decisionPayload(ready.mission,'accepted'),1);
+    var active=X.firstFlightState(events.concat(accept));
+    var complete=experimentEvent('experiment_completed',X.completionPayload(ready.mission,'completed'),2);
+    var completed=X.firstFlightState(events.concat([accept,complete]));
+    return U.renderFirstFlight(active)===''&&U.renderFirstFlight(completed)==='';
+  });
+
   test('proposal UI exposes try, edit, and not-now choices',function(){
     var data=source();box.innerHTML=U.renderProposal(data.proposal);
     return box.querySelectorAll('.td-exp-actions .td-exp-btn').length===3&&

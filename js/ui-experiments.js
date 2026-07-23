@@ -4,6 +4,7 @@
 
   var B=root.BHIVE=root.BHIVE||{};
   var MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var FIRST_FLIGHT_LABELS={lw:'Life & Work',health:'Health',people:'People'};
 
   function esc(value){
     if(B.esc)return B.esc(value);
@@ -95,6 +96,63 @@
       (messages[outcome]||'Experiment outcome logged.');
     return '<div class="td-experiment-closed" tabindex="-1"><span>Experiment logged</span>'+esc(text)+'</div>';
   }
+  function firstFlightStatus(state){
+    if(!state)return '';
+    if(state.status==='available')return 'Choose one foundation cell to begin.';
+    if(state.status==='cell_selected')return 'Question 1 of 2.';
+    if(state.status==='first_answer_recorded')return 'Question 2 of 2.';
+    if(state.status==='mission_ready')return 'Your two answers are safely staged.';
+    return '';
+  }
+  function renderFirstFlight(state){
+    if(!state||!B.experiments||!B.experiments.FIRST_FLIGHT)return '';
+    var status=state.status,cell=state.cellKey&&B.experiments.FIRST_FLIGHT[state.cellKey];
+    var label=FIRST_FLIGHT_LABELS[state.cellKey]||'',questionNumber,question,inputId;
+    var head='<div class="ff-k">Queen <span aria-hidden="true">&middot;</span> First Flight</div>';
+    var live='<div class="ff-status" id="ff-status" role="status" aria-live="polite" aria-atomic="true">'+
+      esc(firstFlightStatus(state))+'</div>';
+    if(status==='available'){
+      return '<section class="ff-card" data-first-flight data-first-flight-state="available" tabindex="-1" aria-labelledby="ff-title">'+
+        head+'<h2 class="ff-title" id="ff-title">What needs your attention most right now?</h2>'+
+        '<p class="ff-intro">Choose the foundation cell that feels most important today.</p>'+
+        '<div class="ff-choices" role="group" aria-label="Choose what needs your attention most">'+
+          '<button class="ff-cell-choice" type="button" data-cell-key="lw">Life &amp; Work</button>'+
+          '<button class="ff-cell-choice" type="button" data-cell-key="health">Health</button>'+
+          '<button class="ff-cell-choice" type="button" data-cell-key="people">People</button>'+
+        '</div>'+live+
+      '</section>';
+    }
+    if((status==='cell_selected'||status==='first_answer_recorded')&&cell){
+      questionNumber=status==='cell_selected'?1:2;
+      question=cell.questions[questionNumber-1];
+      inputId='ff-answer-'+state.cellKey+'-'+questionNumber;
+      return '<section class="ff-card" data-first-flight data-first-flight-state="'+esc(status)+
+        '" tabindex="-1" aria-labelledby="ff-title">'+
+        head+'<div class="ff-cell-label">'+esc(label)+'</div>'+
+        '<form class="ff-form" data-cell-key="'+esc(state.cellKey)+'" data-question="'+questionNumber+'">'+
+          '<label class="ff-title ff-question" id="ff-title" for="'+inputId+'">'+esc(question)+'</label>'+
+          '<textarea class="ff-answer" id="'+inputId+'" rows="3" maxlength="280" required '+
+            'aria-describedby="ff-counter ff-status" autocomplete="off"></textarea>'+
+          '<div class="ff-field-meta"><span>One honest, specific answer is enough.</span>'+
+            '<output class="ff-counter" id="ff-counter" for="'+inputId+'">0 / 280</output></div>'+
+          '<button class="ff-submit" type="submit">Continue</button>'+
+        '</form>'+live+
+      '</section>';
+    }
+    if(status==='mission_ready'&&state.mission){
+      return '<section class="ff-card ff-mission-ready" data-first-flight data-first-flight-state="mission_ready" '+
+        'tabindex="-1" aria-labelledby="ff-title">'+
+        head+'<h2 class="ff-title" id="ff-title">Your First Mission is ready.</h2>'+
+        '<div class="ff-mission" aria-label="First Mission ready">'+
+          '<div class="ff-mission-k">First Mission</div>'+
+          '<h3>'+esc(state.mission.title)+'</h3>'+
+          '<p class="ff-mission-action">'+esc(state.mission.action)+'</p>'+
+        '</div>'+
+        '<p class="ff-readonly">Nothing has started yet. Your mission is ready to review.</p>'+live+
+      '</section>';
+    }
+    return '';
+  }
   function toggleEditor(button){
     if(!button||!button.closest)return false;
     var root=button.closest('.td-experiment'),editor=root&&root.querySelector('.td-exp-editor');
@@ -134,6 +192,7 @@
     renderProposal:renderProposal,
     renderActive:renderActive,
     renderClosed:renderClosed,
+    renderFirstFlight:renderFirstFlight,
     toggleEditor:toggleEditor,
     readEdits:readEdits,
     toggleOutcomes:toggleOutcomes

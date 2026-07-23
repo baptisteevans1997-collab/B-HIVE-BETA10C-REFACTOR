@@ -781,7 +781,7 @@
     function snapshot(){ return BHIVE.snapshot(); }
     function save(){
       syncState();
-      BHIVE.save(STORAGE_KEY);
+      var saved=BHIVE.save(STORAGE_KEY);
       localTs = BHIVE.localTs;
       refreshLevel();
       renderReport();
@@ -789,24 +789,42 @@
       renderBrain();
       renderToday();
       cloudPushSoon();
+      return saved;
     }
     function load(){
       var ok = BHIVE.load(STORAGE_KEY);
       bindState();
       return ok;
     }
-    function prepareFirstFlightStartup(hadStoredState){
+    function currentFirstFlightState(){
       var events=BHIVE.learning&&Array.isArray(BHIVE.learning.events)?
         BHIVE.learning.events:[];
       var reducer=BHIVE.experiments&&BHIVE.experiments.firstFlightState;
-      var state=typeof reducer==='function'?reducer(events):null;
+      return typeof reducer==='function'?reducer(events):null;
+    }
+    function prepareFirstFlightStartup(hadStoredState){
+      var reducer=BHIVE.experiments&&BHIVE.experiments.firstFlightState;
+      var state=currentFirstFlightState();
       if(hadStoredState||state||typeof reducer!=='function')return state;
       if(!BHIVE.recordEvent('first_flight_available',{payload:{version:1}}))return null;
-      state=reducer(BHIVE.learning.events);
+      state=currentFirstFlightState();
       if(!state||state.status!=='available')return null;
       UNLOCK_START.forEach(function(key){swarms[key]=[];});
       BHIVE.swarms=swarms;
       return state;
+    }
+    function persistFirstFlightEvent(type,details){
+      var beforeLearning, beforeLocalTs=BHIVE.localTs, event;
+      try{beforeLearning=JSON.parse(JSON.stringify(BHIVE.learning));}
+      catch(e){return {ok:false,reason:'state_unavailable'};}
+      event=BHIVE.recordEvent(type,details);
+      if(!event)return {ok:false,reason:'event_rejected'};
+      if(save()===true)return {ok:true,event:event};
+      BHIVE.learning=beforeLearning;
+      BHIVE.localTs=beforeLocalTs;
+      localTs=beforeLocalTs;
+      renderToday();
+      return {ok:false,reason:'save_failed'};
     }
 
     var defs=B.el('defs',{});
@@ -2844,7 +2862,19 @@
     function renderToday(){
       var el=document.getElementById('hive-today');
       if(!el)return;
-      var mv=nextMove(),now=Date.now(),events=(BHIVE.learning&&BHIVE.learning.events)||[];
+      var now=Date.now(),events=(BHIVE.learning&&BHIVE.learning.events)||[];
+      var firstFlight=currentFirstFlightState();
+      var firstFlightHTML=B.experimentUI&&B.experimentUI.renderFirstFlight?
+        B.experimentUI.renderFirstFlight(firstFlight):'';
+      if(firstFlightHTML){
+        currentTodayInsight=null;
+        currentTodayExperiment=null;
+        currentTodayReview=null;
+        el.innerHTML=firstFlightHTML;
+        updateAttentionMarker(null);
+        return;
+      }
+      var mv=nextMove();
       var hideAgentMove=mv&&typeof mv.label==='string'&&mv.label.indexOf('Evolve ')===0;
       /* status line */
       var status;
@@ -3112,7 +3142,117 @@
     var lb=document.getElementById('hive-log-btn');
     if(lb)lb.addEventListener('click',logCheckin);
     var todayEl=document.getElementById('hive-today');
+    var firstFlightBusy=false;
+    function firstFlightStepMessage(card){
+      var status=card&&card.getAttribute('data-first-flight-state');
+      if(status==='available')return 'Choose one foundation cell to begin.';
+      if(status==='cell_selected')return 'Question 1 of 2.';
+      if(status==='first_answer_recorded')return 'Question 2 of 2.';
+      if(status==='mission_ready')return 'Your two answers are safely staged.';
+      return '';
+    }
+    function focusFirstFlightStep(selector,value){
+      if(!todayEl)return;
+      var target=selector?todayEl.querySelector(selector):null;
+      if(!target)target=todayEl.querySelector('.ff-answer')||todayEl.querySelector('.ff-card');
+      if(target&&value!==undefined&&target.classList.contains('ff-answer')){
+        target.value=value;
+        var counter=todayEl.querySelector('.ff-counter');
+        if(counter)counter.textContent=target.value.length+' / 280';
+      }
+      if(target&&target.focus)target.focus();
+    }
+    function showFirstFlightError(message,selector,value){
+      if(!todayEl)return;
+      var status=todayEl.querySelector('.ff-status');
+      var input=todayEl.querySelector('.ff-answer');
+      if(status){status.textContent=message;status.classList.add('is-error');}
+      if(input)input.setAttribute('aria-invalid','true');
+      focusFirstFlightStep(selector,value);
+    }
+    function selectFirstFlightCell(button){
+      if(firstFlightBusy||!button)return;
+      var state=currentFirstFlightState(),key=button.getAttribute('data-cell-key');
+      if(!state||state.status!=='available'||!B.experiments.FIRST_FLIGHT[key])return;
+      firstFlightBusy=true;
+      button.disabled=true;
+      var stored=persistFirstFlightEvent('first_flight_cell_selected',{
+        cellKey:key,payload:{version:1}
+      });
+      firstFlightBusy=false;
+      if(!stored.ok){
+        showFirstFlightError(stored.reason==='save_failed'?
+          'We could not save that choice yet. Try again.':
+          'That choice could not be recorded. Try again.',
+          '.ff-cell-choice[data-cell-key="'+key+'"]');
+        return;
+      }
+      focusFirstFlightStep();
+    }
+    function submitFirstFlightAnswer(form){
+      if(firstFlightBusy||!form)return;
+      var state=currentFirstFlightState();
+      var question=parseInt(form.getAttribute('data-question'),10);
+      var expected=state&&state.status==='cell_selected'?1:
+        state&&state.status==='first_answer_recorded'?2:0;
+      var input=form.querySelector('.ff-answer');
+      if(!state||!input||question!==expected||form.getAttribute('data-cell-key')!==state.cellKey)return;
+      var collapsed=input.value.replace(/\s+/g,' ').trim();
+      if(!collapsed){
+        showFirstFlightError('Write a short answer before continuing.','.ff-answer',input.value);
+        return;
+      }
+      if(collapsed.length>280){
+        showFirstFlightError('Keep your answer to 280 characters or fewer.','.ff-answer',input.value);
+        return;
+      }
+      var answer=B.learningTools.normalizeFirstFlightAnswer(input.value);
+      if(!answer){
+        showFirstFlightError('That answer could not be recorded. Try again.','.ff-answer',input.value);
+        return;
+      }
+      firstFlightBusy=true;
+      var submit=form.querySelector('.ff-submit');
+      if(submit)submit.disabled=true;
+      var stored=persistFirstFlightEvent('first_flight_answered',{
+        cellKey:state.cellKey,
+        payload:{version:1,question:question,answer:answer}
+      });
+      firstFlightBusy=false;
+      if(!stored.ok){
+        showFirstFlightError(stored.reason==='save_failed'?
+          'We could not save that answer yet. Your words are still here—try again.':
+          'That answer could not be recorded. Try again.',
+          '.ff-answer',input.value);
+        return;
+      }
+      focusFirstFlightStep();
+    }
+    if(todayEl)todayEl.addEventListener('input',function(ev){
+      var input=ev.target&&ev.target.closest?ev.target.closest('.ff-answer'):null;
+      if(!input)return;
+      var card=input.closest('.ff-card'),counter=card&&card.querySelector('.ff-counter');
+      var status=card&&card.querySelector('.ff-status');
+      if(counter)counter.textContent=input.value.length+' / 280';
+      input.setAttribute('aria-invalid','false');
+      if(status){
+        status.classList.remove('is-error');
+        status.textContent=firstFlightStepMessage(card);
+      }
+    });
+    if(todayEl)todayEl.addEventListener('submit',function(ev){
+      var form=ev.target&&ev.target.closest?ev.target.closest('.ff-form'):null;
+      if(!form)return;
+      ev.preventDefault();
+      submitFirstFlightAnswer(form);
+    });
     if(todayEl)todayEl.addEventListener('click',function(ev){
+      var firstFlightChoice=ev.target&&ev.target.closest?
+        ev.target.closest('.ff-cell-choice'):null;
+      if(firstFlightChoice){
+        selectFirstFlightCell(firstFlightChoice);
+        return;
+      }
       var toggle=ev.target&&ev.target.closest?ev.target.closest('.td-evidence-toggle'):null;
       if(toggle){
         B.insightUI.toggleEvidence(toggle);
@@ -4022,6 +4162,13 @@ var TM=(function(){
   /* ── first-run guide / tutorial ── */
   (function(){
     var TOUR = window.BHIVE_DATA.TOUR;
+    function firstFlightIncomplete(){
+      var B=window.BHIVE,events=B&&B.learning&&Array.isArray(B.learning.events)?
+        B.learning.events:[];
+      var reducer=B&&B.experiments&&B.experiments.firstFlightState;
+      var state=typeof reducer==='function'?reducer(events):null;
+      return !!state&&state.status!=='mission_completed';
+    }
     function initTour(){
       var ov=document.getElementById('tour');
       if(!ov)return;
@@ -4052,7 +4199,7 @@ var TM=(function(){
       var help=document.getElementById('tour-open');
       if(help)help.addEventListener('click',function(){open(false);});
       var seen=false;try{seen=!!localStorage.getItem(STORE);}catch(e){console.warn('hive:',e);}
-      if(!seen)setTimeout(function(){open(true);},600);
+      if(!seen&&!firstFlightIncomplete())setTimeout(function(){open(true);},600);
     }
     if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initTour);
     else initTour();

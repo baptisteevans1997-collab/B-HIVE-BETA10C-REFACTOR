@@ -24,7 +24,8 @@
   var summary = document.getElementById('summary');
   var passed = 0, failed = 0, uncaught = [];
   var scenarios = [
-    'fresh','fresh-wide','progress','completed',
+    'fresh','fresh-wide','health-select','people-select','resume-selected',
+    'progress','mission-ready','save-failure','answer-save-failure','completed','legacy-auto',
     'evolve','widest','locked','migration'
   ];
   var reports = {};
@@ -47,8 +48,10 @@
     activeScenario = scenarios[index];
     activeFrame = frame;
     nextScenario = index + 1;
-    frame.style.width = activeScenario === 'widest' ? '1600px' : '390px';
-    frame.style.height = activeScenario === 'widest' ? '900px' : '844px';
+    frame.style.width = activeScenario === 'widest' || activeScenario === 'fresh-wide' ?
+      '1600px' : '390px';
+    frame.style.height = activeScenario === 'widest' || activeScenario === 'fresh-wide' ?
+      '900px' : '844px';
     frame.src = 'app-main-harness.html?scenario=' + activeScenario + '&run=' + Date.now();
     frame.title = 'controlled ' + activeScenario + ' scenario';
     document.body.appendChild(frame);
@@ -81,21 +84,19 @@
 
   function finish() {
     var fresh = reports.fresh, freshWide = reports['fresh-wide'],
-      progress = reports.progress, completed = reports.completed,
+      healthSelect = reports['health-select'], peopleSelect = reports['people-select'],
+      resumeSelected = reports['resume-selected'], progress = reports.progress,
+      missionReady = reports['mission-ready'], saveFailure = reports['save-failure'],
+      answerSaveFailure = reports['answer-save-failure'],
+      completed = reports.completed, legacyAuto = reports['legacy-auto'],
       evolve = reports.evolve, widest = reports.widest, locked = reports.locked,
       migration = reports.migration;
+    var allReports=scenarios.map(function(scenario){return reports[scenario];});
     test('app-main loads without an uncaught JavaScript error',
-      uncaught.length === 0 && fresh.errors.length === 0 && freshWide.errors.length === 0 &&
-        progress.errors.length === 0 && completed.errors.length === 0 &&
-        evolve.errors.length === 0 && widest.errors.length === 0 &&
-        locked.errors.length === 0 && migration.errors.length === 0,
-      uncaught.concat(fresh.errors, freshWide.errors, progress.errors, completed.errors,
-        evolve.errors, widest.errors, locked.errors, migration.errors).join('; '));
+      uncaught.length === 0 && allReports.every(function(report){return report.errors.length===0;}),
+      uncaught.concat.apply(uncaught,allReports.map(function(report){return report.errors;})).join('; '));
     test('deterministic state contains all 14 cells',
-      fresh.stateCount === 14 && freshWide.stateCount === 14 &&
-        progress.stateCount === 14 && completed.stateCount === 14 &&
-        evolve.stateCount === 14 && widest.stateCount === 14 && locked.stateCount === 14 &&
-        migration.stateCount === 14);
+      allReports.every(function(report){return report.stateCount===14;}));
     test('a genuinely fresh load becomes First Flight eligible in memory',
       fresh.firstFlightStartup && fresh.firstFlightStartup.status === 'available' &&
         freshWide.firstFlightStartup && freshWide.firstFlightStartup.status === 'available');
@@ -145,11 +146,128 @@
         fresh.firstFlightStartup.foundationVisible && fresh.firstFlightStartup.coreVisible &&
         freshWide.cellCount === 3 && freshWide.firstFlightStartup.exactFoundationUnlocks &&
         freshWide.firstFlightStartup.foundationVisible && freshWide.firstFlightStartup.coreVisible);
-    test('First Flight startup state activates no interface on fresh, resumable or completed Hives',
-      fresh.firstFlightStartup.interfaceInactive &&
-        freshWide.firstFlightStartup.interfaceInactive &&
-        progress.firstFlightStartup.interfaceInactive &&
-        completed.firstFlightStartup.interfaceInactive);
+    test('eligible fresh users see the exact Queen opening and exactly three foundation choices',
+      fresh.firstFlightStartup.interfacePresent && fresh.firstFlightFlow &&
+        fresh.firstFlightFlow.opening === 'What needs your attention most right now?' &&
+        fresh.firstFlightFlow.choices.join('|') === 'Life & Work|Health|People' &&
+        freshWide.firstFlightStartup.interfacePresent);
+    test('legacy and completed users do not see First Flight questions',
+      completed.firstFlightStartup.interfaceInactive &&
+        legacyAuto.firstFlightStartup.interfaceInactive &&
+        [evolve,widest,locked,migration].every(function(report){
+          return report.firstFlightStartup.interfaceInactive;
+        }));
+    test('cell selection creates one canonical event, saves once and focuses question one',
+      fresh.firstFlightFlow.selectionState === 'cell_selected' &&
+        fresh.firstFlightFlow.selectionEventCount === 1 &&
+        fresh.firstFlightFlow.selectionEventCanonical &&
+        fresh.firstFlightFlow.selectionSaved &&
+        fresh.firstFlightFlow.questionOneFocused);
+    test('every foundation choice renders its exact approved first question',
+      fresh.firstFlightFlow.questionOne ===
+        'What feels most important in your work or direction right now?' &&
+        healthSelect.firstFlightFlow.cellKey === 'health' &&
+        healthSelect.firstFlightFlow.questionOne ===
+          'How are your body and energy feeling right now?' &&
+        healthSelect.firstFlightFlow.selectionEventCount === 1 &&
+        healthSelect.firstFlightFlow.saveCalls === 1 &&
+        peopleSelect.firstFlightFlow.cellKey === 'people' &&
+        peopleSelect.firstFlightFlow.questionOne ===
+          'Which relationship or connection needs your attention most right now?' &&
+        peopleSelect.firstFlightFlow.selectionEventCount === 1);
+    test('question two appears only after answer one and uses the approved cell copy',
+      fresh.firstFlightFlow.questionTwo ===
+        'What is one small step you can take toward it today?' &&
+        fresh.firstFlightFlow.questionTwoFocused &&
+        peopleSelect.firstFlightFlow.questionTwo ===
+          'What is one small, respectful step you can take today?' &&
+        peopleSelect.firstFlightFlow.answerEventCount === 1 &&
+        peopleSelect.firstFlightFlow.saveCalls === 2);
+    test('answers are normalized, persisted once each and rapid repeat submissions stay idempotent',
+      fresh.firstFlightFlow.firstAnswer === 'Finish the first flight interface' &&
+        fresh.firstFlightFlow.firstAnswerSaved &&
+        fresh.firstFlightFlow.answerEventCount === 2 &&
+        fresh.firstFlightFlow.saveCalls === 3);
+    test('blank and over-280-character answers are rejected without saving or advancing',
+      fresh.firstFlightFlow.blankRejected && fresh.firstFlightFlow.longRejected);
+    test('mission_ready shows the deterministic title and second answer read-only',
+      fresh.firstFlightFlow.readyState === 'mission_ready' &&
+        fresh.firstFlightFlow.readySaved &&
+        fresh.firstFlightFlow.missionTitle === 'Make the first move' &&
+        fresh.firstFlightFlow.missionAction === 'Write one focused test' &&
+        fresh.firstFlightFlow.readyReadOnly &&
+        fresh.firstFlightFlow.readyFocused);
+    test('staged answers create no learning, experiment, strategy or completion effects',
+      fresh.firstFlightFlow.protectedStateUnchanged &&
+        fresh.firstFlightFlow.noLearningEvents &&
+        fresh.firstFlightFlow.noAcceptedEvents &&
+        fresh.firstFlightFlow.noCompletedEvents &&
+        fresh.firstFlightFlow.zeroStrategyEvidence &&
+        fresh.firstFlightFlow.completionOperationCalls === 0);
+    test('save failure rolls back live state, stays recoverable and creates no snapshot',
+      saveFailure.firstFlightFlow.status === 'available' &&
+        saveFailure.firstFlightFlow.selectionEventCount === 0 &&
+        saveFailure.firstFlightFlow.saveCalls === 1 &&
+        saveFailure.firstFlightFlow.storageAbsent &&
+        saveFailure.firstFlightFlow.protectedStateUnchanged &&
+        saveFailure.firstFlightFlow.openingStillVisible &&
+        saveFailure.firstFlightFlow.recoverableError &&
+        saveFailure.firstFlightFlow.focusReturned);
+    test('answer save failure restores question one, its text and the last persisted selection',
+      answerSaveFailure.firstFlightFlow.status === 'cell_selected' &&
+        answerSaveFailure.firstFlightFlow.selectionEventCount === 1 &&
+        answerSaveFailure.firstFlightFlow.answerEventCount === 0 &&
+        answerSaveFailure.firstFlightFlow.saveCalls === 2 &&
+        answerSaveFailure.firstFlightFlow.savedStatus === 'cell_selected' &&
+        answerSaveFailure.firstFlightFlow.protectedStateUnchanged &&
+        answerSaveFailure.firstFlightFlow.answerRestored &&
+        answerSaveFailure.firstFlightFlow.recoverableError &&
+        answerSaveFailure.firstFlightFlow.focusReturned);
+    test('reload after selection resumes at question one without a startup save',
+      resumeSelected.firstFlightFlow.status === 'cell_selected' &&
+        resumeSelected.firstFlightFlow.question ===
+          'What feels most important in your work or direction right now?' &&
+        resumeSelected.firstFlightFlow.eventsPreserved &&
+        resumeSelected.firstFlightFlow.startupSaveCalls === 0);
+    test('reload after answer one resumes at question two without a startup save',
+      progress.firstFlightFlow.status === 'first_answer_recorded' &&
+        progress.firstFlightFlow.question ===
+          'What is one small step you can take toward it today?' &&
+        progress.firstFlightFlow.eventsPreserved &&
+        progress.firstFlightFlow.startupSaveCalls === 0);
+    test('reload after answer two resumes at the same read-only deterministic mission',
+      missionReady.firstFlightFlow.status === 'mission_ready' &&
+        missionReady.firstFlightFlow.missionTitle === 'Make the first move' &&
+        missionReady.firstFlightFlow.missionAction === 'Complete one focused beta task' &&
+        missionReady.firstFlightFlow.readOnly &&
+        missionReady.firstFlightFlow.eventsPreserved &&
+        missionReady.firstFlightFlow.startupSaveCalls === 0);
+    test('automatic tour and beta profile defer only while First Flight is incomplete',
+      [fresh,resumeSelected,progress,missionReady].every(function(report){
+        return report.onboardingCoordination.automaticTourHidden &&
+          report.onboardingCoordination.tourFlagAbsent &&
+          !report.onboardingCoordination.profileCardPresent;
+      }) &&
+        !completed.onboardingCoordination.automaticTourHidden &&
+        completed.onboardingCoordination.profileCardPresent &&
+        !legacyAuto.onboardingCoordination.automaticTourHidden &&
+        legacyAuto.onboardingCoordination.profileCardPresent);
+    test('manual Help still opens the existing tour during First Flight',
+      fresh.onboardingCoordination.manualHelpOpened);
+    test('First Flight exposes a polite live region and moves focus with each step',
+      fresh.firstFlightFlow.liveRegion &&
+        fresh.firstFlightFlow.questionOneFocused &&
+        fresh.firstFlightFlow.questionTwoFocused &&
+        fresh.firstFlightFlow.readyFocused);
+    test('First Flight layout stays within the viewport at 390×844 and 1600×900',
+      fresh.firstFlightLayout && fresh.firstFlightLayout.cardWithinViewport &&
+        fresh.firstFlightLayout.choiceColumns === 1 &&
+        fresh.firstFlightLayout.frameWidth === 390 &&
+        fresh.firstFlightLayout.frameHeight === 844 &&
+        freshWide.firstFlightLayout && freshWide.firstFlightLayout.cardWithinViewport &&
+        freshWide.firstFlightLayout.choiceColumns === 3 &&
+        freshWide.firstFlightLayout.frameWidth === 1600 &&
+        freshWide.firstFlightLayout.frameHeight === 900);
     test('quiet-Hive startup behaviour matches at mobile and wide responsive widths',
       JSON.stringify({
         cells:fresh.cellCount,

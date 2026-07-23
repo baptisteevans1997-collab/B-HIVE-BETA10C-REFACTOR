@@ -151,8 +151,16 @@
     }
 
     function done(){ var result = readResult(); return result ? result.status : null; }
+    function firstFlightIncomplete(){
+      var B=window.BHIVE,events=B&&B.learning&&Array.isArray(B.learning.events)?
+        B.learning.events:[];
+      var reducer=B&&B.experiments&&B.experiments.firstFlightState;
+      var state=typeof reducer==='function'?reducer(events):null;
+      return !!state&&state.status!=='mission_completed';
+    }
 
     function mountCard(){
+      if (firstFlightIncomplete()) return;
       injectStyle();
       var host = document.getElementById('energy'); if (!host) return;
       if (document.getElementById('bhpr-card')) return;
