@@ -813,12 +813,20 @@
       BHIVE.swarms=swarms;
       return state;
     }
-    function persistFirstFlightEvent(type,details){
+    function persistFirstFlightEvent(type,details,expectedStatus){
       var beforeLearning, beforeLocalTs=BHIVE.localTs, event;
       try{beforeLearning=JSON.parse(JSON.stringify(BHIVE.learning));}
       catch(e){return {ok:false,reason:'state_unavailable'};}
       event=BHIVE.recordEvent(type,details);
       if(!event)return {ok:false,reason:'event_rejected'};
+      if(expectedStatus&&(!currentFirstFlightState()||
+         currentFirstFlightState().status!==expectedStatus)){
+        BHIVE.learning=beforeLearning;
+        BHIVE.localTs=beforeLocalTs;
+        localTs=beforeLocalTs;
+        renderToday();
+        return {ok:false,reason:'state_rejected'};
+      }
       if(save()===true)return {ok:true,event:event};
       BHIVE.learning=beforeLearning;
       BHIVE.localTs=beforeLocalTs;
@@ -3228,6 +3236,38 @@
       }
       focusFirstFlightStep();
     }
+    function beginFirstFlightMission(button){
+      if(firstFlightBusy||!button)return;
+      var state=currentFirstFlightState();
+      var mission=state&&state.status==='mission_ready'&&B.experimentUI&&
+        typeof B.experimentUI.firstFlightMissionForState==='function'?
+        B.experimentUI.firstFlightMissionForState(state):null;
+      var acceptedPayload=mission&&B.experiments&&
+        typeof B.experiments.decisionPayload==='function'?
+        B.experiments.decisionPayload(mission,'accepted'):null;
+      if(!mission||!acceptedPayload||acceptedPayload.decision!=='accepted'||
+         !B.experiments||typeof B.experiments.isFirstFlight!=='function'||
+         !B.experiments.isFirstFlight(acceptedPayload)){
+        showFirstFlightError(
+          'This mission could not be validated. Reload and try again.','.ff-begin');
+        return;
+      }
+      firstFlightBusy=true;
+      button.disabled=true;
+      var stored=persistFirstFlightEvent('experiment_accepted',{
+        cellKey:mission.cellKey,payload:acceptedPayload
+      },'mission_active');
+      firstFlightBusy=false;
+      if(!stored.ok){
+        button.disabled=false;
+        showFirstFlightError(stored.reason==='save_failed'?
+          'We could not save the mission yet. Try again.':
+          'The mission could not be started safely. Reload and try again.',
+          '.ff-begin');
+        return;
+      }
+      focusFirstFlightStep('[data-first-flight-state="mission_active"]');
+    }
     if(todayEl)todayEl.addEventListener('input',function(ev){
       var input=ev.target&&ev.target.closest?ev.target.closest('.ff-answer'):null;
       if(!input)return;
@@ -3247,6 +3287,12 @@
       submitFirstFlightAnswer(form);
     });
     if(todayEl)todayEl.addEventListener('click',function(ev){
+      var firstFlightBegin=ev.target&&ev.target.closest?
+        ev.target.closest('.ff-begin'):null;
+      if(firstFlightBegin){
+        beginFirstFlightMission(firstFlightBegin);
+        return;
+      }
       var firstFlightChoice=ev.target&&ev.target.closest?
         ev.target.closest('.ff-cell-choice'):null;
       if(firstFlightChoice){

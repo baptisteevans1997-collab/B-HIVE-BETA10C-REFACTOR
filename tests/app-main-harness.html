@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>B HIVE app-main controlled harness</title>
-<link rel="stylesheet" href="../css/app.css?first-flight-step3b">
+<link rel="stylesheet" href="../css/app.css?first-flight-step3c">
 <link rel="stylesheet" href="../css/beta-mobile-polish.css?navigation-consolidation">
 <link rel="stylesheet" href="../css/beta-overlays.css?navigation-consolidation">
 </head>
@@ -93,8 +93,10 @@
   var freshEligible = [
     'fresh','fresh-wide','health-select','people-select','save-failure','answer-save-failure'
   ].indexOf(scenario) >= 0;
-  var stagedFirstFlight = ['progress','completed','resume-selected','mission-ready']
-    .indexOf(scenario) >= 0;
+  var stagedFirstFlight = [
+    'progress','completed','resume-selected','mission-ready','mission-active','mission-active-wide',
+    'accept-save-failure'
+  ].indexOf(scenario) >= 0;
   var isolatedFirstFlight = freshEligible || stagedFirstFlight;
   var keys = ['lw','free','craft','money','career','growth','finance','health','people','identity','clients','ink','side','recruit'];
   var current = {};
@@ -166,7 +168,8 @@
     people:fixture.swarms.people||null
   });
   localStorage.removeItem('lw-brainmap-tour-v2');
-  if (['fresh','fresh-wide','progress','completed','resume-selected','mission-ready','legacy-auto']
+  if (['fresh','fresh-wide','progress','completed','resume-selected','mission-ready',
+      'mission-active','mission-active-wide','accept-save-failure','legacy-auto']
       .indexOf(scenario) < 0) {
     localStorage.setItem('lw-brainmap-tour-v2', '1');
   }
@@ -276,7 +279,10 @@
   'use strict';
   var scenario = new URLSearchParams(location.search).get('scenario') || 'widest';
   var storageKey = 'lw-brainmap-hive-v1';
-  var staged = ['progress','completed','resume-selected','mission-ready'].indexOf(scenario) >= 0;
+  var staged = [
+    'progress','completed','resume-selected','mission-ready','mission-active','mission-active-wide',
+    'accept-save-failure'
+  ].indexOf(scenario) >= 0;
   if (staged) {
     var fixture = JSON.parse(localStorage.getItem(storageKey));
     var B = window.BHIVE;
@@ -292,18 +298,23 @@
         payload:{version:1,question:1,answer:'Finishing the beta matters most'}
       });
     }
-    if (scenario === 'completed' || scenario === 'mission-ready') {
+    if (scenario === 'completed' || scenario === 'mission-ready' ||
+        scenario === 'mission-active' || scenario === 'mission-active-wide' ||
+        scenario === 'accept-save-failure') {
       B.recordEvent('first_flight_answered', {
         ts:ts+3,cellKey:'lw',
         payload:{version:1,question:2,answer:'Complete one focused beta task'}
       });
     }
-    if (scenario === 'completed') {
+    if (scenario === 'completed' || scenario === 'mission-active' ||
+        scenario === 'mission-active-wide') {
       var ready = B.experiments.firstFlightState(B.learning.events);
       B.recordEvent('experiment_accepted', {
         id:'evt_harness_first_flight_accepted',ts:ts+4,cellKey:'lw',
         payload:B.experiments.decisionPayload(ready.mission,'accepted')
       });
+    }
+    if (scenario === 'completed') {
       B.recordEvent('experiment_completed', {
         id:'evt_first_flight_v1_completed_lw',ts:ts+5,cellKey:'lw',
         payload:B.experiments.completionPayload(ready.mission,'completed')
@@ -317,24 +328,38 @@
     JSON.stringify((JSON.parse(stored).learning||{}).events||[]) : null;
   var originalSave = window.BHIVE.save;
   var originalComplete = window.BHIVE.completeFirstFlight;
+  var originalAddLearning = window.BHIVE.addLearning;
+  var originalUnlockFromAnswer = window.BHIVE.unlockFromAnswer;
   window.__HARNESS_SAVE_CALLS = 0;
   window.__HARNESS_COMPLETE_CALLS = 0;
+  window.__HARNESS_ADD_LEARNING_CALLS = 0;
+  window.__HARNESS_UNLOCK_CALLS = 0;
   window.__HARNESS_FAIL_SAVES = scenario === 'save-failure';
   window.__HARNESS_FAIL_ANSWER_SAVE = scenario === 'answer-save-failure';
+  window.__HARNESS_FAIL_ACCEPT_SAVE = scenario === 'accept-save-failure';
   window.BHIVE.save = function(storageKey){
     window.__HARNESS_SAVE_CALLS++;
     if(window.__HARNESS_FAIL_SAVES||
-      (window.__HARNESS_FAIL_ANSWER_SAVE&&window.__HARNESS_SAVE_CALLS>1))return false;
+      (window.__HARNESS_FAIL_ANSWER_SAVE&&window.__HARNESS_SAVE_CALLS>1)||
+      (window.__HARNESS_FAIL_ACCEPT_SAVE&&window.__HARNESS_SAVE_CALLS===1))return false;
     return originalSave.call(window.BHIVE,storageKey);
   };
   window.BHIVE.completeFirstFlight = function(){
     window.__HARNESS_COMPLETE_CALLS++;
     return originalComplete.apply(window.BHIVE,arguments);
   };
+  window.BHIVE.addLearning = function(){
+    window.__HARNESS_ADD_LEARNING_CALLS++;
+    return originalAddLearning.apply(window.BHIVE,arguments);
+  };
+  window.BHIVE.unlockFromAnswer = function(){
+    window.__HARNESS_UNLOCK_CALLS++;
+    return originalUnlockFromAnswer.apply(window.BHIVE,arguments);
+  };
 }());
 </script>
-<script src="../js/ui-experiments.js?first-flight-step3b"></script>
-<script src="../js/app-main.js?first-flight-step3b"></script>
+<script src="../js/ui-experiments.js?first-flight-step3c"></script>
+<script src="../js/app-main.js?first-flight-step3c"></script>
 <script src="../js/beta-profile-data.js"></script>
 <script src="../js/beta-profile.js?first-flight-step3b"></script>
 <script>
@@ -343,7 +368,8 @@
   var deadline = Date.now() + 2000;
   var scenarioName = new URLSearchParams(location.search).get('scenario') || 'widest';
   var settleAt = ['fresh','fresh-wide','progress','completed','resume-selected',
-    'mission-ready','legacy-auto'].indexOf(scenarioName) >= 0 ? Date.now() + 700 : 0;
+    'mission-ready','mission-active','mission-active-wide','accept-save-failure','legacy-auto']
+    .indexOf(scenarioName) >= 0 ? Date.now() + 700 : 0;
 
   function postFailure(message) {
     parent.postMessage({type:'bhive-app-main-result',result:{
@@ -365,7 +391,8 @@
     var readyScenario = new URLSearchParams(location.search).get('scenario');
     var foundationOnly = [
       'fresh','fresh-wide','health-select','people-select','save-failure','answer-save-failure',
-      'locked','progress','completed','resume-selected','mission-ready'
+      'locked','progress','completed','resume-selected','mission-ready','mission-active',
+      'mission-active-wide','accept-save-failure'
     ].indexOf(readyScenario) >= 0;
     var expectedRenderedCells = foundationOnly ? 3 : readyScenario === 'migration' ? 6 : 14;
     return Date.now() >= settleAt && document.readyState !== 'loading' &&
@@ -455,6 +482,7 @@
         status:firstFlightState&&firstFlightState.status,
         cellKey:firstFlightState&&firstFlightState.cellKey,
         answers:firstFlightState&&firstFlightState.answers,
+        acceptedEventId:firstFlightState&&firstFlightState.acceptedEventId,
         completedEventId:firstFlightState&&firstFlightState.completedEventId,
         availabilityCount:window.BHIVE.learning.events.filter(function(event){
           return event.type === 'first_flight_available';
@@ -507,6 +535,8 @@
         result.firstFlightLayout={
           cardWithinViewport:ffInitialRect.left>=0&&
             ffInitialRect.right<=document.documentElement.clientWidth,
+          horizontalOverflow:document.documentElement.scrollWidth>
+            document.documentElement.clientWidth,
           choiceColumns:ffChoiceStyle?
             ffChoiceStyle.gridTemplateColumns.split(' ').filter(Boolean).length:0,
           viewportWidth:document.documentElement.clientWidth,
@@ -528,7 +558,10 @@
           learnings:window.BHIVE.learnings,
           questions:window.BHIVE.questions,
           swarms:window.BHIVE.swarms,
-          unlocks:window.BHIVE.unlocks
+          unlocks:window.BHIVE.unlocks,
+          agents:window.BHIVE.agents,
+          history:window.BHIVE.history,
+          playbook:window.BHIVE.playbook
         });
       }
       function ffSetAnswer(value){
@@ -621,8 +654,9 @@
           readySaved:ffReadySaved&&ffReadySaved.status==='mission_ready',
           missionTitle:ffReadyState&&ffReadyState.mission&&ffReadyState.mission.title,
           missionAction:ffReadyState&&ffReadyState.mission&&ffReadyState.mission.action,
-          readyReadOnly:!!ffReadyCard&&
-            ffReadyCard.querySelectorAll('button,textarea,input,select').length===0,
+          readyBeginOnly:!!ffReadyCard&&
+            ffReadyCard.querySelectorAll('button,textarea,input,select').length===1&&
+            !!ffReadyCard.querySelector('.ff-begin'),
           readyFocused:document.activeElement===ffReadyCard,
           answerEventCount:ffEventCount('first_flight_answered'),
           saveCalls:window.__HARNESS_SAVE_CALLS-ffSaveStart,
@@ -656,7 +690,7 @@
           result.firstFlightFlow.answerEventCount=ffEventCount('first_flight_answered');
           result.firstFlightFlow.saveCalls=window.__HARNESS_SAVE_CALLS-ffSelectSaveStart;
         }
-      }else if(scenario==='resume-selected'||scenario==='progress'||scenario==='mission-ready'){
+      }else if(scenario==='resume-selected'||scenario==='progress'){
         var ffResumeState=ffState();
         result.firstFlightFlow={
           status:ffResumeState&&ffResumeState.status,
@@ -669,6 +703,150 @@
           eventsPreserved:window.__HARNESS_STORED_EVENTS===
             JSON.stringify(window.BHIVE.learning.events),
           startupSaveCalls:window.__HARNESS_SAVE_CALLS
+        };
+      }else if(scenario==='mission-ready'){
+        var ffMissionReady=ffState();
+        var ffBegin=document.querySelector('#hive-today .ff-begin');
+        var ffReadyBefore=ffProtectedSnapshot();
+        var ffAnswerEventsBefore=JSON.stringify(window.BHIVE.learning.events.filter(function(event){
+          return event.type==='first_flight_answered';
+        }));
+        var ffAcceptSaveStart=window.__HARNESS_SAVE_CALLS;
+        var ffExpectedAcceptance=window.BHIVE.experiments.decisionPayload(
+          ffMissionReady.mission,'accepted');
+        var ffReadyTitle=(document.querySelector('#hive-today .ff-mission h3')||{}).textContent||'';
+        var ffReadyAction=(document.querySelector('#hive-today .ff-mission-action')||{}).textContent||'';
+        var ffReadyControlCount=document.querySelector('#hive-today [data-first-flight]')
+          .querySelectorAll('button,textarea,input,select').length;
+        var ffReadyBeginCount=document.querySelectorAll('#hive-today .ff-begin').length;
+        ffBegin.click();
+        ffBegin.click();
+        var ffMissionActive=ffState(),ffMissionActiveSaved=ffSavedState();
+        var ffAcceptedEvents=window.BHIVE.learning.events.filter(function(event){
+          return event.type==='experiment_accepted';
+        });
+        var ffActiveCard=document.querySelector(
+          '#hive-today [data-first-flight-state="mission_active"]');
+        var ffActiveStats=window.BHIVE.experiments.strategyStats(
+          window.BHIVE.learning.events,ffMissionActive.mission.strategyId,'lw');
+        result.firstFlightFlow={
+          initialStatus:ffMissionReady&&ffMissionReady.status,
+          beginCount:ffReadyBeginCount,
+          beginText:ffBegin&&ffBegin.textContent,
+          readyTitle:ffReadyTitle,
+          readyAction:ffReadyAction,
+          readyControlCount:ffReadyControlCount,
+          activeStatus:ffMissionActive&&ffMissionActive.status,
+          activeSaved:ffMissionActiveSaved&&ffMissionActiveSaved.status==='mission_active',
+          activeHeading:(document.querySelector('#hive-today .ff-title')||{}).textContent||'',
+          activeTitle:(document.querySelector('#hive-today .ff-mission h3')||{}).textContent||'',
+          activeAction:(document.querySelector('#hive-today .ff-mission-action')||{}).textContent||'',
+          activeInProgress:(document.querySelector('#hive-today .ff-progress')||{}).textContent||'',
+          activeNoControls:!!ffActiveCard&&
+            ffActiveCard.querySelectorAll('button,textarea,input,select').length===0,
+          activeFocused:document.activeElement===ffActiveCard,
+          interfaceCount:document.querySelectorAll('#hive-today [data-first-flight]').length,
+          acceptedEventCount:ffAcceptedEvents.length,
+          canonicalAcceptance:ffAcceptedEvents.length===1&&
+            ffAcceptedEvents[0].cellKey==='lw'&&
+            JSON.stringify(ffAcceptedEvents[0].payload)===JSON.stringify(ffExpectedAcceptance),
+          saveCalls:window.__HARNESS_SAVE_CALLS-ffAcceptSaveStart,
+          protectedStateUnchanged:ffReadyBefore===ffProtectedSnapshot(),
+          answerEventsUnchanged:ffAnswerEventsBefore===JSON.stringify(
+            window.BHIVE.learning.events.filter(function(event){
+              return event.type==='first_flight_answered';
+            })),
+          noLearningEvents:ffEventCount('learning_added')===0,
+          addLearningCalls:window.__HARNESS_ADD_LEARNING_CALLS,
+          unlockCalls:window.__HARNESS_UNLOCK_CALLS,
+          noCompletedEvents:ffEventCount('experiment_completed')===0,
+          zeroStrategyEvidence:ffActiveStats.completed===0&&ffActiveStats.declined===0&&
+            ffActiveStats.score===0,
+          completionOperationCalls:window.__HARNESS_COMPLETE_CALLS
+        };
+      }else if(scenario==='mission-active'||scenario==='mission-active-wide'){
+        var ffReloadActive=ffState();
+        var ffReloadActiveCard=document.querySelector(
+          '#hive-today [data-first-flight-state="mission_active"]');
+        var ffActiveTourHelp=document.getElementById('tour-open');
+        if(ffActiveTourHelp)ffActiveTourHelp.click();
+        result.onboardingCoordination.manualHelpOpened=!!ffTour&&!ffTour.hidden;
+        var ffActiveTourClose=ffTour&&ffTour.querySelector('.tr-skip');
+        if(ffActiveTourClose)ffActiveTourClose.click();
+        result.firstFlightFlow={
+          status:ffReloadActive&&ffReloadActive.status,
+          acceptedEventId:ffReloadActive&&ffReloadActive.acceptedEventId,
+          acceptedEventCount:ffEventCount('experiment_accepted'),
+          title:(document.querySelector('#hive-today .ff-mission h3')||{}).textContent||'',
+          action:(document.querySelector('#hive-today .ff-mission-action')||{}).textContent||'',
+          heading:(document.querySelector('#hive-today .ff-title')||{}).textContent||'',
+          inProgress:(document.querySelector('#hive-today .ff-progress')||{}).textContent||'',
+          noControls:!!ffReloadActiveCard&&
+            ffReloadActiveCard.querySelectorAll('button,textarea,input,select').length===0,
+          interfaceCount:document.querySelectorAll('#hive-today [data-first-flight]').length,
+          eventsPreserved:window.__HARNESS_STORED_EVENTS===
+            JSON.stringify(window.BHIVE.learning.events),
+          startupSaveCalls:window.__HARNESS_SAVE_CALLS,
+          completionOperationCalls:window.__HARNESS_COMPLETE_CALLS,
+          addLearningCalls:window.__HARNESS_ADD_LEARNING_CALLS,
+          unlockCalls:window.__HARNESS_UNLOCK_CALLS
+        };
+      }else if(scenario==='accept-save-failure'){
+        var ffAcceptFailureReady=ffState();
+        var ffAcceptFailureBefore=ffProtectedSnapshot();
+        var ffAcceptFailureEvents=JSON.stringify(window.BHIVE.learning.events);
+        var ffAcceptFailureStored=localStorage.getItem(storageKey);
+        var ffAcceptFailureAnswers=JSON.stringify(window.BHIVE.learning.events.filter(function(event){
+          return event.type==='first_flight_answered';
+        }));
+        var ffAcceptFailureExpected=window.BHIVE.experiments.decisionPayload(
+          ffAcceptFailureReady.mission,'accepted');
+        var ffAcceptFailureButton=document.querySelector('#hive-today .ff-begin');
+        ffAcceptFailureButton.click();
+        var ffAfterFailedAccept=ffState(),ffFailedSaved=ffSavedState();
+        var ffRetryButton=document.querySelector('#hive-today .ff-begin');
+        var ffFailureError=/could not save/.test(
+          (document.querySelector('#hive-today .ff-status')||{}).textContent||'');
+        var ffFailureLive=document.querySelector(
+          '#hive-today .ff-status[role="status"][aria-live="polite"][aria-atomic="true"]');
+        var ffFailureFocus=document.activeElement===ffRetryButton;
+        var ffFailureAcceptedCount=ffEventCount('experiment_accepted');
+        var ffFailureEventsRestored=ffAcceptFailureEvents===
+          JSON.stringify(window.BHIVE.learning.events);
+        var ffFailureStoredRestored=ffAcceptFailureStored===localStorage.getItem(storageKey);
+        ffRetryButton.click();
+        var ffAfterRetry=ffState(),ffRetrySaved=ffSavedState();
+        var ffRetryAccepted=window.BHIVE.learning.events.filter(function(event){
+          return event.type==='experiment_accepted';
+        });
+        var ffRetryActiveCard=document.querySelector(
+          '#hive-today [data-first-flight-state="mission_active"]');
+        result.firstFlightFlow={
+          failedStatus:ffAfterFailedAccept&&ffAfterFailedAccept.status,
+          failedSavedStatus:ffFailedSaved&&ffFailedSaved.status,
+          failedAcceptedEventCount:ffFailureAcceptedCount,
+          failureError:ffFailureError,
+          failureLiveRegion:!!ffFailureLive&&ffFailureLive.classList.contains('is-error'),
+          failureFocus:ffFailureFocus,
+          failureEventsRestored:ffFailureEventsRestored,
+          failureStoredRestored:ffFailureStoredRestored,
+          retryStatus:ffAfterRetry&&ffAfterRetry.status,
+          retrySaved:ffRetrySaved&&ffRetrySaved.status==='mission_active',
+          retryAcceptedEventCount:ffRetryAccepted.length,
+          retryCanonical:ffRetryAccepted.length===1&&
+            JSON.stringify(ffRetryAccepted[0].payload)===JSON.stringify(ffAcceptFailureExpected),
+          saveCalls:window.__HARNESS_SAVE_CALLS,
+          protectedStateUnchanged:ffAcceptFailureBefore===ffProtectedSnapshot(),
+          answerEventsUnchanged:ffAcceptFailureAnswers===JSON.stringify(
+            window.BHIVE.learning.events.filter(function(event){
+              return event.type==='first_flight_answered';
+            })),
+          noLearningEvents:ffEventCount('learning_added')===0,
+          addLearningCalls:window.__HARNESS_ADD_LEARNING_CALLS,
+          unlockCalls:window.__HARNESS_UNLOCK_CALLS,
+          noCompletedEvents:ffEventCount('experiment_completed')===0,
+          completionOperationCalls:window.__HARNESS_COMPLETE_CALLS,
+          retryFocused:document.activeElement===ffRetryActiveCard
         };
       }else if(scenario==='save-failure'){
         var ffFailureBefore=ffProtectedSnapshot();

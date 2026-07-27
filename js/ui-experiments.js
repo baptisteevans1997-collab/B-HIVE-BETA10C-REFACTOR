@@ -102,12 +102,24 @@
     if(state.status==='cell_selected')return 'Question 1 of 2.';
     if(state.status==='first_answer_recorded')return 'Question 2 of 2.';
     if(state.status==='mission_ready')return 'Your two answers are safely staged.';
+    if(state.status==='mission_active')return 'First Mission in progress.';
     return '';
+  }
+  function firstFlightMissionForState(state){
+    if(!state||(state.status!=='mission_ready'&&state.status!=='mission_active')||
+       !state.mission||!Array.isArray(state.answers)||state.answers.length!==2||
+       !B.experiments||typeof B.experiments.firstFlightMission!=='function'||
+       typeof B.experiments.isFirstFlight!=='function')return null;
+    var mission=B.experiments.firstFlightMission(
+      state.cellKey,state.answers,state.mission.createdAt);
+    if(!mission||!B.experiments.isFirstFlight(mission))return null;
+    try{return JSON.stringify(mission)===JSON.stringify(state.mission)?mission:null;}
+    catch(e){return null;}
   }
   function renderFirstFlight(state){
     if(!state||!B.experiments||!B.experiments.FIRST_FLIGHT)return '';
     var status=state.status,cell=state.cellKey&&B.experiments.FIRST_FLIGHT[state.cellKey];
-    var label=FIRST_FLIGHT_LABELS[state.cellKey]||'',questionNumber,question,inputId;
+    var label=FIRST_FLIGHT_LABELS[state.cellKey]||'',questionNumber,question,inputId,mission;
     var head='<div class="ff-k">Queen <span aria-hidden="true">&middot;</span> First Flight</div>';
     var live='<div class="ff-status" id="ff-status" role="status" aria-live="polite" aria-atomic="true">'+
       esc(firstFlightStatus(state))+'</div>';
@@ -139,16 +151,31 @@
         '</form>'+live+
       '</section>';
     }
-    if(status==='mission_ready'&&state.mission){
+    mission=firstFlightMissionForState(state);
+    if(status==='mission_ready'&&mission){
       return '<section class="ff-card ff-mission-ready" data-first-flight data-first-flight-state="mission_ready" '+
         'tabindex="-1" aria-labelledby="ff-title">'+
         head+'<h2 class="ff-title" id="ff-title">Your First Mission is ready.</h2>'+
         '<div class="ff-mission" aria-label="First Mission ready">'+
           '<div class="ff-mission-k">First Mission</div>'+
-          '<h3>'+esc(state.mission.title)+'</h3>'+
-          '<p class="ff-mission-action">'+esc(state.mission.action)+'</p>'+
+          '<h3>'+esc(mission.title)+'</h3>'+
+          '<p class="ff-mission-action">'+esc(mission.action)+'</p>'+
         '</div>'+
-        '<p class="ff-readonly">Nothing has started yet. Your mission is ready to review.</p>'+live+
+        '<p class="ff-readonly">Nothing has started yet. Your mission is ready to review.</p>'+
+        '<button class="ff-begin" type="button">Begin First Mission</button>'+live+
+      '</section>';
+    }
+    if(status==='mission_active'&&mission){
+      return '<section class="ff-card ff-mission-active" data-first-flight data-first-flight-state="mission_active" '+
+        'tabindex="-1" aria-labelledby="ff-title">'+
+        head+'<h2 class="ff-title" id="ff-title">Your First Mission is active.</h2>'+
+        '<div class="ff-mission" aria-label="First Mission in progress">'+
+          '<div class="ff-mission-k">First Mission</div>'+
+          '<div class="ff-progress">In progress</div>'+
+          '<h3>'+esc(mission.title)+'</h3>'+
+          '<p class="ff-mission-action">'+esc(mission.action)+'</p>'+
+        '</div>'+
+        '<p class="ff-readonly">Take the step when you are ready. Completion comes later.</p>'+live+
       '</section>';
     }
     return '';
@@ -193,6 +220,7 @@
     renderActive:renderActive,
     renderClosed:renderClosed,
     renderFirstFlight:renderFirstFlight,
+    firstFlightMissionForState:firstFlightMissionForState,
     toggleEditor:toggleEditor,
     readEdits:readEdits,
     toggleOutcomes:toggleOutcomes

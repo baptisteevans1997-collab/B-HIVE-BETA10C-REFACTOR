@@ -25,7 +25,8 @@
   var passed = 0, failed = 0, uncaught = [];
   var scenarios = [
     'fresh','fresh-wide','health-select','people-select','resume-selected',
-    'progress','mission-ready','save-failure','answer-save-failure','completed','legacy-auto',
+    'progress','mission-ready','mission-active','mission-active-wide','accept-save-failure',
+    'save-failure','answer-save-failure','completed','legacy-auto',
     'evolve','widest','locked','migration'
   ];
   var reports = {};
@@ -48,9 +49,11 @@
     activeScenario = scenarios[index];
     activeFrame = frame;
     nextScenario = index + 1;
-    frame.style.width = activeScenario === 'widest' || activeScenario === 'fresh-wide' ?
+    frame.style.width = activeScenario === 'widest' || activeScenario === 'fresh-wide' ||
+      activeScenario === 'mission-active-wide' ?
       '1600px' : '390px';
-    frame.style.height = activeScenario === 'widest' || activeScenario === 'fresh-wide' ?
+    frame.style.height = activeScenario === 'widest' || activeScenario === 'fresh-wide' ||
+      activeScenario === 'mission-active-wide' ?
       '900px' : '844px';
     frame.src = 'app-main-harness.html?scenario=' + activeScenario + '&run=' + Date.now();
     frame.title = 'controlled ' + activeScenario + ' scenario';
@@ -86,7 +89,9 @@
     var fresh = reports.fresh, freshWide = reports['fresh-wide'],
       healthSelect = reports['health-select'], peopleSelect = reports['people-select'],
       resumeSelected = reports['resume-selected'], progress = reports.progress,
-      missionReady = reports['mission-ready'], saveFailure = reports['save-failure'],
+      missionReady = reports['mission-ready'], missionActive = reports['mission-active'],
+      missionActiveWide = reports['mission-active-wide'],
+      acceptSaveFailure = reports['accept-save-failure'], saveFailure = reports['save-failure'],
       answerSaveFailure = reports['answer-save-failure'],
       completed = reports.completed, legacyAuto = reports['legacy-auto'],
       evolve = reports.evolve, widest = reports.widest, locked = reports.locked,
@@ -190,12 +195,12 @@
         fresh.firstFlightFlow.saveCalls === 3);
     test('blank and over-280-character answers are rejected without saving or advancing',
       fresh.firstFlightFlow.blankRejected && fresh.firstFlightFlow.longRejected);
-    test('mission_ready shows the deterministic title and second answer read-only',
+    test('mission_ready shows the deterministic mission with exactly one Begin action',
       fresh.firstFlightFlow.readyState === 'mission_ready' &&
         fresh.firstFlightFlow.readySaved &&
         fresh.firstFlightFlow.missionTitle === 'Make the first move' &&
         fresh.firstFlightFlow.missionAction === 'Write one focused test' &&
-        fresh.firstFlightFlow.readyReadOnly &&
+        fresh.firstFlightFlow.readyBeginOnly &&
         fresh.firstFlightFlow.readyFocused);
     test('staged answers create no learning, experiment, strategy or completion effects',
       fresh.firstFlightFlow.protectedStateUnchanged &&
@@ -235,15 +240,77 @@
           'What is one small step you can take toward it today?' &&
         progress.firstFlightFlow.eventsPreserved &&
         progress.firstFlightFlow.startupSaveCalls === 0);
-    test('reload after answer two resumes at the same read-only deterministic mission',
-      missionReady.firstFlightFlow.status === 'mission_ready' &&
-        missionReady.firstFlightFlow.missionTitle === 'Make the first move' &&
-        missionReady.firstFlightFlow.missionAction === 'Complete one focused beta task' &&
-        missionReady.firstFlightFlow.readOnly &&
-        missionReady.firstFlightFlow.eventsPreserved &&
-        missionReady.firstFlightFlow.startupSaveCalls === 0);
+    test('reload after answer two exposes only the matching deterministic Begin action',
+      missionReady.firstFlightFlow.initialStatus === 'mission_ready' &&
+        missionReady.firstFlightFlow.readyTitle === 'Make the first move' &&
+        missionReady.firstFlightFlow.readyAction === 'Complete one focused beta task' &&
+        missionReady.firstFlightFlow.beginCount === 1 &&
+        missionReady.firstFlightFlow.beginText === 'Begin First Mission' &&
+        missionReady.firstFlightFlow.readyControlCount === 1);
+    test('beginning the mission records one canonical acceptance, saves once and is idempotent',
+      missionReady.firstFlightFlow.activeStatus === 'mission_active' &&
+        missionReady.firstFlightFlow.activeSaved &&
+        missionReady.firstFlightFlow.acceptedEventCount === 1 &&
+        missionReady.firstFlightFlow.canonicalAcceptance &&
+        missionReady.firstFlightFlow.saveCalls === 1);
+    test('mission_active presents the exact read-only active mission without lifecycle controls',
+      missionReady.firstFlightFlow.activeHeading === 'Your First Mission is active.' &&
+        missionReady.firstFlightFlow.activeTitle === 'Make the first move' &&
+        missionReady.firstFlightFlow.activeAction === 'Complete one focused beta task' &&
+        missionReady.firstFlightFlow.activeInProgress === 'In progress' &&
+        missionReady.firstFlightFlow.activeNoControls &&
+        missionReady.firstFlightFlow.activeFocused &&
+        missionReady.firstFlightFlow.interfaceCount === 1);
+    test('mission acceptance has no learning, completion, evidence, bee, unlock or reward effects',
+      missionReady.firstFlightFlow.protectedStateUnchanged &&
+        missionReady.firstFlightFlow.answerEventsUnchanged &&
+        missionReady.firstFlightFlow.noLearningEvents &&
+        missionReady.firstFlightFlow.addLearningCalls === 0 &&
+        missionReady.firstFlightFlow.unlockCalls === 0 &&
+        missionReady.firstFlightFlow.noCompletedEvents &&
+        missionReady.firstFlightFlow.zeroStrategyEvidence &&
+        missionReady.firstFlightFlow.completionOperationCalls === 0);
+    test('acceptance save failure restores live and persisted mission_ready state for a safe retry',
+      acceptSaveFailure.firstFlightFlow.failedStatus === 'mission_ready' &&
+        acceptSaveFailure.firstFlightFlow.failedSavedStatus === 'mission_ready' &&
+        acceptSaveFailure.firstFlightFlow.failedAcceptedEventCount === 0 &&
+        acceptSaveFailure.firstFlightFlow.failureEventsRestored &&
+        acceptSaveFailure.firstFlightFlow.failureStoredRestored &&
+        acceptSaveFailure.firstFlightFlow.failureError &&
+        acceptSaveFailure.firstFlightFlow.failureLiveRegion &&
+        acceptSaveFailure.firstFlightFlow.failureFocus);
+    test('retry after acceptance save failure creates one canonical active mission and no side effects',
+      acceptSaveFailure.firstFlightFlow.retryStatus === 'mission_active' &&
+        acceptSaveFailure.firstFlightFlow.retrySaved &&
+        acceptSaveFailure.firstFlightFlow.retryAcceptedEventCount === 1 &&
+        acceptSaveFailure.firstFlightFlow.retryCanonical &&
+        acceptSaveFailure.firstFlightFlow.saveCalls === 2 &&
+        acceptSaveFailure.firstFlightFlow.protectedStateUnchanged &&
+        acceptSaveFailure.firstFlightFlow.answerEventsUnchanged &&
+        acceptSaveFailure.firstFlightFlow.noLearningEvents &&
+        acceptSaveFailure.firstFlightFlow.addLearningCalls === 0 &&
+        acceptSaveFailure.firstFlightFlow.unlockCalls === 0 &&
+        acceptSaveFailure.firstFlightFlow.noCompletedEvents &&
+        acceptSaveFailure.firstFlightFlow.completionOperationCalls === 0 &&
+        acceptSaveFailure.firstFlightFlow.retryFocused);
+    test('reload resumes the accepted mission without duplication or startup persistence',
+      [missionActive,missionActiveWide].every(function(report){
+        return report.firstFlightFlow.status === 'mission_active' &&
+          report.firstFlightFlow.acceptedEventId === 'evt_harness_first_flight_accepted' &&
+          report.firstFlightFlow.acceptedEventCount === 1 &&
+          report.firstFlightFlow.heading === 'Your First Mission is active.' &&
+          report.firstFlightFlow.title === 'Make the first move' &&
+          report.firstFlightFlow.action === 'Complete one focused beta task' &&
+          report.firstFlightFlow.inProgress === 'In progress' &&
+          report.firstFlightFlow.noControls && report.firstFlightFlow.interfaceCount === 1 &&
+          report.firstFlightFlow.eventsPreserved && report.firstFlightFlow.startupSaveCalls === 0 &&
+          report.firstFlightFlow.completionOperationCalls === 0 &&
+          report.firstFlightFlow.addLearningCalls === 0 &&
+          report.firstFlightFlow.unlockCalls === 0;
+      }));
     test('automatic tour and beta profile defer only while First Flight is incomplete',
-      [fresh,resumeSelected,progress,missionReady].every(function(report){
+      [fresh,resumeSelected,progress,missionReady,missionActive,missionActiveWide,
+        acceptSaveFailure].every(function(report){
         return report.onboardingCoordination.automaticTourHidden &&
           report.onboardingCoordination.tourFlagAbsent &&
           !report.onboardingCoordination.profileCardPresent;
@@ -253,21 +320,37 @@
         !legacyAuto.onboardingCoordination.automaticTourHidden &&
         legacyAuto.onboardingCoordination.profileCardPresent);
     test('manual Help still opens the existing tour during First Flight',
-      fresh.onboardingCoordination.manualHelpOpened);
+      fresh.onboardingCoordination.manualHelpOpened &&
+        missionActive.onboardingCoordination.manualHelpOpened);
     test('First Flight exposes a polite live region and moves focus with each step',
       fresh.firstFlightFlow.liveRegion &&
         fresh.firstFlightFlow.questionOneFocused &&
         fresh.firstFlightFlow.questionTwoFocused &&
-        fresh.firstFlightFlow.readyFocused);
+        fresh.firstFlightFlow.readyFocused &&
+        missionReady.firstFlightFlow.activeFocused &&
+        acceptSaveFailure.firstFlightFlow.failureFocus &&
+        acceptSaveFailure.firstFlightFlow.retryFocused);
     test('First Flight layout stays within the viewport at 390×844 and 1600×900',
       fresh.firstFlightLayout && fresh.firstFlightLayout.cardWithinViewport &&
+        !fresh.firstFlightLayout.horizontalOverflow &&
         fresh.firstFlightLayout.choiceColumns === 1 &&
         fresh.firstFlightLayout.frameWidth === 390 &&
         fresh.firstFlightLayout.frameHeight === 844 &&
         freshWide.firstFlightLayout && freshWide.firstFlightLayout.cardWithinViewport &&
+        !freshWide.firstFlightLayout.horizontalOverflow &&
         freshWide.firstFlightLayout.choiceColumns === 3 &&
         freshWide.firstFlightLayout.frameWidth === 1600 &&
         freshWide.firstFlightLayout.frameHeight === 900);
+    test('active mission layout has no horizontal overflow at 390×844 and 1600×900',
+      missionActive.firstFlightLayout && missionActive.firstFlightLayout.cardWithinViewport &&
+        !missionActive.firstFlightLayout.horizontalOverflow &&
+        missionActive.firstFlightLayout.frameWidth === 390 &&
+        missionActive.firstFlightLayout.frameHeight === 844 &&
+        missionActiveWide.firstFlightLayout &&
+        missionActiveWide.firstFlightLayout.cardWithinViewport &&
+        !missionActiveWide.firstFlightLayout.horizontalOverflow &&
+        missionActiveWide.firstFlightLayout.frameWidth === 1600 &&
+        missionActiveWide.firstFlightLayout.frameHeight === 900);
     test('quiet-Hive startup behaviour matches at mobile and wide responsive widths',
       JSON.stringify({
         cells:fresh.cellCount,

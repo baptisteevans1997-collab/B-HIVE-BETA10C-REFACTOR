@@ -507,22 +507,51 @@
         box.querySelector('.ff-form').getAttribute('data-question')==='2';
     });
   });
-  test('First Flight mission-ready UI is deterministic, read-only and has no lifecycle controls',function(){
+  test('First Flight mission-ready UI has one validated Begin action and no other lifecycle controls',function(){
     var state=X.firstFlightState(firstFlightProgress('people'));
     box.innerHTML=U.renderFirstFlight(state);
+    var begin=box.querySelector('.ff-begin');
     return box.querySelector('.ff-title').textContent==='Your First Mission is ready.'&&
       box.querySelector('.ff-mission h3').textContent==='Strengthen the connection'&&
       box.querySelector('.ff-mission-action').textContent==='Take one small concrete step'&&
-      box.querySelectorAll('button,textarea,input,select').length===0&&
-      !box.querySelector('.td-exp-accept,.td-exp-edit,.td-exp-outcome');
+      box.querySelectorAll('button,textarea,input,select').length===1&&!!begin&&
+      begin.type==='button'&&begin.textContent==='Begin First Mission'&&
+      !box.querySelector('.td-exp-accept,.td-exp-edit,.td-exp-outcome,.td-exp-decline');
   });
-  test('First Flight renderer stays inactive for active or completed missions',function(){
+  test('First Flight Begin action fails closed for malformed or mismatched mission-ready state',function(){
+    var ready=X.firstFlightState(firstFlightProgress('lw'));
+    var malformed=JSON.parse(JSON.stringify(ready));
+    var mismatched=JSON.parse(JSON.stringify(ready));
+    malformed.mission.action='Changed outside the deterministic generator';
+    mismatched.answers[1]='A different staged answer';
+    return U.firstFlightMissionForState(malformed)===null&&
+      U.firstFlightMissionForState(mismatched)===null&&
+      U.renderFirstFlight(malformed)===''&&U.renderFirstFlight(mismatched)==='';
+  });
+  test('First Flight active UI shows the deterministic mission in progress without controls',function(){
     var events=firstFlightProgress('lw'),ready=X.firstFlightState(events);
     var accept=experimentEvent('experiment_accepted',X.decisionPayload(ready.mission,'accepted'),1);
     var active=X.firstFlightState(events.concat(accept));
+    box.innerHTML=U.renderFirstFlight(active);
+    return box.querySelector('.ff-title').textContent==='Your First Mission is active.'&&
+      box.querySelector('.ff-progress').textContent==='In progress'&&
+      box.querySelector('.ff-mission h3').textContent==='Make the first move'&&
+      box.querySelector('.ff-mission-action').textContent==='Take one small concrete step'&&
+      box.querySelectorAll('button,textarea,input,select').length===0&&
+      !box.querySelector('.td-exp-accept,.td-exp-edit,.td-exp-outcome,.td-exp-decline');
+  });
+  test('First Flight Begin action appears only for mission_ready and completed UI stays inactive',function(){
+    var events=firstFlightProgress('lw'),ready=X.firstFlightState(events);
+    var accept=experimentEvent('experiment_accepted',X.decisionPayload(ready.mission,'accepted'),1);
     var complete=experimentEvent('experiment_completed',X.completionPayload(ready.mission,'completed'),2);
     var completed=X.firstFlightState(events.concat([accept,complete]));
-    return U.renderFirstFlight(active)===''&&U.renderFirstFlight(completed)==='';
+    box.innerHTML=U.renderFirstFlight(ready);
+    var readyBegin=box.querySelectorAll('.ff-begin').length;
+    box.innerHTML=U.renderFirstFlight(X.firstFlightState(events.slice(0,3)));
+    var answerBegin=box.querySelectorAll('.ff-begin').length;
+    box.innerHTML=U.renderFirstFlight(X.firstFlightState(events.concat(accept)));
+    var activeBegin=box.querySelectorAll('.ff-begin').length;
+    return readyBegin===1&&answerBegin===0&&activeBegin===0&&U.renderFirstFlight(completed)==='';
   });
 
   test('proposal UI exposes try, edit, and not-now choices',function(){
