@@ -793,6 +793,9 @@
     }
     function load(){
       var ok = BHIVE.load(STORAGE_KEY);
+      if(ok&&typeof BHIVE.reconcileFirstFlightQuestions==='function'){
+        BHIVE.reconcileFirstFlightQuestions();
+      }
       bindState();
       return ok;
     }
@@ -805,12 +808,17 @@
     function prepareFirstFlightStartup(hadStoredState){
       var reducer=BHIVE.experiments&&BHIVE.experiments.firstFlightState;
       var state=currentFirstFlightState();
-      if(hadStoredState||state||typeof reducer!=='function')return state;
-      if(!BHIVE.recordEvent('first_flight_available',{payload:{version:1}}))return null;
-      state=currentFirstFlightState();
-      if(!state||state.status!=='available')return null;
-      UNLOCK_START.forEach(function(key){swarms[key]=[];});
-      BHIVE.swarms=swarms;
+      if(typeof reducer!=='function')return state;
+      if(!hadStoredState&&!state){
+        if(!BHIVE.recordEvent('first_flight_available',{payload:{version:1}}))return null;
+        state=currentFirstFlightState();
+        if(!state||state.status!=='available')return null;
+        UNLOCK_START.forEach(function(key){swarms[key]=[];});
+        BHIVE.swarms=swarms;
+      }
+      if(state&&typeof BHIVE.reconcileFirstFlightQuestions==='function'){
+        BHIVE.reconcileFirstFlightQuestions();
+      }
       return state;
     }
     function persistFirstFlightEvent(type,details,expectedStatus){

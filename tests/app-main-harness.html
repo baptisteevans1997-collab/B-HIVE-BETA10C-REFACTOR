@@ -91,7 +91,8 @@
   var scenario = new URLSearchParams(location.search).get('scenario') || 'widest';
   var storageKey = 'lw-brainmap-hive-v1';
   var freshEligible = [
-    'fresh','fresh-wide','health-select','people-select','save-failure','answer-save-failure'
+    'fresh','fresh-wide','health-select','people-select','save-failure','answer-save-failure',
+    'genuine-completion'
   ].indexOf(scenario) >= 0;
   var stagedFirstFlight = [
     'progress','completed','resume-selected','mission-ready','mission-active','mission-active-wide',
@@ -271,7 +272,7 @@
     .catch(function (error) { window.__INDEX_ERROR = error.message; });
 })();
 </script>
-<script src="../js/bhive-engine.js"></script>
+<script src="../js/bhive-engine.js?first-flight-step3dp3"></script>
 <script src="../js/bhive-learning.js"></script>
 <script src="../js/bhive-experiments.js"></script>
 <script>
@@ -288,6 +289,9 @@
     var B = window.BHIVE;
     var ts = 1700002000000;
     B.init();
+    fixture.qver = 3;
+    fixture.questions = JSON.parse(JSON.stringify(B.questions));
+    fixture.questions.lw.push({q:'Preserve this resumable question',s:'claude'});
     B.recordEvent('first_flight_available', {ts:ts,payload:{version:1}});
     B.recordEvent('first_flight_cell_selected', {
       ts:ts+1,cellKey:'lw',payload:{version:1}
@@ -324,16 +328,20 @@
     localStorage.setItem(storageKey, JSON.stringify(fixture));
   }
   var stored = localStorage.getItem(storageKey);
+  window.__HARNESS_STORED_HIVE = stored;
   window.__HARNESS_STORED_EVENTS = stored ?
     JSON.stringify((JSON.parse(stored).learning||{}).events||[]) : null;
   var originalSave = window.BHIVE.save;
   var originalComplete = window.BHIVE.completeFirstFlight;
   var originalAddLearning = window.BHIVE.addLearning;
   var originalUnlockFromAnswer = window.BHIVE.unlockFromAnswer;
+  var originalSeedSwarms = window.BHIVE.seedSwarms;
   window.__HARNESS_SAVE_CALLS = 0;
   window.__HARNESS_COMPLETE_CALLS = 0;
   window.__HARNESS_ADD_LEARNING_CALLS = 0;
   window.__HARNESS_UNLOCK_CALLS = 0;
+  window.__HARNESS_UNLOCK_REQUESTS = [];
+  window.__HARNESS_ENGINE_SEED_CALLS = 0;
   window.__HARNESS_FAIL_SAVES = scenario === 'save-failure';
   window.__HARNESS_FAIL_ANSWER_SAVE = scenario === 'answer-save-failure';
   window.__HARNESS_FAIL_ACCEPT_SAVE = scenario === 'accept-save-failure';
@@ -354,12 +362,20 @@
   };
   window.BHIVE.unlockFromAnswer = function(){
     window.__HARNESS_UNLOCK_CALLS++;
+    window.__HARNESS_UNLOCK_REQUESTS.push({
+      text:arguments[0],
+      options:arguments[1]===undefined?null:JSON.parse(JSON.stringify(arguments[1]))
+    });
     return originalUnlockFromAnswer.apply(window.BHIVE,arguments);
+  };
+  window.BHIVE.seedSwarms = function(){
+    window.__HARNESS_ENGINE_SEED_CALLS++;
+    return originalSeedSwarms.apply(window.BHIVE,arguments);
   };
 }());
 </script>
 <script src="../js/ui-experiments.js?first-flight-step3c"></script>
-<script src="../js/app-main.js?first-flight-step3c"></script>
+<script src="../js/app-main.js?first-flight-step3dp"></script>
 <script src="../js/beta-profile-data.js"></script>
 <script src="../js/beta-profile.js?first-flight-step3b"></script>
 <script>
@@ -367,7 +383,7 @@
   'use strict';
   var deadline = Date.now() + 2000;
   var scenarioName = new URLSearchParams(location.search).get('scenario') || 'widest';
-  var settleAt = ['fresh','fresh-wide','progress','completed','resume-selected',
+  var settleAt = ['fresh','fresh-wide','genuine-completion','progress','completed','resume-selected',
     'mission-ready','mission-active','mission-active-wide','accept-save-failure','legacy-auto']
     .indexOf(scenarioName) >= 0 ? Date.now() + 700 : 0;
 
@@ -391,6 +407,7 @@
     var readyScenario = new URLSearchParams(location.search).get('scenario');
     var foundationOnly = [
       'fresh','fresh-wide','health-select','people-select','save-failure','answer-save-failure',
+      'genuine-completion',
       'locked','progress','completed','resume-selected','mission-ready','mission-active',
       'mission-active-wide','accept-save-failure'
     ].indexOf(readyScenario) >= 0;
@@ -473,11 +490,19 @@
       var availableEvent = firstFlightEvents.filter(function(event){
         return event.type === 'first_flight_available';
       })[0] || null;
-      var isFreshScenario = scenario === 'fresh' || scenario === 'fresh-wide';
+      var isFreshScenario = scenario === 'fresh' || scenario === 'fresh-wide' ||
+        scenario === 'genuine-completion';
       var duplicateAvailability = isFreshScenario ?
         window.BHIVE.recordEvent('first_flight_available',{payload:{version:1}}) : null;
       var foundationKeys = ['lw','health','people'];
       var expectedFoundationSwarms = JSON.parse(window.__HARNESS_FOUNDATION_SWARMS);
+      var canonicalFoundationQuestions=foundationKeys.every(function(key){
+        var approved=window.BHIVE.experiments.FIRST_FLIGHT[key].questions;
+        var canonical=(window.BHIVE.questions[key]||[]).filter(function(item){
+          return item&&item.s==='first_flight';
+        });
+        return canonical.length===2&&canonical[0].q===approved[0]&&canonical[1].q===approved[1];
+      });
       result.firstFlightStartup = {
         status:firstFlightState&&firstFlightState.status,
         cellKey:firstFlightState&&firstFlightState.cellKey,
@@ -514,6 +539,16 @@
         }),
         coreVisible:!!document.querySelector('#hivesvg .hive-core'),
         startupSaveCalls:window.__HARNESS_SAVE_CALLS,
+        storedHiveUnchanged:window.__HARNESS_STORED_HIVE===localStorage.getItem(storageKey),
+        canonicalFoundationQuestions:canonicalFoundationQuestions,
+        noFoundationSeedQuestions:foundationKeys.every(function(key){
+          return (window.BHIVE.questions[key]||[]).every(function(item){
+            return !item||item.s!=='base';
+          });
+        }),
+        resumableQuestionPreserved:(window.BHIVE.questions.lw||[]).some(function(item){
+          return item&&item.s==='claude'&&item.q==='Preserve this resumable question';
+        }),
         interfacePresent:!!document.querySelector('[data-first-flight]'),
         interfaceInactive:!document.querySelector(
           '#first-flight, .first-flight, [data-first-flight]')
@@ -666,6 +701,124 @@
           noCompletedEvents:ffEventCount('experiment_completed')===0,
           zeroStrategyEvidence:!!ffStats&&ffStats.completed===0&&ffStats.declined===0&&ffStats.score===0,
           completionOperationCalls:window.__HARNESS_COMPLETE_CALLS
+        };
+      }else if(scenario==='genuine-completion'){
+        var ffGenuineChoice=document.querySelector(
+          '#hive-today .ff-cell-choice[data-cell-key="lw"]');
+        var ffGenuineSaveStart=window.__HARNESS_SAVE_CALLS;
+        ffGenuineChoice.click();
+        var ffGenuineSelectionSaved=JSON.parse(localStorage.getItem(storageKey));
+        ffSetAnswer('  Finishing the beta matters most  ');
+        ffSubmit(document.querySelector('#hive-today .ff-form'));
+        ffSetAnswer('  Complete one focused beta task  ');
+        ffSubmit(document.querySelector('#hive-today .ff-form'));
+        var ffGenuineReady=ffState();
+        document.querySelector('#hive-today .ff-begin').click();
+        var ffGenuineActive=ffState();
+        var ffGenuineBeforeQuestions=JSON.parse(JSON.stringify(window.BHIVE.questions));
+        var ffGenuineBeforeSwarms=JSON.parse(JSON.stringify(window.BHIVE.swarms));
+        var ffGenuineBeforeUnlocks=window.BHIVE.unlocks.slice();
+        var ffGenuineBeforeQueen=document.querySelectorAll(
+          '#hivesvg .hive-workers > :not([data-cell-key])').length;
+        var ffGenuineBeforeUnrelated=JSON.stringify({
+          agents:window.BHIVE.agents,requests:window.BHIVE.requests,
+          history:window.BHIVE.history,playbook:window.BHIVE.playbook,mbti:window.BHIVE.mbti
+        });
+        var ffGenuineCompletionSaveStart=window.__HARNESS_SAVE_CALLS;
+        var ffGenuineCompletionCallStart=window.__HARNESS_COMPLETE_CALLS;
+        var ffGenuineUnlockStart=window.__HARNESS_UNLOCK_CALLS;
+        var ffGenuineSeedStart=window.__HARNESS_ENGINE_SEED_CALLS;
+        var ffGenuineRequest={
+          storageKey:storageKey,
+          mission:JSON.parse(JSON.stringify(ffGenuineActive.mission)),
+          cellKey:ffGenuineActive.cellKey,
+          answers:ffGenuineActive.answers.slice(),
+          now:Date.now()
+        };
+        var ffGenuineRequestBefore=JSON.stringify(ffGenuineRequest);
+        var ffGenuineResult=window.BHIVE.completeFirstFlight(ffGenuineRequest);
+        var ffGenuineCompleted=ffState();
+        var ffGenuineSaved=JSON.parse(localStorage.getItem(storageKey));
+        var ffGenuineSavedState=window.BHIVE.experiments.firstFlightState(
+          ffGenuineSaved.learning.events);
+        var ffGenuineLearnings=(window.BHIVE.learnings.lw||[]).filter(function(item){
+          return item&&item.s==='you';
+        });
+        var ffGenuineLearningEvents=window.BHIVE.learning.events.filter(function(event){
+          return event.type==='learning_added'&&event.cellKey==='lw'&&
+            event.payload.firstFlightVersion===1;
+        });
+        var ffGenuineCompletions=window.BHIVE.learning.events.filter(function(event){
+          return event.type==='experiment_completed';
+        });
+        var ffGenuineStats=window.BHIVE.experiments.strategyStats(
+          window.BHIVE.learning.events,ffGenuineActive.mission.strategyId,'lw');
+        var ffGenuineRevealed=ffGenuineResult&&ffGenuineResult.unlockedKey;
+        var ffGenuineOtherSwarmsUnchanged=window.BHIVE.cells.every(function(cell){
+          return cell.key==='lw'||cell.key===ffGenuineRevealed||
+            JSON.stringify(window.BHIVE.swarms[cell.key])===
+              JSON.stringify(ffGenuineBeforeSwarms[cell.key]);
+        });
+        result.firstFlightFlow={
+          startupAvailable:firstFlightState&&firstFlightState.status==='available',
+          selectionSavedCanonical:!!ffGenuineSelectionSaved&&
+            ['lw','health','people'].every(function(key){
+              return ffGenuineSelectionSaved.questions[key].filter(function(item){
+                return item.s==='first_flight';
+              }).length===2;
+            }),
+          readyStatus:ffGenuineReady&&ffGenuineReady.status,
+          activeStatus:ffGenuineActive&&ffGenuineActive.status,
+          completionOk:ffGenuineResult&&ffGenuineResult.ok&&!ffGenuineResult.alreadyCompleted,
+          completionCalls:window.__HARNESS_COMPLETE_CALLS-ffGenuineCompletionCallStart,
+          completionSaveCalls:window.__HARNESS_SAVE_CALLS-ffGenuineCompletionSaveStart,
+          deliberateSaveCallsBeforeCompletion:ffGenuineCompletionSaveStart-ffGenuineSaveStart,
+          completedStatus:ffGenuineCompleted&&ffGenuineCompleted.status,
+          persistedCompleted:ffGenuineSavedState&&ffGenuineSavedState.status==='mission_completed',
+          requestUnchanged:ffGenuineRequestBefore===JSON.stringify(ffGenuineRequest),
+          exactLearnings:ffGenuineLearnings.length===2&&
+            ffGenuineLearnings[0].t==='Finishing the beta matters most'&&
+            ffGenuineLearnings[1].t==='Complete one focused beta task'&&
+            ffGenuineLearningEvents.length===2,
+          selectedQuestionsConsumed:(window.BHIVE.questions.lw||[]).length===0,
+          otherQuestionsUnchanged:JSON.stringify(window.BHIVE.questions.health)===
+              JSON.stringify(ffGenuineBeforeQuestions.health)&&
+            JSON.stringify(window.BHIVE.questions.people)===
+              JSON.stringify(ffGenuineBeforeQuestions.people),
+          selectedWorkerOnly:window.BHIVE.swarms.lw.length===1&&
+            JSON.stringify(window.BHIVE.swarms.lw[0])===
+              JSON.stringify({age:3,b:0.5,p:0.5}),
+          unselectedFoundationsEmpty:window.BHIVE.swarms.health.length===0&&
+            window.BHIVE.swarms.people.length===0,
+          revealedSeedWasAppOwned:!!ffGenuineRevealed&&
+            JSON.stringify(ffGenuineBeforeSwarms[ffGenuineRevealed])===
+              JSON.stringify([{age:0},{age:2}]),
+          revealedEmpty:!!ffGenuineRevealed&&Array.isArray(window.BHIVE.swarms[ffGenuineRevealed])&&
+            window.BHIVE.swarms[ffGenuineRevealed].length===0,
+          otherSwarmsUnchanged:ffGenuineOtherSwarmsUnchanged,
+          queenRetinueUnchanged:ffGenuineBeforeQueen===document.querySelectorAll(
+            '#hivesvg .hive-workers > :not([data-cell-key])').length,
+          unlockCalls:window.__HARNESS_UNLOCK_CALLS-ffGenuineUnlockStart,
+          quietUnlockRequest:window.__HARNESS_UNLOCK_REQUESTS.length===1&&
+            window.__HARNESS_UNLOCK_REQUESTS[0].options&&
+            window.__HARNESS_UNLOCK_REQUESTS[0].options.seedSwarm===false,
+          singleReveal:window.BHIVE.unlocks.length===ffGenuineBeforeUnlocks.length+1&&
+            ffGenuineRevealed==='craft',
+          globalSeedCalls:window.__HARNESS_ENGINE_SEED_CALLS-ffGenuineSeedStart,
+          neutralCompletion:ffGenuineCompletions.length===1&&
+            ffGenuineCompletions[0].id==='evt_first_flight_v1_completed_lw'&&
+            ffGenuineCompletions[0].payload.outcome==='completed',
+          zeroStrategyEvidence:ffGenuineStats.completed===0&&ffGenuineStats.declined===0&&
+            ffGenuineStats.score===0,
+          noNormalLearningCalls:window.__HARNESS_ADD_LEARNING_CALLS===0,
+          noAdditionalReward:ffGenuineBeforeUnrelated===JSON.stringify({
+            agents:window.BHIVE.agents,requests:window.BHIVE.requests,
+            history:window.BHIVE.history,playbook:window.BHIVE.playbook,mbti:window.BHIVE.mbti
+          }),
+          savedMatchesLive:JSON.stringify(ffGenuineSaved.questions)===
+              JSON.stringify(window.BHIVE.questions)&&
+            JSON.stringify(ffGenuineSaved.swarms)===JSON.stringify(window.BHIVE.swarms)&&
+            JSON.stringify(ffGenuineSaved.unlocks)===JSON.stringify(window.BHIVE.unlocks)
         };
       }else if(scenario==='health-select'||scenario==='people-select'){
         var ffSelectKey=scenario==='health-select'?'health':'people';

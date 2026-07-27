@@ -19,7 +19,7 @@
 <h1>B HIVE Engine Tests</h1>
 <div id="results"></div>
 
-<script src="../js/bhive-engine.js?test=first-flight-v1-step2"></script>
+<script src="../js/bhive-engine.js?test=first-flight-v1-step3dp3"></script>
 <script src="../js/bhive-learning.js?test=beta10c-v4"></script>
 <script src="../js/bhive-experiments.js?test=first-flight-v1-step2"></script>
 <script src="../js/beta-profile-data.js"></script>
@@ -118,10 +118,10 @@ function firstFlightFixture(cellKey, answers, extraQuestion) {
   answers = answers || ['Shipping the beta matters most', 'Make one small project move'];
   localStorage.removeItem(FIRST_FLIGHT_KEY);
   B.init();
-  var approved = B.experiments.FIRST_FLIGHT[cellKey].questions;
-  B.questions[cellKey] = approved.map(function(q){ return {q:q,s:'first_flight'}; });
-  if (extraQuestion) B.questions[cellKey].push({q:extraQuestion,s:'base'});
   var state = firstFlightProgress(cellKey, answers, true);
+  if (!B.reconcileFirstFlightQuestions()) throw new Error('First Flight question reconciliation failed');
+  B.UNLOCK_START.forEach(function(key){ B.swarms[key] = []; });
+  if (extraQuestion) B.questions[cellKey].push({q:extraQuestion,s:'claude'});
   return {
     state:state,
     request:{
@@ -293,6 +293,15 @@ suite('unlockFromAnswer', [
     var r2 = B.unlockFromAnswer('stressed about money');
     return r1 === r2;
   }},
+  { name: 'ordinary unlocks retain global swarm seeding by default', fn: function(){
+    B.init();
+    B.swarms.health=[];
+    var original=B.seedSwarms,calls=0,result;
+    B.seedSwarms=function(){calls++;return original.apply(B,arguments);};
+    try{result=B.unlockFromAnswer('ordinary note');}
+    finally{B.seedSwarms=original;}
+    return result==='craft'&&calls===1&&B.swarms.craft.length===3&&B.swarms.health.length===3;
+  }},
 ]);
 
 /* ────────────────────────────────────────────
@@ -325,7 +334,110 @@ suite('addLearning', [
 ]);
 
 /* ────────────────────────────────────────────
-   8. First Flight isolated completion
+   8. First Flight canonical questions
+   ──────────────────────────────────────────── */
+suite('First Flight canonical questions', [
+  { name: 'eligible state replaces only app seed questions with the canonical six', fn: function(){
+    B.init();
+    B.recordEvent('first_flight_available',{ts:FIRST_FLIGHT_TS,payload:{version:1}});
+    B.questions.lw.push({q:'Keep my own work question',s:'you',meta:{keep:true}});
+    B.questions.health.push({q:'Keep the synced health question',s:'claude'});
+    var sideBefore=JSON.stringify({
+      learning:B.learning,learnings:B.learnings,swarms:B.swarms,unlocks:B.unlocks,
+      peopleExtra:B.questions.people.filter(function(item){return item.s!=='base';}),
+      craft:B.questions.craft
+    });
+    var originalSave=B.save,saveCalls=0,ok;
+    B.save=function(){saveCalls++;return originalSave.apply(B,arguments);};
+    try{ok=B.reconcileFirstFlightQuestions();}
+    finally{B.save=originalSave;}
+    var exact=B.UNLOCK_START.every(function(key){
+      var approved=B.experiments.FIRST_FLIGHT[key].questions;
+      var canonical=B.questions[key].filter(function(item){return item&&item.s==='first_flight';});
+      return canonical.length===2&&canonical[0].q===approved[0]&&canonical[1].q===approved[1]&&
+        B.questions[key].every(function(item){return !item||item.s!=='base';});
+    });
+    var sideAfter=JSON.stringify({
+      learning:B.learning,learnings:B.learnings,swarms:B.swarms,unlocks:B.unlocks,
+      peopleExtra:B.questions.people.filter(function(item){return item.s!=='base'&&item.s!=='first_flight';}),
+      craft:B.questions.craft
+    });
+    return ok&&exact&&saveCalls===0&&sideBefore===sideAfter&&
+      B.questions.lw.some(function(item){return item.s==='you'&&item.meta&&item.meta.keep;})&&
+      B.questions.health.some(function(item){return item.s==='claude'&&
+        item.q==='Keep the synced health question';});
+  }},
+  { name: 'reconciliation is byte-stable and collapses engine-owned duplicates', fn: function(){
+    B.init();
+    B.recordEvent('first_flight_available',{ts:FIRST_FLIGHT_TS,payload:{version:1}});
+    var approved=B.experiments.FIRST_FLIGHT.lw.questions;
+    B.questions.lw.push({q:approved[0],s:'first_flight'});
+    var first=B.reconcileFirstFlightQuestions(),before=JSON.stringify(B.questions);
+    var second=B.reconcileFirstFlightQuestions(),after=JSON.stringify(B.questions);
+    return first&&second&&before===after&&B.questions.lw.filter(function(item){
+      return item.s==='first_flight'&&approved.indexOf(item.q)>=0;
+    }).length===2;
+  }},
+  { name: 'a protected same-text question remains separate and survives completion', fn: function(){
+    B.init();
+    var answers=['A relationship matters','Send one respectful message'];
+    var state=firstFlightProgress('people',answers,true);
+    var approved=B.experiments.FIRST_FLIGHT.people.questions;
+    B.questions.people.push({q:approved[0],s:'you',meta:{keep:'exact'}});
+    var ok=B.reconcileFirstFlightQuestions();
+    B.UNLOCK_START.forEach(function(key){B.swarms[key]=[];});
+    var result=B.completeFirstFlight({
+      storageKey:FIRST_FLIGHT_KEY,mission:cloneJSON(state.mission),cellKey:'people',
+      answers:answers.slice(),now:FIRST_FLIGHT_TS+5
+    });
+    var kept=B.questions.people.filter(function(item){
+      return item&&item.s==='you'&&item.q===approved[0]&&item.meta&&item.meta.keep==='exact';
+    });
+    localStorage.removeItem(FIRST_FLIGHT_KEY);
+    return ok&&result.ok&&kept.length===1&&
+      B.questions.people.filter(function(item){return item&&item.s==='first_flight';}).length===0;
+  }},
+  { name: 'every incomplete reducer state is eligible for safe reconciliation', fn: function(){
+    B.init();
+    var X=B.experiments,answers=['My work direction matters','Take one small work step'];
+    var checks=[];
+    function check(status){
+      B.UNLOCK_START.forEach(function(key){B.questions[key]=B.SEED_QUESTIONS[key].map(function(q){
+        return{q:q,s:'base'};
+      });});
+      checks.push(X.firstFlightState(B.learning.events).status===status&&
+        B.reconcileFirstFlightQuestions()&&B.UNLOCK_START.every(function(key){
+          return B.questions[key].filter(function(item){return item.s==='first_flight';}).length===2;
+        }));
+    }
+    B.recordEvent('first_flight_available',{ts:FIRST_FLIGHT_TS,payload:{version:1}});check('available');
+    B.recordEvent('first_flight_cell_selected',{ts:FIRST_FLIGHT_TS+1,cellKey:'lw',payload:{version:1}});check('cell_selected');
+    B.recordEvent('first_flight_answered',{ts:FIRST_FLIGHT_TS+2,cellKey:'lw',
+      payload:{version:1,question:1,answer:answers[0]}});check('first_answer_recorded');
+    B.recordEvent('first_flight_answered',{ts:FIRST_FLIGHT_TS+3,cellKey:'lw',
+      payload:{version:1,question:2,answer:answers[1]}});check('mission_ready');
+    var ready=X.firstFlightState(B.learning.events);
+    B.recordEvent('experiment_accepted',{ts:FIRST_FLIGHT_TS+4,cellKey:'lw',
+      payload:X.decisionPayload(ready.mission,'accepted')});check('mission_active');
+    return checks.length===5&&checks.every(Boolean);
+  }},
+  { name: 'legacy and completed states are byte-for-byte no-ops', fn: function(){
+    B.init();
+    var legacyBefore=firstFlightLiveSnapshot(),legacyResult=B.reconcileFirstFlightQuestions();
+    var legacyAfter=firstFlightLiveSnapshot();
+    B.init();
+    var state=firstFlightProgress('lw',['Work direction','Take one work step'],true);
+    B.recordEvent('experiment_completed',{ts:FIRST_FLIGHT_TS+5,cellKey:'lw',
+      payload:B.experiments.completionPayload(state.mission,'completed')});
+    var completedBefore=firstFlightLiveSnapshot(),completedResult=B.reconcileFirstFlightQuestions();
+    var completedAfter=firstFlightLiveSnapshot();
+    return legacyResult===false&&legacyBefore===legacyAfter&&completedResult===false&&
+      completedBefore===completedAfter;
+  }}
+]);
+
+/* ────────────────────────────────────────────
+   9. First Flight isolated completion
    ──────────────────────────────────────────── */
 suite('First Flight engine completion', [
   { name: 'valid active mission completes and persists atomically', fn: function(){
@@ -375,11 +487,30 @@ suite('First Flight engine completion', [
   }},
   { name: 'completion calls unlockFromAnswer exactly once with both answers', fn: function(){
     var fixture=firstFlightFixture(),original=B.unlockFromAnswer,calls=[],result;
-    B.unlockFromAnswer=function(text){calls.push(text);return original.call(B,text);};
+    B.unlockFromAnswer=function(){
+      calls.push({text:arguments[0],options:cloneJSON(arguments[1])});
+      return original.apply(B,arguments);
+    };
     try{result=B.completeFirstFlight(fixture.request);}
     finally{B.unlockFromAnswer=original;localStorage.removeItem(FIRST_FLIGHT_KEY);}
     return result.ok&&calls.length===1&&
-      calls[0]===fixture.request.answers[0]+' '+fixture.request.answers[1];
+      calls[0].text===fixture.request.answers[0]+' '+fixture.request.answers[1]&&
+      calls[0].options&&calls[0].options.seedSwarm===false;
+  }},
+  { name: 'First Flight reveal skips global seeding and changes no unrelated swarm', fn: function(){
+    var fixture=firstFlightFixture(),before=cloneJSON(B.swarms),original=B.seedSwarms;
+    var seedCalls=0,result,unrelated;
+    B.seedSwarms=function(){seedCalls++;return original.apply(B,arguments);};
+    try{result=B.completeFirstFlight(fixture.request);}
+    finally{B.seedSwarms=original;localStorage.removeItem(FIRST_FLIGHT_KEY);}
+    unrelated=B.cells.every(function(cell){
+      return cell.key==='lw'||cell.key===result.unlockedKey||
+        JSON.stringify(B.swarms[cell.key])===JSON.stringify(before[cell.key]);
+    });
+    return result.ok&&seedCalls===0&&B.swarms.lw.length===1&&
+      JSON.stringify(B.swarms.lw[0])===JSON.stringify({age:3,b:0.5,p:0.5})&&
+      Array.isArray(B.swarms[result.unlockedKey])&&B.swarms[result.unlockedKey].length===0&&
+      B.swarms.health.length===0&&B.swarms.people.length===0&&unrelated;
   }},
   { name: 'completion reveals no more than one hidden cell', fn: function(){
     var fixture=firstFlightFixture(),before=B.unlocks.length;
@@ -417,18 +548,26 @@ suite('First Flight engine completion', [
   { name: 'duplicate completion is an idempotent no-op', fn: function(){
     var fixture=firstFlightFixture(),first=B.completeFirstFlight(fixture.request);
     var before=firstFlightLiveSnapshot(),stored=localStorage.getItem(FIRST_FLIGHT_KEY);
-    var second=B.completeFirstFlight(fixture.request);
+    var original=B.save,saveCalls=0,second;
+    B.save=function(){saveCalls++;return original.apply(B,arguments);};
+    try{second=B.completeFirstFlight(fixture.request);}
+    finally{B.save=original;}
     var after=firstFlightLiveSnapshot(),storedAfter=localStorage.getItem(FIRST_FLIGHT_KEY);
     localStorage.removeItem(FIRST_FLIGHT_KEY);
-    return first.ok&&second.ok&&second.alreadyCompleted&&before===after&&stored===storedAfter;
+    return first.ok&&second.ok&&second.alreadyCompleted&&saveCalls===0&&
+      before===after&&stored===storedAfter;
   }},
   { name: 'reload after completion cannot replay any effect', fn: function(){
     var fixture=firstFlightFixture(),first=B.completeFirstFlight(fixture.request);
     B.init();
     var loaded=B.load(FIRST_FLIGHT_KEY),before=firstFlightLiveSnapshot();
-    var replay=B.completeFirstFlight(fixture.request),after=firstFlightLiveSnapshot();
+    var original=B.save,saveCalls=0,replay;
+    B.save=function(){saveCalls++;return original.apply(B,arguments);};
+    try{replay=B.completeFirstFlight(fixture.request);}
+    finally{B.save=original;}
+    var after=firstFlightLiveSnapshot();
     localStorage.removeItem(FIRST_FLIGHT_KEY);
-    return first.ok&&loaded&&replay.ok&&replay.alreadyCompleted&&before===after;
+    return first.ok&&loaded&&replay.ok&&replay.alreadyCompleted&&saveCalls===0&&before===after;
   }},
   { name: 'malformed, edited, wrong-cell and wrong-answer requests fail without mutation', fn: function(){
     var fixture=firstFlightFixture(),before=firstFlightLiveSnapshot();
@@ -475,14 +614,42 @@ suite('First Flight engine completion', [
     return !missing.ok&&missing.reason==='questions_mismatch'&&
       !duplicate.ok&&duplicate.reason==='questions_mismatch';
   }},
+  { name: 'protected same-text questions cannot substitute for the canonical pair', fn: function(){
+    var fixture=firstFlightFixture(),approved=B.experiments.FIRST_FLIGHT.lw.questions;
+    B.questions.lw=approved.map(function(q,index){
+      return{q:q,s:index?'claude':'you',meta:{keep:true}};
+    });
+    var before=firstFlightLiveSnapshot(),result=B.completeFirstFlight(fixture.request);
+    localStorage.removeItem(FIRST_FLIGHT_KEY);
+    return !result.ok&&result.reason==='questions_mismatch'&&before===firstFlightLiveSnapshot();
+  }},
   { name: 'failed persistence rolls every live effect back', fn: function(){
-    var fixture=firstFlightFixture(),before=firstFlightLiveSnapshot();
+    var fixture=firstFlightFixture();
+    B.save(FIRST_FLIGHT_KEY);
+    var before=firstFlightLiveSnapshot(),stored=localStorage.getItem(FIRST_FLIGHT_KEY);
     var original=B.save,result;
     B.save=function(){return false;};
     try{result=B.completeFirstFlight(fixture.request);}
-    finally{B.save=original;localStorage.removeItem(FIRST_FLIGHT_KEY);}
+    finally{B.save=original;}
+    var storedAfter=localStorage.getItem(FIRST_FLIGHT_KEY);
+    localStorage.removeItem(FIRST_FLIGHT_KEY);
     return !result.ok&&result.reason==='completion_failed'&&before===firstFlightLiveSnapshot()&&
-      B.experiments.firstFlightState(B.learning.events).status==='mission_active';
+      stored===storedAfter&&B.experiments.firstFlightState(B.learning.events).status==='mission_active';
+  }},
+  { name: 'retry after failed persistence completes once without residual effects', fn: function(){
+    var fixture=firstFlightFixture(),original=B.save,failed,completed;
+    B.save=function(){return false;};
+    failed=B.completeFirstFlight(fixture.request);
+    B.save=original;
+    completed=B.completeFirstFlight(fixture.request);
+    var state=B.experiments.firstFlightState(B.learning.events);
+    var promoted=B.learningTools.selectEvents(B.learning,{type:'learning_added',cellKey:'lw'}).filter(function(event){
+      return event.payload.firstFlightVersion===1;
+    });
+    var completions=B.learningTools.selectEvents(B.learning,{type:'experiment_completed'});
+    localStorage.removeItem(FIRST_FLIGHT_KEY);
+    return !failed.ok&&completed.ok&&state.status==='mission_completed'&&
+      promoted.length===2&&completions.length===1&&B.swarms.lw.length===1;
   }},
   { name: 'completion does not mutate its request object', fn: function(){
     var fixture=firstFlightFixture(),before=JSON.stringify(fixture.request);
@@ -528,7 +695,7 @@ suite('First Flight engine completion', [
 ]);
 
 /* ────────────────────────────────────────────
-   9. snapshot / save / load round-trip
+   10. snapshot / save / load round-trip
    ──────────────────────────────────────────── */
 suite('Persistence', [
   { name: 'snapshot returns object with v:4 learning state', fn: function(){
@@ -559,7 +726,7 @@ suite('Persistence', [
 ]);
 
 /* ────────────────────────────────────────────
-   10. Authoritative unlock/reveal migration
+   11. Authoritative unlock/reveal migration
    ──────────────────────────────────────────── */
 suite('Unlock reveal migration', [
   { name: 'fresh state starts versioned with only the three foundation cells', fn: function(){

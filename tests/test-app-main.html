@@ -26,7 +26,7 @@
   var scenarios = [
     'fresh','fresh-wide','health-select','people-select','resume-selected',
     'progress','mission-ready','mission-active','mission-active-wide','accept-save-failure',
-    'save-failure','answer-save-failure','completed','legacy-auto',
+    'save-failure','answer-save-failure','genuine-completion','completed','legacy-auto',
     'evolve','widest','locked','migration'
   ];
   var reports = {};
@@ -93,6 +93,7 @@
       missionActiveWide = reports['mission-active-wide'],
       acceptSaveFailure = reports['accept-save-failure'], saveFailure = reports['save-failure'],
       answerSaveFailure = reports['answer-save-failure'],
+      genuineCompletion = reports['genuine-completion'],
       completed = reports.completed, legacyAuto = reports['legacy-auto'],
       evolve = reports.evolve, widest = reports.widest, locked = reports.locked,
       migration = reports.migration;
@@ -112,6 +113,13 @@
         freshWide.firstFlightStartup.availabilityCount === 1);
     test('availability alone does not persist a new blank Hive',
       fresh.firstFlightStartup.noStartupSave && freshWide.firstFlightStartup.noStartupSave);
+    test('fresh startup provisions exactly the canonical six questions without saving',
+      [fresh,freshWide,genuineCompletion].every(function(report){
+        return report.firstFlightStartup.canonicalFoundationQuestions&&
+          report.firstFlightStartup.noFoundationSeedQuestions&&
+          report.firstFlightStartup.startupSaveCalls===0&&
+          report.firstFlightStartup.noStartupSave;
+      }));
     test('fresh foundation cells start with empty swarms and no rendered cell workers',
       fresh.firstFlightStartup.foundationSwarmsEmpty &&
         fresh.firstFlightStartup.cellWorkerCount === 0 &&
@@ -136,11 +144,24 @@
         progress.firstFlightStartup.answers.join('|') === 'Finishing the beta matters most' &&
         progress.firstFlightStartup.availabilityCount === 1 &&
         progress.firstFlightStartup.storedEventsPreserved);
+    test('resumable incomplete states reconcile canonical questions in memory without data loss or save',
+      [resumeSelected,progress,missionReady,missionActive,missionActiveWide,
+        acceptSaveFailure].every(function(report){
+        return report.firstFlightStartup.canonicalFoundationQuestions&&
+          report.firstFlightStartup.noFoundationSeedQuestions&&
+          report.firstFlightStartup.resumableQuestionPreserved&&
+          report.firstFlightStartup.storedHiveUnchanged&&
+          report.firstFlightStartup.startupSaveCalls===0;
+      }));
     test('a completed First Flight remains completed and receives no duplicate availability',
       completed.firstFlightStartup.status === 'mission_completed' &&
         completed.firstFlightStartup.completedEventId === 'evt_first_flight_v1_completed_lw' &&
         completed.firstFlightStartup.availabilityCount === 1 &&
         completed.firstFlightStartup.storedEventsPreserved);
+    test('legacy and completed startup snapshots remain byte-for-byte unchanged',
+      completed.firstFlightStartup.storedHiveUnchanged&&
+        legacyAuto.firstFlightStartup.storedHiveUnchanged&&
+        widest.firstFlightStartup.storedHiveUnchanged);
     test('fresh availability is idempotent under a repeated startup event attempt',
       fresh.firstFlightStartup.duplicateRejected &&
         fresh.firstFlightStartup.availabilityCount === 1 &&
@@ -308,6 +329,40 @@
           report.firstFlightFlow.addLearningCalls === 0 &&
           report.firstFlightFlow.unlockCalls === 0;
       }));
+    test('the genuine production path reaches mission_active and completes through the domain operation',
+      genuineCompletion.firstFlightFlow.startupAvailable&&
+        genuineCompletion.firstFlightFlow.selectionSavedCanonical&&
+        genuineCompletion.firstFlightFlow.readyStatus==='mission_ready'&&
+        genuineCompletion.firstFlightFlow.activeStatus==='mission_active'&&
+        genuineCompletion.firstFlightFlow.completionOk&&
+        genuineCompletion.firstFlightFlow.completionCalls===1&&
+        genuineCompletion.firstFlightFlow.requestUnchanged&&
+        genuineCompletion.firstFlightFlow.completedStatus==='mission_completed'&&
+        genuineCompletion.firstFlightFlow.persistedCompleted);
+    test('genuine completion promotes exactly two answers and consumes only the selected canonical pair',
+      genuineCompletion.firstFlightFlow.exactLearnings&&
+        genuineCompletion.firstFlightFlow.selectedQuestionsConsumed&&
+        genuineCompletion.firstFlightFlow.otherQuestionsUnchanged);
+    test('genuine completion adds only the selected age-3 worker and keeps quiet swarms empty',
+      genuineCompletion.firstFlightFlow.selectedWorkerOnly&&
+        genuineCompletion.firstFlightFlow.unselectedFoundationsEmpty&&
+        genuineCompletion.firstFlightFlow.revealedSeedWasAppOwned&&
+        genuineCompletion.firstFlightFlow.revealedEmpty&&
+        genuineCompletion.firstFlightFlow.otherSwarmsUnchanged&&
+        genuineCompletion.firstFlightFlow.queenRetinueUnchanged&&
+        genuineCompletion.firstFlightFlow.globalSeedCalls===0);
+    test('genuine completion makes one quiet unlock attempt and at most one approved reveal',
+      genuineCompletion.firstFlightFlow.unlockCalls===1&&
+        genuineCompletion.firstFlightFlow.quietUnlockRequest&&
+        genuineCompletion.firstFlightFlow.singleReveal);
+    test('genuine completion persists once with neutral outcome and no evidence or reward',
+      genuineCompletion.firstFlightFlow.deliberateSaveCallsBeforeCompletion===4&&
+        genuineCompletion.firstFlightFlow.completionSaveCalls===1&&
+        genuineCompletion.firstFlightFlow.neutralCompletion&&
+        genuineCompletion.firstFlightFlow.zeroStrategyEvidence&&
+        genuineCompletion.firstFlightFlow.noNormalLearningCalls&&
+        genuineCompletion.firstFlightFlow.noAdditionalReward&&
+        genuineCompletion.firstFlightFlow.savedMatchesLive);
     test('automatic tour and beta profile defer only while First Flight is incomplete',
       [fresh,resumeSelected,progress,missionReady,missionActive,missionActiveWide,
         acceptSaveFailure].every(function(report){

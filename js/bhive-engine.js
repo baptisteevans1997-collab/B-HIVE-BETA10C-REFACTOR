@@ -326,11 +326,15 @@ BHIVE.suggestedNextKey = function() {
   return B.isTaught(k) ? null : k;
 };
 
-BHIVE.wakeCell = function(key) {
+BHIVE.wakeCell = function(key, options) {
   var B = BHIVE;
   B.unlocks.push(key);
-  delete B.swarms[key];
-  B.seedSwarms();
+  if (options && options.seedSwarm === false) {
+    B.swarms[key] = [];
+  } else {
+    delete B.swarms[key];
+    B.seedSwarms();
+  }
   B.recordEvent('cell_unlocked', { cellKey: key, payload: { source: 'runtime' } });
   return key;
 };
@@ -345,7 +349,7 @@ BHIVE.recordEvent = function(type, details) {
 };
 
 /* ── unlockFromAnswer: one teach = at most ONE new cell wakes ── */
-BHIVE.unlockFromAnswer = function(text) {
+BHIVE.unlockFromAnswer = function(text, options) {
   var B = BHIVE;
   if (B.unlocks.length >= B.cells.length) return null;
   var low = (text || '').toLowerCase(), i, j, r;
@@ -353,11 +357,11 @@ BHIVE.unlockFromAnswer = function(text) {
     r = B.SIG_RULES[i];
     if (!r.re.test(low)) continue;
     for (j = 0; j < r.next.length; j++) {
-      if (!B.isUnlocked(r.next[j])) return B.wakeCell(r.next[j]);
+      if (!B.isUnlocked(r.next[j])) return B.wakeCell(r.next[j], options);
     }
   }
   for (j = 0; j < B.UNLOCK_ORDER.length; j++) {
-    if (!B.isUnlocked(B.UNLOCK_ORDER[j])) return B.wakeCell(B.UNLOCK_ORDER[j]);
+    if (!B.isUnlocked(B.UNLOCK_ORDER[j])) return B.wakeCell(B.UNLOCK_ORDER[j], options);
   }
   return null;
 };
@@ -383,6 +387,51 @@ BHIVE.addLearning = function(key, text, src, q) {
   if (B.swarms[key] && B.swarms[key].length < 24) B.swarms[key].push({ age: 0, b: 0.5 + Math.random() * 0.5, p: 0.4 + Math.random() * 0.6 });
   if (ent.s === 'you') {
     B.unlockFromAnswer(text);
+  }
+  return true;
+};
+
+/* ── reconcileFirstFlightQuestions: provision the canonical six without saving ── */
+BHIVE.reconcileFirstFlightQuestions = function() {
+  var B = BHIVE, state, statuses, planned = {}, keys, i, j, key, config, current;
+  var retained, canonical, changed = false;
+
+  if (!B.experiments || !B.experiments.firstFlightState ||
+      !B.experiments.FIRST_FLIGHT || !B.learning ||
+      !Array.isArray(B.learning.events) || !B.questions ||
+      typeof B.questions !== 'object') return false;
+
+  state = B.experiments.firstFlightState(B.learning.events);
+  statuses = {
+    available: 1,
+    cell_selected: 1,
+    first_answer_recorded: 1,
+    mission_ready: 1,
+    mission_active: 1
+  };
+  if (!state || !statuses[state.status]) return false;
+
+  keys = B.UNLOCK_START.slice();
+  for (i = 0; i < keys.length; i++) {
+    key = keys[i];
+    config = B.experiments.FIRST_FLIGHT[key];
+    current = B.questions[key];
+    if (!config || !Array.isArray(config.questions) || config.questions.length !== 2 ||
+        (current !== undefined && !Array.isArray(current))) return false;
+
+    current = current || [];
+    retained = current.filter(function(item) {
+      return !item || (item.s !== 'base' && item.s !== 'first_flight');
+    });
+    canonical = config.questions.map(function(question) {
+      return { q: question, s: 'first_flight' };
+    });
+    planned[key] = canonical.concat(retained);
+    if (JSON.stringify(current) !== JSON.stringify(planned[key])) changed = true;
+  }
+
+  if (changed) {
+    for (j = 0; j < keys.length; j++) B.questions[keys[j]] = planned[keys[j]];
   }
   return true;
 };
@@ -460,7 +509,8 @@ BHIVE.completeFirstFlight = function(request) {
   for (i = 0; i < config.questions.length; i++) {
     matches = [];
     questionList.forEach(function(item, index) {
-      if (item && item.q === config.questions[i]) matches.push(index);
+      if (item && item.s === 'first_flight' &&
+          item.q === config.questions[i]) matches.push(index);
     });
     if (matches.length !== 1 || questionIndexes.indexOf(matches[0]) >= 0) {
       return result(false, 'questions_mismatch');
@@ -512,7 +562,7 @@ BHIVE.completeFirstFlight = function(request) {
     });
 
     B.swarms[state.cellKey].push({ age: 3, b: 0.5, p: 0.5 });
-    unlockedKey = B.unlockFromAnswer(answers.join(' '));
+    unlockedKey = B.unlockFromAnswer(answers.join(' '), { seedSwarm: false });
 
     completionEvent = B.recordEvent('experiment_completed', {
       id: 'evt_first_flight_v1_completed_' + state.cellKey,
