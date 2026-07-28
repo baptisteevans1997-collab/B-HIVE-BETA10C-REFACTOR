@@ -2863,6 +2863,7 @@
       }
     }
     var currentTodayInsight=null,currentTodayExperiment=null,currentTodayReview=null;
+    var renderedFirstFlightCompletionContext=null;
     function trustedMemoryUse(now,observations){
       if(!B.memoryUse||typeof B.memoryUse.derive!=='function')return null;
       var options={};
@@ -2875,13 +2876,37 @@
       var status=document.querySelector('#hive-today .td-status');
       if(status)status.textContent='Recommendation updated after confirmed memory changed';
     }
+    function firstFlightCompletionContext(state){
+      var mission=state&&state.status==='mission_active'&&B.experimentUI&&
+        typeof B.experimentUI.firstFlightCompletionMission==='function'?
+        B.experimentUI.firstFlightCompletionMission(state):null;
+      if(!mission)return null;
+      try{
+        return {
+          mission:mission,
+          serialized:JSON.stringify({
+            version:state.version,
+            status:state.status,
+            cellKey:state.cellKey,
+            selectedEventId:state.selectedEventId,
+            answerEventIds:state.answerEventIds.slice(),
+            acceptedEventId:state.acceptedEventId,
+            answers:state.answers.slice(),
+            mission:mission
+          })
+        };
+      }catch(e){return null;}
+    }
     function renderToday(){
       var el=document.getElementById('hive-today');
       if(!el)return;
       var now=Date.now(),events=(BHIVE.learning&&BHIVE.learning.events)||[];
       var firstFlight=currentFirstFlightState();
+      var firstFlightCompletion=firstFlightCompletionContext(firstFlight);
       var firstFlightHTML=B.experimentUI&&B.experimentUI.renderFirstFlight?
         B.experimentUI.renderFirstFlight(firstFlight):'';
+      renderedFirstFlightCompletionContext=firstFlightHTML&&firstFlightCompletion?
+        firstFlightCompletion.serialized:null;
       if(firstFlightHTML){
         currentTodayInsight=null;
         currentTodayExperiment=null;
@@ -2932,7 +2957,11 @@
         var answeredVerdict=answered&&answered.payload&&answered.payload.verdict;
         var proposalFeedback=(answeredVerdict==='true'||answeredVerdict==='partly')?answered:pending;
         var active=B.experiments&&B.experimentUI?B.experiments.activeExperiment(events):null;
+        if(active&&typeof B.experiments.isFirstFlight==='function'&&
+           B.experiments.isFirstFlight(active))active=null;
         var closed=!active&&B.experiments&&B.experimentUI?B.experiments.latestClosedToday(events,now):null;
+        if(closed&&closed.payload&&typeof B.experiments.isFirstFlight==='function'&&
+           B.experiments.isFirstFlight(closed.payload))closed=null;
         if(active){
           currentTodayExperiment=active;
           todayOwnsNextMove=true;
@@ -3180,9 +3209,15 @@
     }
     function showFirstFlightError(message,selector,value){
       if(!todayEl)return;
-      var status=todayEl.querySelector('.ff-status');
+      var status=todayEl.querySelector('.ff-status')||todayEl.querySelector('.td-status');
       var input=todayEl.querySelector('.ff-answer');
-      if(status){status.textContent=message;status.classList.add('is-error');}
+      if(status){
+        status.setAttribute('role','status');
+        status.setAttribute('aria-live','polite');
+        status.setAttribute('aria-atomic','true');
+        status.textContent=message;
+        status.classList.add('is-error');
+      }
       if(input)input.setAttribute('aria-invalid','true');
       focusFirstFlightStep(selector,value);
     }
@@ -3276,6 +3311,56 @@
       }
       focusFirstFlightStep('[data-first-flight-state="mission_active"]');
     }
+    function completeFirstFlightMission(button){
+      if(firstFlightBusy||!button)return;
+      firstFlightBusy=true;
+      button.disabled=true;
+      button.setAttribute('aria-busy','true');
+      var card=button.closest?button.closest('[data-first-flight-state="mission_active"]'):null;
+      var state=currentFirstFlightState();
+      var completionContext=firstFlightCompletionContext(state);
+      var mission=completionContext&&completionContext.mission;
+      if(!card||todayEl.querySelectorAll('.ff-complete').length!==1||!mission||
+         !renderedFirstFlightCompletionContext||
+         completionContext.serialized!==renderedFirstFlightCompletionContext||
+         !Array.isArray(state.answers)||state.answers.length!==2||
+         typeof BHIVE.completeFirstFlight!=='function'){
+        firstFlightBusy=false;
+        renderToday();
+        showFirstFlightError(
+          'Your First Mission changed. Review it and try again.','.ff-complete');
+        return;
+      }
+      var request={
+        storageKey:STORAGE_KEY,
+        mission:mission,
+        cellKey:state.cellKey,
+        answers:state.answers.slice(),
+        now:Date.now()
+      };
+      var completed;
+      try{completed=BHIVE.completeFirstFlight(request);}
+      catch(e){completed={ok:false};}
+      bindState();
+      var completedState=currentFirstFlightState();
+      if(!completed||!completed.ok||!completedState||
+         completedState.status!=='mission_completed'||completedState.cellKey!==state.cellKey){
+        firstFlightBusy=false;
+        renderToday();
+        showFirstFlightError('First Mission could not be completed. Please try again.',
+          '.ff-complete');
+        return;
+      }
+      renderHive(false);
+      renderToday();
+      var status=todayEl.querySelector('.td-status');
+      if(status){
+        status.setAttribute('role','status');
+        status.setAttribute('aria-live','polite');
+        status.setAttribute('aria-atomic','true');
+        status.textContent='First Flight complete.';
+      }
+    }
     if(todayEl)todayEl.addEventListener('input',function(ev){
       var input=ev.target&&ev.target.closest?ev.target.closest('.ff-answer'):null;
       if(!input)return;
@@ -3295,6 +3380,12 @@
       submitFirstFlightAnswer(form);
     });
     if(todayEl)todayEl.addEventListener('click',function(ev){
+      var firstFlightComplete=ev.target&&ev.target.closest?
+        ev.target.closest('.ff-complete'):null;
+      if(firstFlightComplete){
+        completeFirstFlightMission(firstFlightComplete);
+        return;
+      }
       var firstFlightBegin=ev.target&&ev.target.closest?
         ev.target.closest('.ff-begin'):null;
       if(firstFlightBegin){

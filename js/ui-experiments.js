@@ -116,6 +116,21 @@
     try{return JSON.stringify(mission)===JSON.stringify(state.mission)?mission:null;}
     catch(e){return null;}
   }
+  function firstFlightCompletionMission(state){
+    if(!state||state.status!=='mission_active'||
+       typeof state.selectedEventId!=='string'||!state.selectedEventId||
+       typeof state.acceptedEventId!=='string'||!state.acceptedEventId||
+       !Array.isArray(state.answerEventIds)||state.answerEventIds.length!==2||
+       typeof state.answerEventIds[0]!=='string'||!state.answerEventIds[0]||
+       typeof state.answerEventIds[1]!=='string'||!state.answerEventIds[1]||
+       state.answerEventIds[0]===state.answerEventIds[1])return null;
+    var mission=firstFlightMissionForState(state);
+    if(!mission||!Array.isArray(mission.evidenceEventIds)||
+       mission.evidenceEventIds.length!==2||
+       mission.evidenceEventIds[0]!==state.answerEventIds[0]||
+       mission.evidenceEventIds[1]!==state.answerEventIds[1])return null;
+    return mission;
+  }
   function renderFirstFlight(state){
     if(!state||!B.experiments||!B.experiments.FIRST_FLIGHT)return '';
     var status=state.status,cell=state.cellKey&&B.experiments.FIRST_FLIGHT[state.cellKey];
@@ -151,7 +166,8 @@
         '</form>'+live+
       '</section>';
     }
-    mission=firstFlightMissionForState(state);
+    mission=status==='mission_active'?
+      firstFlightCompletionMission(state):firstFlightMissionForState(state);
     if(status==='mission_ready'&&mission){
       return '<section class="ff-card ff-mission-ready" data-first-flight data-first-flight-state="mission_ready" '+
         'tabindex="-1" aria-labelledby="ff-title">'+
@@ -175,7 +191,8 @@
           '<h3>'+esc(mission.title)+'</h3>'+
           '<p class="ff-mission-action">'+esc(mission.action)+'</p>'+
         '</div>'+
-        '<p class="ff-readonly">Take the step when you are ready. Completion comes later.</p>'+live+
+        '<p class="ff-readonly">Complete it here when you have taken the step.</p>'+
+        '<button class="ff-complete" type="button" aria-describedby="ff-status">Complete First Mission</button>'+live+
       '</section>';
     }
     return '';
@@ -221,6 +238,7 @@
     renderClosed:renderClosed,
     renderFirstFlight:renderFirstFlight,
     firstFlightMissionForState:firstFlightMissionForState,
+    firstFlightCompletionMission:firstFlightCompletionMission,
     toggleEditor:toggleEditor,
     readEdits:readEdits,
     toggleOutcomes:toggleOutcomes

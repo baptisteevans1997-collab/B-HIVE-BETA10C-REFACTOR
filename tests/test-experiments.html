@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>B HIVE Experiment Loop Tests (beta10c)</title>
-<link rel="stylesheet" href="../css/app.css?test=beta10c-stage4">
+<link rel="stylesheet" href="../css/app.css?test=first-flight-step3d">
 <style>
   body{background:#15120c;color:#ece4d2;font:14px/1.6 system-ui,sans-serif;max-width:780px;margin:40px auto;padding:0 20px}
   h1{color:#c9ae78;font-size:20px;border-bottom:1px solid rgba(237,228,210,.1);padding-bottom:10px}
@@ -22,7 +22,7 @@
 <script src="../js/bhive-inference.js?test=beta10c-stage4"></script>
 <script src="../js/bhive-memory-use.js?test=beta10c-stage5c-fix2"></script>
 <script src="../js/bhive-experiments.js?test=beta10c-stage5c-fix2"></script>
-<script src="../js/ui-experiments.js?test=beta10c-stage5c-fix2"></script>
+<script src="../js/ui-experiments.js?test=first-flight-step3d"></script>
 <script src="./fixtures/learning-fixtures.js?test=beta10c-stage4"></script>
 <script>
 (function(){
@@ -528,17 +528,62 @@
       U.firstFlightMissionForState(mismatched)===null&&
       U.renderFirstFlight(malformed)===''&&U.renderFirstFlight(mismatched)==='';
   });
-  test('First Flight active UI shows the deterministic mission in progress without controls',function(){
+  test('First Flight active UI shows the deterministic mission with exactly one completion control',function(){
     var events=firstFlightProgress('lw'),ready=X.firstFlightState(events);
     var accept=experimentEvent('experiment_accepted',X.decisionPayload(ready.mission,'accepted'),1);
     var active=X.firstFlightState(events.concat(accept));
     box.innerHTML=U.renderFirstFlight(active);
+    var complete=box.querySelector('.ff-complete');
     return box.querySelector('.ff-title').textContent==='Your First Mission is active.'&&
       box.querySelector('.ff-progress').textContent==='In progress'&&
       box.querySelector('.ff-mission h3').textContent==='Make the first move'&&
       box.querySelector('.ff-mission-action').textContent==='Take one small concrete step'&&
-      box.querySelectorAll('button,textarea,input,select').length===0&&
+      box.querySelectorAll('button,textarea,input,select').length===1&&!!complete&&
+      complete.type==='button'&&complete.textContent==='Complete First Mission'&&
+      complete.tabIndex===0&&!complete.disabled&&
+      complete.getAttribute('aria-describedby')==='ff-status'&&
       !box.querySelector('.td-exp-accept,.td-exp-edit,.td-exp-outcome,.td-exp-decline');
+  });
+  test('First Flight completion control fails closed for malformed, stale, edited or mismatched active state',function(){
+    var events=firstFlightProgress('lw'),ready=X.firstFlightState(events);
+    var accept=experimentEvent('experiment_accepted',X.decisionPayload(ready.mission,'accepted'),1);
+    var active=X.firstFlightState(events.concat(accept));
+    var variants=['selectedEventId','acceptedEventId','answerEventIds','cellKey','mission','answers'].map(function(kind){
+      var state=JSON.parse(JSON.stringify(active));
+      if(kind==='selectedEventId')delete state.selectedEventId;
+      if(kind==='acceptedEventId')delete state.acceptedEventId;
+      if(kind==='answerEventIds')state.answerEventIds[1]=state.answerEventIds[0];
+      if(kind==='cellKey')state.cellKey=null;
+      if(kind==='mission')state.mission.action='Edited outside the deterministic mission';
+      if(kind==='answers')state.answers[1]='A stale answer that does not match';
+      return state;
+    });
+    var stale=JSON.parse(JSON.stringify(active));
+    stale.mission.createdAt=0;
+    variants.push(stale);
+    return U.firstFlightCompletionMission(active)!==null&&
+      variants.every(function(state){
+        return U.firstFlightCompletionMission(state)===null&&U.renderFirstFlight(state)==='';
+      });
+  });
+  test('Complete First Mission appears only for authoritative mission_active',function(){
+    var events=firstFlightProgress('lw'),ready=X.firstFlightState(events);
+    var accept=experimentEvent('experiment_accepted',X.decisionPayload(ready.mission,'accepted'),1);
+    var active=X.firstFlightState(events.concat(accept));
+    var complete=experimentEvent('experiment_completed',X.completionPayload(ready.mission,'completed'),2);
+    var states=[
+      X.firstFlightState(events.slice(0,1)),
+      X.firstFlightState(events.slice(0,2)),
+      X.firstFlightState(events.slice(0,3)),
+      ready,
+      X.firstFlightState(events.concat([accept,complete]))
+    ];
+    var absent=states.every(function(state){
+      box.innerHTML=U.renderFirstFlight(state);
+      return box.querySelectorAll('.ff-complete').length===0;
+    });
+    box.innerHTML=U.renderFirstFlight(active);
+    return absent&&box.querySelectorAll('.ff-complete').length===1;
   });
   test('First Flight Begin action appears only for mission_ready and completed UI stays inactive',function(){
     var events=firstFlightProgress('lw'),ready=X.firstFlightState(events);

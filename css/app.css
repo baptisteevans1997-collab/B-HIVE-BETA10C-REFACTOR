@@ -1673,16 +1673,16 @@ em{font-style:italic}
 }
 .ff-intro,.ff-readonly{margin:8px 0 0;color:var(--ink-2);font-size:12.5px;line-height:1.55}
 .ff-choices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:15px}
-.ff-cell-choice,.ff-submit,.ff-begin{
+.ff-cell-choice,.ff-submit,.ff-begin,.ff-complete{
   min-height:42px;padding:9px 12px;border:1px solid var(--line-2);border-radius:7px;
   background:linear-gradient(135deg,rgba(201,174,120,.17),rgba(39,32,22,.58));
   color:var(--gold-2);font:600 11px/1.25 var(--sans);cursor:pointer;
   transition:background .18s ease,border-color .18s ease,color .18s ease;
 }
-.ff-cell-choice:hover,.ff-submit:hover,.ff-begin:hover{
+.ff-cell-choice:hover,.ff-submit:hover,.ff-begin:hover,.ff-complete:hover{
   border-color:var(--gold);background:rgba(201,174,120,.24);color:var(--ink);
 }
-.ff-cell-choice:focus-visible,.ff-submit:focus-visible,.ff-begin:focus-visible,.ff-answer:focus-visible{
+.ff-cell-choice:focus-visible,.ff-submit:focus-visible,.ff-begin:focus-visible,.ff-complete:focus-visible,.ff-answer:focus-visible{
   outline:2px solid var(--gold-2);outline-offset:2px;
 }
 .ff-form{margin-top:14px}
@@ -1698,9 +1698,9 @@ em{font-style:italic}
   color:var(--ink-3);font-size:10.5px;line-height:1.4;
 }
 .ff-counter{flex:none;color:var(--gold-2);font-family:var(--mono);font-size:9.5px}
-.ff-submit,.ff-begin{margin-top:12px;min-width:112px}
-.ff-begin{border-color:rgba(226,200,144,.72);background:rgba(201,174,120,.24);color:var(--ink)}
-.ff-submit:disabled,.ff-cell-choice:disabled,.ff-begin:disabled{opacity:.52;cursor:default}
+.ff-submit,.ff-begin,.ff-complete{margin-top:12px;min-width:112px}
+.ff-begin,.ff-complete{border-color:rgba(226,200,144,.72);background:rgba(201,174,120,.24);color:var(--ink)}
+.ff-submit:disabled,.ff-cell-choice:disabled,.ff-begin:disabled,.ff-complete:disabled{opacity:.52;cursor:default}
 .ff-status{min-height:18px;margin-top:10px;color:var(--sage);font-size:11px;line-height:1.45}
 .ff-status.is-error{color:var(--clay)}
 .ff-mission{
@@ -1718,10 +1718,10 @@ em{font-style:italic}
   .ff-card{padding:15px}
   .ff-title{font-size:18px}
   .ff-choices{grid-template-columns:1fr}
-  .ff-cell-choice,.ff-submit,.ff-begin{width:100%;font-size:12px}
+  .ff-cell-choice,.ff-submit,.ff-begin,.ff-complete{width:100%;font-size:12px}
 }
 @media (prefers-reduced-motion:reduce){
-  .ff-cell-choice,.ff-submit,.ff-begin{transition:none}
+  .ff-cell-choice,.ff-submit,.ff-begin,.ff-complete{transition:none}
 }
 .td-memory{
   margin:11px 0;padding:12px 0;border-top:1px solid var(--line-2);border-bottom:1px solid var(--line-2);

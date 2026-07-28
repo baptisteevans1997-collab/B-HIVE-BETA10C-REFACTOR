@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>B HIVE app-main controlled harness</title>
-<link rel="stylesheet" href="../css/app.css?first-flight-step3c">
+<link rel="stylesheet" href="../css/app.css?first-flight-step3d">
 <link rel="stylesheet" href="../css/beta-mobile-polish.css?navigation-consolidation">
 <link rel="stylesheet" href="../css/beta-overlays.css?navigation-consolidation">
 </head>
@@ -90,13 +90,16 @@
   'use strict';
   var scenario = new URLSearchParams(location.search).get('scenario') || 'widest';
   var storageKey = 'lw-brainmap-hive-v1';
+  var completionReload = scenario === 'completion-reload';
   var freshEligible = [
     'fresh','fresh-wide','health-select','people-select','save-failure','answer-save-failure',
     'genuine-completion'
   ].indexOf(scenario) >= 0;
   var stagedFirstFlight = [
     'progress','completed','resume-selected','mission-ready','mission-active','mission-active-wide',
-    'accept-save-failure'
+    'accept-save-failure','completion-save-failure','completion-no-reveal','completion-reload',
+    'completion-stale','completion-malformed','completion-domain-failure','completion-throw',
+    'completion-rerender'
   ].indexOf(scenario) >= 0;
   var isolatedFirstFlight = freshEligible || stagedFirstFlight;
   var keys = ['lw','free','craft','money','career','growth','finance','health','people','identity','clients','ink','side','recruit'];
@@ -138,13 +141,14 @@
     mbti: ['E','N','T','J'],
     swarms: scenario === 'migration' ?
       {lw:[{age:4,b:0.5,p:0.5}],craft:[{age:5,b:0.6,p:0.4}],free:[{age:8,b:0.3,p:0.7}]} :
+      completionReload ? {lw:[],health:[],people:[]} :
       stagedFirstFlight ?
       {lw:[{age:6,b:0.4,p:0.6}],health:[{age:7,b:0.5,p:0.5}],people:[{age:8,b:0.6,p:0.4}]} :
       {lw:[{age:4,b:0.5,p:0.5}],craft:[{age:5,b:0.6,p:0.4}]},
-    unlocks: scenario === 'locked' || stagedFirstFlight ?
-      ['lw','health','people'] : keys.slice()
+    unlocks: scenario === 'completion-no-reveal' ? keys.slice() :
+      scenario === 'locked' || stagedFirstFlight ? ['lw','health','people'] : keys.slice()
   };
-  if (scenario === 'evolve' || scenario === 'widest' ||
+  if (scenario === 'evolve' || scenario === 'widest' || scenario === 'normal-experiment' ||
       stagedFirstFlight || scenario === 'legacy-auto') fixture.unlockRevealVersion = 1;
   if (scenario === 'migration') fixture.learning = {
     modelVersion:1,
@@ -160,9 +164,8 @@
   localStorage.removeItem('lw-brainmap-queen-v1');
   localStorage.removeItem('bhive_beta_profile_answers');
   localStorage.removeItem('bhive_beta_profile_result');
-  if (!freshEligible) {
-    localStorage.setItem(storageKey, JSON.stringify(fixture));
-  }
+  window.__HARNESS_STORAGE_CLEARED=localStorage.getItem(storageKey)===null;
+  if (!freshEligible) localStorage.setItem(storageKey, JSON.stringify(fixture));
   window.__HARNESS_FOUNDATION_SWARMS = JSON.stringify({
     lw:fixture.swarms.lw||null,
     health:fixture.swarms.health||null,
@@ -170,7 +173,10 @@
   });
   localStorage.removeItem('lw-brainmap-tour-v2');
   if (['fresh','fresh-wide','progress','completed','resume-selected','mission-ready',
-      'mission-active','mission-active-wide','accept-save-failure','legacy-auto']
+      'mission-active','mission-active-wide','accept-save-failure','genuine-completion',
+      'completion-save-failure','completion-no-reveal','completion-reload','completion-stale',
+      'completion-malformed','completion-domain-failure','completion-throw',
+      'completion-rerender','legacy-auto']
       .indexOf(scenario) < 0) {
     localStorage.setItem('lw-brainmap-tour-v2', '1');
   }
@@ -282,7 +288,9 @@
   var storageKey = 'lw-brainmap-hive-v1';
   var staged = [
     'progress','completed','resume-selected','mission-ready','mission-active','mission-active-wide',
-    'accept-save-failure'
+    'accept-save-failure','completion-save-failure','completion-no-reveal','completion-reload',
+    'completion-stale','completion-malformed','completion-domain-failure','completion-throw',
+    'completion-rerender'
   ].indexOf(scenario) >= 0;
   if (staged) {
     var fixture = JSON.parse(localStorage.getItem(storageKey));
@@ -304,14 +312,22 @@
     }
     if (scenario === 'completed' || scenario === 'mission-ready' ||
         scenario === 'mission-active' || scenario === 'mission-active-wide' ||
-        scenario === 'accept-save-failure') {
+        scenario === 'accept-save-failure' || scenario === 'completion-save-failure' ||
+        scenario === 'completion-no-reveal' || scenario === 'completion-reload' ||
+        scenario === 'completion-stale' || scenario === 'completion-malformed' ||
+        scenario === 'completion-domain-failure' || scenario === 'completion-throw' ||
+        scenario === 'completion-rerender') {
       B.recordEvent('first_flight_answered', {
         ts:ts+3,cellKey:'lw',
         payload:{version:1,question:2,answer:'Complete one focused beta task'}
       });
     }
     if (scenario === 'completed' || scenario === 'mission-active' ||
-        scenario === 'mission-active-wide') {
+        scenario === 'mission-active-wide' || scenario === 'completion-save-failure' ||
+        scenario === 'completion-no-reveal' || scenario === 'completion-reload' ||
+        scenario === 'completion-stale' || scenario === 'completion-malformed' ||
+        scenario === 'completion-domain-failure' || scenario === 'completion-throw' ||
+        scenario === 'completion-rerender') {
       var ready = B.experiments.firstFlightState(B.learning.events);
       B.recordEvent('experiment_accepted', {
         id:'evt_harness_first_flight_accepted',ts:ts+4,cellKey:'lw',
@@ -324,8 +340,45 @@
         payload:B.experiments.completionPayload(ready.mission,'completed')
       });
     }
-    fixture.learning = B.learning;
-    localStorage.setItem(storageKey, JSON.stringify(fixture));
+    if (scenario === 'completion-reload') {
+      B.reconcileFirstFlightQuestions();
+      B.cells.forEach(function(cell){B.swarms[cell.key]=[];});
+      B.unlocks=B.UNLOCK_START.slice();
+      var reloadActive=B.experiments.firstFlightState(B.learning.events);
+      window.__HARNESS_RELOAD_SEED_RESULT=B.completeFirstFlight({
+        storageKey:storageKey,
+        mission:JSON.parse(JSON.stringify(reloadActive.mission)),
+        cellKey:reloadActive.cellKey,
+        answers:reloadActive.answers.slice(),
+        now:ts+5
+      });
+    } else {
+      fixture.learning = B.learning;
+      localStorage.setItem(storageKey, JSON.stringify(fixture));
+    }
+  }
+  if (scenario === 'normal-experiment') {
+    fixture = JSON.parse(localStorage.getItem(storageKey));
+    B = window.BHIVE;
+    B.init();
+    var normalNow=Date.now();
+    var normalMission={
+      experimentId:'exp_harness_normal',insightId:'obs_harness_normal',
+      evidenceKey:'evt_harness_normal_evidence',
+      evidenceEventIds:['evt_harness_normal_evidence'],observationKind:'trend',
+      classification:'rising',themeId:null,cellKey:'lw',strategyId:'protected_block',
+      action:'Take one normal action',measure:'Complete it and report back',durationDays:1,
+      createdAt:normalNow-1000,dueAt:normalNow+86400000,sourceVerdict:'true',
+      sourceRead:'A normal evidence-backed read'
+    };
+    B.recordEvent('experiment_accepted',{
+      id:'evt_harness_normal_accepted',ts:normalNow,cellKey:'lw',
+      payload:B.experiments.decisionPayload(normalMission,'accepted')
+    });
+    fixture.learning=B.learning;
+    localStorage.setItem(storageKey,JSON.stringify(fixture));
+    B.inference={};
+    B.insightUI={latestFeedbackToday:function(){return null;}};
   }
   var stored = localStorage.getItem(storageKey);
   window.__HARNESS_STORED_HIVE = stored;
@@ -337,7 +390,16 @@
   var originalUnlockFromAnswer = window.BHIVE.unlockFromAnswer;
   var originalSeedSwarms = window.BHIVE.seedSwarms;
   window.__HARNESS_SAVE_CALLS = 0;
+  window.__HARNESS_SAVE_INSIDE_COMPLETE = 0;
+  window.__HARNESS_SAVE_OUTSIDE_COMPLETE = 0;
   window.__HARNESS_COMPLETE_CALLS = 0;
+  window.__HARNESS_COMPLETE_DEPTH = 0;
+  window.__HARNESS_COMPLETE_REQUESTS = [];
+  window.__HARNESS_COMPLETE_RESULTS = [];
+  window.__HARNESS_BUSY_OBSERVATIONS = [];
+  window.__HARNESS_REENTERED_COMPLETION = false;
+  window.__HARNESS_FAIL_DOMAIN_ONCE = scenario === 'completion-domain-failure';
+  window.__HARNESS_THROW_COMPLETION_ONCE = scenario === 'completion-throw';
   window.__HARNESS_ADD_LEARNING_CALLS = 0;
   window.__HARNESS_UNLOCK_CALLS = 0;
   window.__HARNESS_UNLOCK_REQUESTS = [];
@@ -345,16 +407,77 @@
   window.__HARNESS_FAIL_SAVES = scenario === 'save-failure';
   window.__HARNESS_FAIL_ANSWER_SAVE = scenario === 'answer-save-failure';
   window.__HARNESS_FAIL_ACCEPT_SAVE = scenario === 'accept-save-failure';
+  window.__HARNESS_FAIL_COMPLETION_SAVE = scenario === 'completion-save-failure';
   window.BHIVE.save = function(storageKey){
     window.__HARNESS_SAVE_CALLS++;
+    if(window.__HARNESS_COMPLETE_DEPTH)window.__HARNESS_SAVE_INSIDE_COMPLETE++;
+    else window.__HARNESS_SAVE_OUTSIDE_COMPLETE++;
     if(window.__HARNESS_FAIL_SAVES||
       (window.__HARNESS_FAIL_ANSWER_SAVE&&window.__HARNESS_SAVE_CALLS>1)||
-      (window.__HARNESS_FAIL_ACCEPT_SAVE&&window.__HARNESS_SAVE_CALLS===1))return false;
+      (window.__HARNESS_FAIL_ACCEPT_SAVE&&window.__HARNESS_SAVE_CALLS===1)||
+      (window.__HARNESS_FAIL_COMPLETION_SAVE&&window.__HARNESS_COMPLETE_DEPTH))return false;
     return originalSave.call(window.BHIVE,storageKey);
   };
   window.BHIVE.completeFirstFlight = function(){
     window.__HARNESS_COMPLETE_CALLS++;
-    return originalComplete.apply(window.BHIVE,arguments);
+    window.__HARNESS_COMPLETE_REQUESTS.push(JSON.parse(JSON.stringify(arguments[0]||null)));
+    var completeButton=document.querySelector('#hive-today .ff-complete');
+    var busyObservation={
+      buttonDisabled:!!completeButton&&completeButton.disabled,
+      ariaBusy:completeButton&&completeButton.getAttribute('aria-busy'),
+      reentrantClickBlocked:false,
+      reentrantEnterBlocked:false,
+      reentrantSpaceBlocked:false
+    };
+    if(completeButton){
+      var callsBeforeReentry=window.__HARNESS_COMPLETE_CALLS;
+      completeButton.disabled=false;
+      completeButton.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true}));
+      busyObservation.reentrantClickBlocked=
+        window.__HARNESS_COMPLETE_CALLS===callsBeforeReentry;
+      completeButton.dispatchEvent(new KeyboardEvent('keydown',{
+        key:'Enter',code:'Enter',bubbles:true,cancelable:true
+      }));
+      completeButton.dispatchEvent(new KeyboardEvent('keyup',{
+        key:'Enter',code:'Enter',bubbles:true,cancelable:true
+      }));
+      completeButton.dispatchEvent(new MouseEvent('click',{
+        bubbles:true,cancelable:true,detail:0
+      }));
+      busyObservation.reentrantEnterBlocked=
+        window.__HARNESS_COMPLETE_CALLS===callsBeforeReentry;
+      completeButton.dispatchEvent(new KeyboardEvent('keydown',{
+        key:' ',code:'Space',bubbles:true,cancelable:true
+      }));
+      completeButton.dispatchEvent(new KeyboardEvent('keyup',{
+        key:' ',code:'Space',bubbles:true,cancelable:true
+      }));
+      completeButton.dispatchEvent(new MouseEvent('click',{
+        bubbles:true,cancelable:true,detail:0
+      }));
+      busyObservation.reentrantSpaceBlocked=
+        window.__HARNESS_COMPLETE_CALLS===callsBeforeReentry;
+      completeButton.disabled=true;
+      window.__HARNESS_REENTERED_COMPLETION=true;
+    }
+    window.__HARNESS_BUSY_OBSERVATIONS.push(busyObservation);
+    window.__HARNESS_COMPLETE_DEPTH++;
+    try{
+      var result;
+      if(window.__HARNESS_FAIL_DOMAIN_ONCE){
+        window.__HARNESS_FAIL_DOMAIN_ONCE=false;
+        result={ok:false,reason:'domain_rejected'};
+      }else if(window.__HARNESS_THROW_COMPLETION_ONCE){
+        window.__HARNESS_THROW_COMPLETION_ONCE=false;
+        throw new Error('fixture completion exception');
+      }else{
+        result=originalComplete.apply(window.BHIVE,arguments);
+      }
+      window.__HARNESS_COMPLETE_RESULTS.push(JSON.parse(JSON.stringify(result)));
+      return result;
+    }finally{
+      window.__HARNESS_COMPLETE_DEPTH--;
+    }
   };
   window.BHIVE.addLearning = function(){
     window.__HARNESS_ADD_LEARNING_CALLS++;
@@ -374,8 +497,8 @@
   };
 }());
 </script>
-<script src="../js/ui-experiments.js?first-flight-step3c"></script>
-<script src="../js/app-main.js?first-flight-step3dp"></script>
+<script src="../js/ui-experiments.js?first-flight-step3d"></script>
+<script src="../js/app-main.js?first-flight-step3d-context-fix"></script>
 <script src="../js/beta-profile-data.js"></script>
 <script src="../js/beta-profile.js?first-flight-step3b"></script>
 <script>
@@ -384,7 +507,10 @@
   var deadline = Date.now() + 2000;
   var scenarioName = new URLSearchParams(location.search).get('scenario') || 'widest';
   var settleAt = ['fresh','fresh-wide','genuine-completion','progress','completed','resume-selected',
-    'mission-ready','mission-active','mission-active-wide','accept-save-failure','legacy-auto']
+    'mission-ready','mission-active','mission-active-wide','accept-save-failure',
+    'completion-save-failure','completion-no-reveal','completion-reload','completion-stale',
+    'completion-malformed','completion-domain-failure','completion-throw','completion-rerender',
+    'normal-experiment','legacy-auto']
     .indexOf(scenarioName) >= 0 ? Date.now() + 700 : 0;
 
   function postFailure(message) {
@@ -409,9 +535,12 @@
       'fresh','fresh-wide','health-select','people-select','save-failure','answer-save-failure',
       'genuine-completion',
       'locked','progress','completed','resume-selected','mission-ready','mission-active',
-      'mission-active-wide','accept-save-failure'
+      'mission-active-wide','accept-save-failure','completion-save-failure',
+      'completion-stale','completion-malformed','completion-domain-failure','completion-throw',
+      'completion-rerender'
     ].indexOf(readyScenario) >= 0;
-    var expectedRenderedCells = foundationOnly ? 3 : readyScenario === 'migration' ? 6 : 14;
+    var expectedRenderedCells = readyScenario === 'completion-reload' ? 4 :
+      foundationOnly ? 3 : readyScenario === 'migration' ? 6 : 14;
     return Date.now() >= settleAt && document.readyState !== 'loading' &&
       window.__INDEX_SIGNATURE &&
       window.BHIVE && Array.isArray(window.BHIVE.cells) && window.BHIVE.cells.length === 14 &&
@@ -550,6 +679,7 @@
           return item&&item.s==='claude'&&item.q==='Preserve this resumable question';
         }),
         interfacePresent:!!document.querySelector('[data-first-flight]'),
+        completionControlCount:document.querySelectorAll('#hive-today .ff-complete').length,
         interfaceInactive:!document.querySelector(
           '#first-flight, .first-flight, [data-first-flight]')
       };
@@ -565,6 +695,8 @@
       var ffInitialChoices=document.querySelector('#hive-today .ff-choices');
       if(ffInitialCard){
         var ffInitialRect=ffInitialCard.getBoundingClientRect();
+        var ffInitialComplete=ffInitialCard.querySelector('.ff-complete');
+        var ffInitialCompleteRect=ffInitialComplete&&ffInitialComplete.getBoundingClientRect();
         var ffChoiceStyle=ffInitialChoices&&getComputedStyle(ffInitialChoices);
         var ffFrameRect=window.frameElement&&window.frameElement.getBoundingClientRect();
         result.firstFlightLayout={
@@ -574,6 +706,9 @@
             document.documentElement.clientWidth,
           choiceColumns:ffChoiceStyle?
             ffChoiceStyle.gridTemplateColumns.split(' ').filter(Boolean).length:0,
+          completionWithinViewport:!ffInitialCompleteRect||
+            (ffInitialCompleteRect.left>=0&&
+             ffInitialCompleteRect.right<=document.documentElement.clientWidth),
           viewportWidth:document.documentElement.clientWidth,
           frameWidth:ffFrameRect&&ffFrameRect.width,
           frameHeight:ffFrameRect&&ffFrameRect.height
@@ -597,6 +732,21 @@
           agents:window.BHIVE.agents,
           history:window.BHIVE.history,
           playbook:window.BHIVE.playbook
+        });
+      }
+      function ffCompletionSnapshot(){
+        return JSON.stringify({
+          learnings:window.BHIVE.learnings,
+          questions:window.BHIVE.questions,
+          swarms:window.BHIVE.swarms,
+          unlocks:window.BHIVE.unlocks,
+          learning:window.BHIVE.learning,
+          localTs:window.BHIVE.localTs,
+          agents:window.BHIVE.agents,
+          requests:window.BHIVE.requests,
+          history:window.BHIVE.history,
+          playbook:window.BHIVE.playbook,
+          mbti:window.BHIVE.mbti
         });
       }
       function ffSetAnswer(value){
@@ -728,15 +878,23 @@
         var ffGenuineCompletionCallStart=window.__HARNESS_COMPLETE_CALLS;
         var ffGenuineUnlockStart=window.__HARNESS_UNLOCK_CALLS;
         var ffGenuineSeedStart=window.__HARNESS_ENGINE_SEED_CALLS;
-        var ffGenuineRequest={
-          storageKey:storageKey,
-          mission:JSON.parse(JSON.stringify(ffGenuineActive.mission)),
-          cellKey:ffGenuineActive.cellKey,
-          answers:ffGenuineActive.answers.slice(),
-          now:Date.now()
-        };
-        var ffGenuineRequestBefore=JSON.stringify(ffGenuineRequest);
-        var ffGenuineResult=window.BHIVE.completeFirstFlight(ffGenuineRequest);
+        var ffGenuineInsideSaveStart=window.__HARNESS_SAVE_INSIDE_COMPLETE;
+        var ffGenuineOutsideSaveStart=window.__HARNESS_SAVE_OUTSIDE_COMPLETE;
+        var ffGenuineOnboardingBefore=JSON.stringify({
+          tour:localStorage.getItem('lw-brainmap-tour-v2'),
+          profileAnswers:localStorage.getItem('bhive_beta_profile_answers'),
+          profileResult:localStorage.getItem('bhive_beta_profile_result')
+        });
+        var ffGenuineButton=document.querySelector('#hive-today .ff-complete');
+        var ffGenuineButtonCount=document.querySelectorAll('#hive-today .ff-complete').length;
+        var ffGenuineExpectedMission=window.BHIVE.experiments.firstFlightMission(
+          ffGenuineActive.cellKey,ffGenuineActive.answers,ffGenuineActive.mission.createdAt);
+        if(ffGenuineButton)ffGenuineButton.focus();
+        var ffGenuineButtonFocused=document.activeElement===ffGenuineButton;
+        if(ffGenuineButton)ffGenuineButton.click();
+        if(ffGenuineButton)ffGenuineButton.click();
+        var ffGenuineRequest=window.__HARNESS_COMPLETE_REQUESTS[0];
+        var ffGenuineResult=window.__HARNESS_COMPLETE_RESULTS[0];
         var ffGenuineCompleted=ffState();
         var ffGenuineSaved=JSON.parse(localStorage.getItem(storageKey));
         var ffGenuineSavedState=window.BHIVE.experiments.firstFlightState(
@@ -769,13 +927,39 @@
             }),
           readyStatus:ffGenuineReady&&ffGenuineReady.status,
           activeStatus:ffGenuineActive&&ffGenuineActive.status,
+          completionButtonCount:ffGenuineButtonCount,
+          completionButtonText:ffGenuineButton&&ffGenuineButton.textContent,
+          completionButtonType:ffGenuineButton&&ffGenuineButton.type,
+          completionButtonFocused:ffGenuineButtonFocused,
           completionOk:ffGenuineResult&&ffGenuineResult.ok&&!ffGenuineResult.alreadyCompleted,
           completionCalls:window.__HARNESS_COMPLETE_CALLS-ffGenuineCompletionCallStart,
           completionSaveCalls:window.__HARNESS_SAVE_CALLS-ffGenuineCompletionSaveStart,
+          domainOwnedSaveCalls:window.__HARNESS_SAVE_INSIDE_COMPLETE-ffGenuineInsideSaveStart,
+          uiSaveCalls:window.__HARNESS_SAVE_OUTSIDE_COMPLETE-ffGenuineOutsideSaveStart,
           deliberateSaveCallsBeforeCompletion:ffGenuineCompletionSaveStart-ffGenuineSaveStart,
           completedStatus:ffGenuineCompleted&&ffGenuineCompleted.status,
           persistedCompleted:ffGenuineSavedState&&ffGenuineSavedState.status==='mission_completed',
-          requestUnchanged:ffGenuineRequestBefore===JSON.stringify(ffGenuineRequest),
+          requestCanonical:!!ffGenuineRequest&&ffGenuineRequest.storageKey===storageKey&&
+            ffGenuineRequest.cellKey===ffGenuineActive.cellKey&&
+            JSON.stringify(ffGenuineRequest.answers)===JSON.stringify(ffGenuineActive.answers)&&
+            JSON.stringify(ffGenuineRequest.mission)===JSON.stringify(ffGenuineExpectedMission)&&
+            JSON.stringify(ffGenuineRequest.mission)===JSON.stringify(ffGenuineActive.mission)&&
+            typeof ffGenuineRequest.now==='number'&&isFinite(ffGenuineRequest.now)&&
+            ffGenuineRequest.now>0,
+          reentrantActivationBlocked:window.__HARNESS_REENTERED_COMPLETION&&
+            window.__HARNESS_COMPLETE_CALLS-ffGenuineCompletionCallStart===1,
+          interfaceRemoved:!document.querySelector('#hive-today [data-first-flight]')&&
+            !document.querySelector('#hive-today .ff-complete'),
+          normalPresentation:!!document.querySelector('#hive-today .td-status')&&
+            !document.querySelector('#hive-today .td-experiment-closed, #hive-today .td-experiment'),
+          successAnnouncement:!!document.querySelector(
+            '#hive-today .td-status[role="status"][aria-live="polite"][aria-atomic="true"]')&&
+            document.querySelector('#hive-today .td-status').textContent==='First Flight complete.',
+          onboardingUnchanged:ffGenuineOnboardingBefore===JSON.stringify({
+            tour:localStorage.getItem('lw-brainmap-tour-v2'),
+            profileAnswers:localStorage.getItem('bhive_beta_profile_answers'),
+            profileResult:localStorage.getItem('bhive_beta_profile_result')
+          })&&document.getElementById('tour').hidden&&!document.getElementById('bhpr-card'),
           exactLearnings:ffGenuineLearnings.length===2&&
             ffGenuineLearnings[0].t==='Finishing the beta matters most'&&
             ffGenuineLearnings[1].t==='Complete one focused beta task'&&
@@ -819,6 +1003,313 @@
               JSON.stringify(window.BHIVE.questions)&&
             JSON.stringify(ffGenuineSaved.swarms)===JSON.stringify(window.BHIVE.swarms)&&
             JSON.stringify(ffGenuineSaved.unlocks)===JSON.stringify(window.BHIVE.unlocks)
+        };
+      }else if(scenario==='completion-stale'){
+        var ffStaleInitial=ffState();
+        var ffStaleOldButton=document.querySelector('#hive-today .ff-complete');
+        var ffStaleOldAction=(document.querySelector('#hive-today .ff-mission-action')||{}).textContent||'';
+        var ffStaleAnswerEvent=window.BHIVE.learning.events.filter(function(event){
+          return event.type==='first_flight_answered'&&event.payload.question===2;
+        })[0];
+        var ffStaleAcceptedEvent=window.BHIVE.learning.events.filter(function(event){
+          return event.type==='experiment_accepted';
+        })[0];
+        ffStaleAnswerEvent.payload.answer='Complete a newly reviewed beta task';
+        var ffStaleChangedMission=window.BHIVE.experiments.firstFlightMission(
+          ffStaleInitial.cellKey,
+          [ffStaleInitial.answers[0],ffStaleAnswerEvent.payload.answer],ffStaleAnswerEvent.ts);
+        ffStaleAcceptedEvent.payload=window.BHIVE.experiments.decisionPayload(
+          ffStaleChangedMission,'accepted');
+        var ffStaleAuthoritative=ffState();
+        var ffStaleBefore=ffCompletionSnapshot();
+        var ffStaleStored=localStorage.getItem(storageKey);
+        var ffStaleCalls=window.__HARNESS_COMPLETE_CALLS;
+        var ffStaleSaves=window.__HARNESS_SAVE_CALLS;
+        ffStaleOldButton.click();
+        var ffStaleFreshButton=document.querySelector('#hive-today .ff-complete');
+        var ffStaleStatus=document.querySelector('#hive-today .ff-status');
+        var ffStaleBlocked=window.__HARNESS_COMPLETE_CALLS===ffStaleCalls&&
+          window.__HARNESS_SAVE_CALLS===ffStaleSaves&&ffStaleBefore===ffCompletionSnapshot()&&
+          ffStaleStored===localStorage.getItem(storageKey);
+        var ffStaleFreshAction=(document.querySelector('#hive-today .ff-mission-action')||{}).textContent||'';
+        var ffStaleFreshRestored=!!ffStaleFreshButton&&ffStaleFreshButton!==ffStaleOldButton&&
+          !ffStaleFreshButton.disabled&&ffStaleFreshButton.getAttribute('aria-busy')===null;
+        var ffStaleFreshFocus=document.activeElement===ffStaleFreshButton;
+        ffStaleFreshButton.click();
+        result.firstFlightFlow={
+          initialStatus:ffStaleInitial&&ffStaleInitial.status,
+          authoritativeStatus:ffStaleAuthoritative&&ffStaleAuthoritative.status,
+          displayedActionChanged:ffStaleOldAction==='Complete one focused beta task'&&
+            ffStaleFreshAction==='Complete a newly reviewed beta task',
+          staleActivationBlocked:ffStaleBlocked,
+          zeroCallsBeforeRetry:ffStaleCalls===0,
+          freshButton:ffStaleFreshRestored,
+          freshFocus:ffStaleFreshFocus,
+          changedAnnouncement:!!ffStaleStatus&&
+            ffStaleStatus.matches('[role="status"][aria-live="polite"][aria-atomic="true"]')&&
+            ffStaleStatus.textContent==='Your First Mission changed. Review it and try again.',
+          retryCompleted:ffState()&&ffState().status==='mission_completed',
+          completionCalls:window.__HARNESS_COMPLETE_CALLS-ffStaleCalls,
+          domainSaveCalls:window.__HARNESS_SAVE_INSIDE_COMPLETE,
+          uiSaveCalls:window.__HARNESS_SAVE_OUTSIDE_COMPLETE,
+          controlsRemoved:!document.querySelector('#hive-today .ff-complete')
+        };
+      }else if(scenario==='completion-malformed'){
+        var ffMalformedOldButton=document.querySelector('#hive-today .ff-complete');
+        var ffMalformedAccepted=window.BHIVE.learning.events.filter(function(event){
+          return event.type==='experiment_accepted';
+        })[0];
+        ffMalformedAccepted.payload.action='Edited outside the deterministic mission';
+        var ffMalformedBefore=ffCompletionSnapshot();
+        var ffMalformedStored=localStorage.getItem(storageKey);
+        var ffMalformedCalls=window.__HARNESS_COMPLETE_CALLS;
+        var ffMalformedSaves=window.__HARNESS_SAVE_CALLS;
+        ffMalformedOldButton.click();
+        var ffMalformedStatus=document.querySelector('#hive-today .ff-status');
+        result.firstFlightFlow={
+          derivedStatus:ffState()&&ffState().status,
+          completionCalls:window.__HARNESS_COMPLETE_CALLS-ffMalformedCalls,
+          saveCalls:window.__HARNESS_SAVE_CALLS-ffMalformedSaves,
+          statePreserved:ffMalformedBefore===ffCompletionSnapshot(),
+          storedBytesPreserved:ffMalformedStored===localStorage.getItem(storageKey),
+          noCompletionEffects:ffEventCount('learning_added')===0&&
+            ffEventCount('experiment_completed')===0,
+          completionControlAbsent:!document.querySelector('#hive-today .ff-complete'),
+          changedAnnouncement:!!ffMalformedStatus&&
+            ffMalformedStatus.matches('[role="status"][aria-live="polite"][aria-atomic="true"]')&&
+            ffMalformedStatus.textContent==='Your First Mission changed. Review it and try again.'
+        };
+      }else if(scenario==='completion-domain-failure'||scenario==='completion-throw'){
+        var ffOperationFailureKind=scenario==='completion-throw'?'throw':'domain';
+        var ffOperationFailureState=ffState();
+        var ffOperationFailureBefore=ffCompletionSnapshot();
+        var ffOperationFailureStored=localStorage.getItem(storageKey);
+        var ffOperationFailureCalls=window.__HARNESS_COMPLETE_CALLS;
+        var ffOperationFailureInside=window.__HARNESS_SAVE_INSIDE_COMPLETE;
+        var ffOperationFailureOutside=window.__HARNESS_SAVE_OUTSIDE_COMPLETE;
+        var ffOperationFailureOldButton=document.querySelector('#hive-today .ff-complete');
+        ffOperationFailureOldButton.click();
+        var ffOperationFailureFreshButton=document.querySelector('#hive-today .ff-complete');
+        var ffOperationFailureStatus=document.querySelector('#hive-today .ff-status');
+        var ffOperationFailureBusy=window.__HARNESS_BUSY_OBSERVATIONS[0];
+        var ffOperationFailureStoredClean=ffOperationFailureStored===
+          localStorage.getItem(storageKey);
+        var ffOperationFailureClean=ffOperationFailureBefore===ffCompletionSnapshot()&&
+          ffOperationFailureStoredClean;
+        var ffOperationFailureFocused=document.activeElement===ffOperationFailureFreshButton;
+        var ffOperationFailureRestored=!!ffOperationFailureFreshButton&&
+          ffOperationFailureFreshButton!==ffOperationFailureOldButton&&
+          !ffOperationFailureFreshButton.disabled&&
+          ffOperationFailureFreshButton.getAttribute('aria-busy')===null;
+        ffOperationFailureFreshButton.click();
+        var ffOperationFailureLearningEvents=window.BHIVE.learning.events.filter(function(event){
+          return event.type==='learning_added'&&event.payload.firstFlightVersion===1;
+        });
+        var ffOperationFailureCompletions=window.BHIVE.learning.events.filter(function(event){
+          return event.type==='experiment_completed'&&event.id==='evt_first_flight_v1_completed_lw';
+        });
+        result.firstFlightFlow={
+          failureKind:ffOperationFailureKind,
+          initialStatus:ffOperationFailureState&&ffOperationFailureState.status,
+          failedStatus:ffOperationFailureClean?'mission_active':null,
+          failedSnapshotRestored:ffOperationFailureClean,
+          failedStoredBytesRestored:ffOperationFailureStoredClean,
+          failedControlRestored:ffOperationFailureRestored,
+          failedFocus:ffOperationFailureFocused,
+          failedAnnouncement:!!ffOperationFailureStatus&&
+            ffOperationFailureStatus.matches('[role="status"][aria-live="polite"][aria-atomic="true"]')&&
+            ffOperationFailureStatus.textContent==='First Mission could not be completed. Please try again.',
+          busyObserved:!!ffOperationFailureBusy&&ffOperationFailureBusy.buttonDisabled&&
+            ffOperationFailureBusy.ariaBusy==='true'&&ffOperationFailureBusy.reentrantClickBlocked&&
+            ffOperationFailureBusy.reentrantEnterBlocked&&ffOperationFailureBusy.reentrantSpaceBlocked,
+          retryCompleted:ffState()&&ffState().status==='mission_completed',
+          operationCalls:window.__HARNESS_COMPLETE_CALLS-ffOperationFailureCalls,
+          domainSaveCalls:window.__HARNESS_SAVE_INSIDE_COMPLETE-ffOperationFailureInside,
+          uiSaveCalls:window.__HARNESS_SAVE_OUTSIDE_COMPLETE-ffOperationFailureOutside,
+          exactEffectsOnce:ffOperationFailureLearningEvents.length===2&&
+            ffOperationFailureCompletions.length===1&&
+            window.BHIVE.swarms.lw.filter(function(worker){return worker.age===3;}).length===1,
+          controlsRemoved:!document.querySelector('#hive-today .ff-complete')
+        };
+      }else if(scenario==='completion-rerender'){
+        var ffRerenderCounts=[],ffRerenderIndex;
+        var ffRerenderOutsideStart=window.__HARNESS_SAVE_OUTSIDE_COMPLETE;
+        for(ffRerenderIndex=0;ffRerenderIndex<5;ffRerenderIndex++){
+          var ffRerenderMbti=document.querySelector('#hive-mbti .mb-ax');
+          if(ffRerenderMbti)ffRerenderMbti.click();
+          ffRerenderCounts.push({
+            surfaces:document.querySelectorAll('#hive-today [data-first-flight]').length,
+            controls:document.querySelectorAll('#hive-today .ff-complete').length
+          });
+        }
+        var ffRerenderCalls=window.__HARNESS_COMPLETE_CALLS;
+        var ffRerenderInside=window.__HARNESS_SAVE_INSIDE_COMPLETE;
+        var ffRerenderOutside=window.__HARNESS_SAVE_OUTSIDE_COMPLETE;
+        document.querySelector('#hive-today .ff-complete').click();
+        result.firstFlightFlow={
+          rerenders:ffRerenderCounts.length,
+          rerenderUiSaveCalls:ffRerenderOutside-ffRerenderOutsideStart,
+          exactlyOneSurfaceEach:ffRerenderCounts.every(function(item){
+            return item.surfaces===1&&item.controls===1;
+          }),
+          completionCalls:window.__HARNESS_COMPLETE_CALLS-ffRerenderCalls,
+          domainSaveCalls:window.__HARNESS_SAVE_INSIDE_COMPLETE-ffRerenderInside,
+          uiSaveCallsDuringCompletion:window.__HARNESS_SAVE_OUTSIDE_COMPLETE-ffRerenderOutside,
+          completedStatus:ffState()&&ffState().status,
+          handlersDidNotAccumulate:window.__HARNESS_COMPLETE_CALLS-ffRerenderCalls===1,
+          controlsRemoved:!document.querySelector('#hive-today .ff-complete')
+        };
+      }else if(scenario==='completion-save-failure'){
+        var ffCompletionFailureState=ffState();
+        var ffCompletionFailureSnapshot=ffCompletionSnapshot();
+        var ffCompletionFailureStored=localStorage.getItem(storageKey);
+        var ffCompletionFailureCalls=window.__HARNESS_COMPLETE_CALLS;
+        var ffCompletionFailureSaveCalls=window.__HARNESS_SAVE_CALLS;
+        var ffCompletionFailureInsideSaves=window.__HARNESS_SAVE_INSIDE_COMPLETE;
+        var ffCompletionFailureOutsideSaves=window.__HARNESS_SAVE_OUTSIDE_COMPLETE;
+        var ffCompletionFailureSeedCalls=window.__HARNESS_ENGINE_SEED_CALLS;
+        var ffCompletionFailureButton=document.querySelector('#hive-today .ff-complete');
+        ffCompletionFailureButton.click();
+        var ffCompletionFailedState=ffState();
+        var ffCompletionRetryButton=document.querySelector('#hive-today .ff-complete');
+        var ffCompletionFailureStatus=document.querySelector('#hive-today .ff-status');
+        var ffCompletionFirstResult=window.__HARNESS_COMPLETE_RESULTS[0];
+        var ffCompletionFailureBusy=window.__HARNESS_BUSY_OBSERVATIONS[0];
+        var ffCompletionFailureClean=ffCompletionFailureSnapshot===ffCompletionSnapshot();
+        var ffCompletionFailureStoredClean=ffCompletionFailureStored===
+          localStorage.getItem(storageKey);
+        var ffCompletionFailureFocused=document.activeElement===ffCompletionRetryButton;
+        var ffCompletionFailureEnabled=!!ffCompletionRetryButton&&
+          ffCompletionRetryButton!==ffCompletionFailureButton&&!ffCompletionRetryButton.disabled&&
+          ffCompletionRetryButton.getAttribute('aria-busy')===null;
+        window.__HARNESS_FAIL_COMPLETION_SAVE=false;
+        ffCompletionRetryButton.click();
+        var ffCompletionRetryState=ffState();
+        var ffCompletionRetryResult=window.__HARNESS_COMPLETE_RESULTS[1];
+        var ffCompletionRetryLearnings=(window.BHIVE.learning.events||[]).filter(function(event){
+          return event.type==='learning_added'&&event.cellKey==='lw'&&
+            event.payload.firstFlightVersion===1;
+        });
+        var ffCompletionRetryCompletions=(window.BHIVE.learning.events||[]).filter(function(event){
+          return event.type==='experiment_completed'&&event.id==='evt_first_flight_v1_completed_lw';
+        });
+        var ffCompletionRetryStats=window.BHIVE.experiments.strategyStats(
+          window.BHIVE.learning.events,ffCompletionFailureState.mission.strategyId,'lw');
+        result.firstFlightFlow={
+          initialStatus:ffCompletionFailureState&&ffCompletionFailureState.status,
+          failedResult:ffCompletionFirstResult&& !ffCompletionFirstResult.ok&&
+            ffCompletionFirstResult.reason==='completion_failed',
+          failedStatus:ffCompletionFailedState&&ffCompletionFailedState.status,
+          failedSnapshotRestored:ffCompletionFailureClean,
+          failedStoredBytesRestored:ffCompletionFailureStoredClean,
+          failedControlRestored:ffCompletionFailureEnabled,
+          failedFocus:ffCompletionFailureFocused,
+          failedAnnouncement:!!ffCompletionFailureStatus&&
+            ffCompletionFailureStatus.matches('[role="status"][aria-live="polite"][aria-atomic="true"]')&&
+            ffCompletionFailureStatus.classList.contains('is-error')&&
+            ffCompletionFailureStatus.textContent===
+              'First Mission could not be completed. Please try again.',
+          busyObserved:!!ffCompletionFailureBusy&&ffCompletionFailureBusy.buttonDisabled&&
+            ffCompletionFailureBusy.ariaBusy==='true'&&
+            ffCompletionFailureBusy.reentrantClickBlocked&&
+            ffCompletionFailureBusy.reentrantEnterBlocked&&
+            ffCompletionFailureBusy.reentrantSpaceBlocked,
+          retryOk:ffCompletionRetryResult&&ffCompletionRetryResult.ok&&
+            !ffCompletionRetryResult.alreadyCompleted,
+          retryStatus:ffCompletionRetryState&&ffCompletionRetryState.status,
+          operationCalls:window.__HARNESS_COMPLETE_CALLS-ffCompletionFailureCalls,
+          domainSaveAttempts:window.__HARNESS_SAVE_INSIDE_COMPLETE-
+            ffCompletionFailureInsideSaves,
+          uiSaveCalls:window.__HARNESS_SAVE_OUTSIDE_COMPLETE-
+            ffCompletionFailureOutsideSaves,
+          totalSaveAttempts:window.__HARNESS_SAVE_CALLS-ffCompletionFailureSaveCalls,
+          exactEffectsOnce:ffCompletionRetryLearnings.length===2&&
+            ffCompletionRetryCompletions.length===1&&
+            (window.BHIVE.learnings.lw||[]).filter(function(item){
+              return item&&item.s==='you';
+            }).length===2&&
+            (window.BHIVE.swarms.lw||[]).filter(function(worker){
+              return worker&&worker.age===3&&worker.b===0.5&&worker.p===0.5;
+            }).length===1,
+          canonicalQuestionsConsumed:(window.BHIVE.questions.lw||[]).filter(function(item){
+            return item&&item.s==='first_flight';
+          }).length===0,
+          quietAttemptPerOperation:window.__HARNESS_UNLOCK_CALLS===2&&
+            window.__HARNESS_UNLOCK_REQUESTS.every(function(request){
+              return request.options&&request.options.seedSwarm===false;
+            }),
+          globalSeedCalls:window.__HARNESS_ENGINE_SEED_CALLS-ffCompletionFailureSeedCalls,
+          zeroStrategyEvidence:ffCompletionRetryStats.completed===0&&
+            ffCompletionRetryStats.declined===0&&ffCompletionRetryStats.score===0,
+          interfaceRemoved:!document.querySelector('#hive-today [data-first-flight], #hive-today .ff-complete'),
+          successAnnouncement:(document.querySelector('#hive-today .td-status')||{}).textContent===
+            'First Flight complete.'
+        };
+      }else if(scenario==='completion-no-reveal'){
+        var ffNoRevealState=ffState();
+        var ffNoRevealUnlocks=window.BHIVE.unlocks.slice();
+        var ffNoRevealCalls=window.__HARNESS_COMPLETE_CALLS;
+        var ffNoRevealInsideSaves=window.__HARNESS_SAVE_INSIDE_COMPLETE;
+        var ffNoRevealOutsideSaves=window.__HARNESS_SAVE_OUTSIDE_COMPLETE;
+        var ffNoRevealUnlockCalls=window.__HARNESS_UNLOCK_CALLS;
+        var ffNoRevealSeedCalls=window.__HARNESS_ENGINE_SEED_CALLS;
+        document.querySelector('#hive-today .ff-complete').click();
+        var ffNoRevealResult=window.__HARNESS_COMPLETE_RESULTS[0];
+        result.firstFlightFlow={
+          initialStatus:ffNoRevealState&&ffNoRevealState.status,
+          completedStatus:ffState()&&ffState().status,
+          completionOk:ffNoRevealResult&&ffNoRevealResult.ok&&!ffNoRevealResult.alreadyCompleted,
+          unlockedKeyNull:ffNoRevealResult&&ffNoRevealResult.unlockedKey===null,
+          unlocksUnchanged:JSON.stringify(window.BHIVE.unlocks)===JSON.stringify(ffNoRevealUnlocks),
+          completionCalls:window.__HARNESS_COMPLETE_CALLS-ffNoRevealCalls,
+          domainSaveCalls:window.__HARNESS_SAVE_INSIDE_COMPLETE-ffNoRevealInsideSaves,
+          uiSaveCalls:window.__HARNESS_SAVE_OUTSIDE_COMPLETE-ffNoRevealOutsideSaves,
+          quietUnlockCalls:window.__HARNESS_UNLOCK_CALLS-ffNoRevealUnlockCalls,
+          quietUnlockRequest:window.__HARNESS_UNLOCK_REQUESTS.length===1&&
+            window.__HARNESS_UNLOCK_REQUESTS[0].options&&
+            window.__HARNESS_UNLOCK_REQUESTS[0].options.seedSwarm===false,
+          globalSeedCalls:window.__HARNESS_ENGINE_SEED_CALLS-ffNoRevealSeedCalls,
+          allCellsStillVisible:document.querySelectorAll('#hivesvg .hive-cell').length===14,
+          interfaceRemoved:!document.querySelector('#hive-today [data-first-flight], #hive-today .ff-complete')
+        };
+      }else if(scenario==='completion-reload'){
+        var ffReloadCompleted=ffState();
+        var ffReloadPersisted=JSON.parse(window.__HARNESS_STORED_HIVE);
+        var ffReloadLearningEvents=window.BHIVE.learning.events.filter(function(event){
+          return event.type==='learning_added'&&event.payload.firstFlightVersion===1;
+        });
+        var ffReloadCompletionEvents=window.BHIVE.learning.events.filter(function(event){
+          return event.type==='experiment_completed'&&event.id==='evt_first_flight_v1_completed_lw';
+        });
+        result.firstFlightFlow={
+          status:ffReloadCompleted&&ffReloadCompleted.status,
+          selfContainedSeed:window.__HARNESS_STORAGE_CLEARED&&
+            window.__HARNESS_RELOAD_SEED_RESULT&&window.__HARNESS_RELOAD_SEED_RESULT.ok&&
+            !window.__HARNESS_RELOAD_SEED_RESULT.alreadyCompleted,
+          storedBytesUnchanged:window.__HARNESS_STORED_HIVE===localStorage.getItem(storageKey),
+          noReplayCalls:window.__HARNESS_COMPLETE_CALLS===0&&window.__HARNESS_SAVE_CALLS===0&&
+            window.__HARNESS_UNLOCK_CALLS===0&&window.__HARNESS_ADD_LEARNING_CALLS===0,
+          normalInitSeedCalls:window.__HARNESS_ENGINE_SEED_CALLS,
+          effectsRemainOnce:ffReloadLearningEvents.length===2&&
+            ffReloadCompletionEvents.length===1&&
+            (window.BHIVE.swarms.lw||[]).filter(function(worker){
+              return worker&&worker.age===3&&worker.b===0.5&&worker.p===0.5;
+            }).length===1,
+          persistedQuietSwarmsClean:Object.keys(ffReloadPersisted.swarms).every(function(key){
+            var workers=ffReloadPersisted.swarms[key]||[];
+            return key==='lw'?workers.length===1&&workers[0].age===3:workers.length===0;
+          }),
+          canonicalQuestionsConsumed:(window.BHIVE.questions.lw||[]).filter(function(item){
+            return item&&item.s==='first_flight';
+          }).length===0,
+          controlsAbsent:!document.querySelector('#hive-today [data-first-flight], #hive-today .ff-complete'),
+          normalPresentation:!!document.querySelector('#hive-today .td-status')&&
+            !document.querySelector('#hive-today .td-experiment, #hive-today .td-experiment-closed'),
+          automaticTourResumed:!!document.getElementById('tour')&&!document.getElementById('tour').hidden,
+          profileResumed:!!document.getElementById('bhpr-card'),
+          onboardingStorageUntouched:localStorage.getItem('lw-brainmap-tour-v2')===null&&
+            localStorage.getItem('bhive_beta_profile_answers')===null&&
+            localStorage.getItem('bhive_beta_profile_result')===null
         };
       }else if(scenario==='health-select'||scenario==='people-select'){
         var ffSelectKey=scenario==='health-select'?'health':'people';
@@ -895,8 +1386,14 @@
           activeTitle:(document.querySelector('#hive-today .ff-mission h3')||{}).textContent||'',
           activeAction:(document.querySelector('#hive-today .ff-mission-action')||{}).textContent||'',
           activeInProgress:(document.querySelector('#hive-today .ff-progress')||{}).textContent||'',
-          activeNoControls:!!ffActiveCard&&
-            ffActiveCard.querySelectorAll('button,textarea,input,select').length===0,
+          activeCompletionOnly:!!ffActiveCard&&
+            ffActiveCard.querySelectorAll('button,textarea,input,select').length===1&&
+            ffActiveCard.querySelectorAll('.ff-complete').length===1&&
+            ffActiveCard.querySelector('.ff-complete').textContent==='Complete First Mission'&&
+            ffActiveCard.querySelector('.ff-complete').tabIndex===0&&
+            !ffActiveCard.querySelector('.ff-complete').disabled&&
+            !ffActiveCard.querySelector(
+              '.td-exp-accept,.td-exp-edit,.td-exp-outcome,.td-exp-decline,.td-exp-report'),
           activeFocused:document.activeElement===ffActiveCard,
           interfaceCount:document.querySelectorAll('#hive-today [data-first-flight]').length,
           acceptedEventCount:ffAcceptedEvents.length,
@@ -934,8 +1431,16 @@
           action:(document.querySelector('#hive-today .ff-mission-action')||{}).textContent||'',
           heading:(document.querySelector('#hive-today .ff-title')||{}).textContent||'',
           inProgress:(document.querySelector('#hive-today .ff-progress')||{}).textContent||'',
-          noControls:!!ffReloadActiveCard&&
-            ffReloadActiveCard.querySelectorAll('button,textarea,input,select').length===0,
+          completionOnly:!!ffReloadActiveCard&&
+            ffReloadActiveCard.querySelectorAll('button,textarea,input,select').length===1&&
+            ffReloadActiveCard.querySelectorAll('.ff-complete').length===1&&
+            ffReloadActiveCard.querySelector('.ff-complete').textContent===
+              'Complete First Mission'&&
+            ffReloadActiveCard.querySelector('.ff-complete').type==='button'&&
+            !ffReloadActiveCard.querySelector(
+              '.td-exp-accept,.td-exp-edit,.td-exp-outcome,.td-exp-decline,.td-exp-report'),
+          completionFocusable:!!ffReloadActiveCard&&
+            ffReloadActiveCard.querySelector('.ff-complete').tabIndex===0,
           interfaceCount:document.querySelectorAll('#hive-today [data-first-flight]').length,
           eventsPreserved:window.__HARNESS_STORED_EVENTS===
             JSON.stringify(window.BHIVE.learning.events),
@@ -1042,6 +1547,52 @@
           recoverableError:/could not save/.test(
             (document.querySelector('#hive-today .ff-status')||{}).textContent||''),
           focusReturned:document.activeElement===ffRestoredInput
+        };
+      }else if(scenario==='normal-experiment'){
+        var normalActive=window.BHIVE.experiments.activeExperiment(window.BHIVE.learning.events);
+        var normalPanel=document.querySelector('#hive-today .td-exp-active');
+        var normalReport=document.querySelector('#hive-today .td-exp-report');
+        if(normalReport)normalReport.click();
+        var normalOutcome=document.querySelector(
+          '#hive-today .td-exp-outcome[data-outcome="helped"]');
+        var normalReportExpanded=!!normalReport&&
+          normalReport.getAttribute('aria-expanded')==='true'&&
+          !!normalOutcome&&normalOutcome.getClientRects().length>0;
+        var normalSaveStart=window.__HARNESS_SAVE_CALLS;
+        var normalInsideStart=window.__HARNESS_SAVE_INSIDE_COMPLETE;
+        var normalOutsideStart=window.__HARNESS_SAVE_OUTSIDE_COMPLETE;
+        var normalCompleteStart=window.__HARNESS_COMPLETE_CALLS;
+        if(normalOutcome)normalOutcome.click();
+        var normalCompletions=window.BHIVE.learning.events.filter(function(event){
+          return event.type==='experiment_completed'&&
+            event.payload&&event.payload.experimentId==='exp_harness_normal';
+        });
+        var normalLifecycle=window.BHIVE.experiments.lifecycle(
+          window.BHIVE.learning.events,'exp_harness_normal');
+        var normalStats=window.BHIVE.experiments.strategyStats(
+          window.BHIVE.learning.events,'protected_block','lw');
+        var normalClosed=document.querySelector('#hive-today .td-experiment-closed');
+        var normalSaved=JSON.parse(localStorage.getItem(storageKey));
+        result.normalExperiment={
+          activeRendered:!!normalPanel&&!!normalActive&&
+            normalActive.experimentId==='exp_harness_normal'&&
+            (normalPanel.querySelector('.td-exp-action')||{}).textContent==='Take one normal action',
+          outcomeControl:!!normalOutcome&&normalOutcome.textContent==='Yes',
+          reportExpanded:normalReportExpanded,
+          completionCount:normalCompletions.length,
+          helpedOutcome:normalCompletions.length===1&&normalCompletions[0].payload.outcome==='helped',
+          completedLifecycle:normalLifecycle&&normalLifecycle.status==='completed'&&
+            normalLifecycle.outcome==='helped',
+          positiveStrategyEvidence:normalStats.completed===1&&normalStats.score>0,
+          saveCalls:window.__HARNESS_SAVE_CALLS-normalSaveStart,
+          insideFirstFlightSaveCalls:window.__HARNESS_SAVE_INSIDE_COMPLETE-normalInsideStart,
+          ordinaryUiSaveCalls:window.__HARNESS_SAVE_OUTSIDE_COMPLETE-normalOutsideStart,
+          firstFlightCompletionCalls:window.__HARNESS_COMPLETE_CALLS-normalCompleteStart,
+          closedFocused:!!normalClosed&&document.activeElement===normalClosed,
+          closedCopy:normalClosed&&/Useful/.test(normalClosed.textContent),
+          storedMatchesLive:!!normalSaved&&JSON.stringify(normalSaved.learning.events)===
+            JSON.stringify(window.BHIVE.learning.events),
+          firstFlightControlsAbsent:!document.querySelector('#hive-today [data-first-flight], #hive-today .ff-complete')
         };
       }
 
@@ -1279,7 +1830,11 @@
     parent.postMessage({type:'bhive-app-main-result',result:result}, location.origin);
   }
 
-  finishWhenReady();
+  /* manual=1 leaves the staged page idle for an external browser to send trusted keys.
+     At 390x844 and 1600x900, load mission-active, wait for .ff-complete, Tab to it,
+     verify :focus-visible and its outline, then press Enter. Reload an isolated page
+     before repeating with Space because successful completion removes the control. */
+  if(new URLSearchParams(location.search).get('manual')!=='1')finishWhenReady();
 })());
 </script>
 </body>

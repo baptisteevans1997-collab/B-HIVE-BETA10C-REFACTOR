@@ -26,8 +26,11 @@
   var scenarios = [
     'fresh','fresh-wide','health-select','people-select','resume-selected',
     'progress','mission-ready','mission-active','mission-active-wide','accept-save-failure',
-    'save-failure','answer-save-failure','genuine-completion','completed','legacy-auto',
-    'evolve','widest','locked','migration'
+    'save-failure','answer-save-failure','genuine-completion','completion-reload',
+    'completion-save-failure','completion-no-reveal','completion-stale',
+    'completion-malformed','completion-domain-failure','completion-throw',
+    'completion-rerender','normal-experiment','completed','legacy-auto','evolve','widest',
+    'locked','migration'
   ];
   var reports = {};
   var activeFrame = null, activeScenario = '', scenarioTimer = 0, nextScenario = 0;
@@ -94,6 +97,15 @@
       acceptSaveFailure = reports['accept-save-failure'], saveFailure = reports['save-failure'],
       answerSaveFailure = reports['answer-save-failure'],
       genuineCompletion = reports['genuine-completion'],
+      completionReload = reports['completion-reload'],
+      completionSaveFailure = reports['completion-save-failure'],
+      completionNoReveal = reports['completion-no-reveal'],
+      completionStale = reports['completion-stale'],
+      completionMalformed = reports['completion-malformed'],
+      completionDomainFailure = reports['completion-domain-failure'],
+      completionThrow = reports['completion-throw'],
+      completionRerender = reports['completion-rerender'],
+      normalExperiment = reports['normal-experiment'],
       completed = reports.completed, legacyAuto = reports['legacy-auto'],
       evolve = reports.evolve, widest = reports.widest, locked = reports.locked,
       migration = reports.migration;
@@ -146,7 +158,9 @@
         progress.firstFlightStartup.storedEventsPreserved);
     test('resumable incomplete states reconcile canonical questions in memory without data loss or save',
       [resumeSelected,progress,missionReady,missionActive,missionActiveWide,
-        acceptSaveFailure].every(function(report){
+        acceptSaveFailure,completionSaveFailure,completionNoReveal,completionStale,
+        completionMalformed,completionDomainFailure,completionThrow,completionRerender]
+        .every(function(report){
         return report.firstFlightStartup.canonicalFoundationQuestions&&
           report.firstFlightStartup.noFoundationSeedQuestions&&
           report.firstFlightStartup.resumableQuestionPreserved&&
@@ -183,6 +197,18 @@
         [evolve,widest,locked,migration].every(function(report){
           return report.firstFlightStartup.interfaceInactive;
         }));
+    test('Complete First Mission exists only for authoritative mission_active states',
+      [fresh,resumeSelected,progress,missionReady,genuineCompletion,normalExperiment,
+        completed,legacyAuto,evolve,widest,locked,migration]
+        .every(function(report){
+          return report.firstFlightStartup.completionControlCount===0;
+        })&&
+        [missionActive,missionActiveWide,completionSaveFailure,completionNoReveal,
+          completionStale,completionMalformed,completionDomainFailure,completionThrow,
+          completionRerender]
+          .every(function(report){
+            return report.firstFlightStartup.completionControlCount===1;
+          }));
     test('cell selection creates one canonical event, saves once and focuses question one',
       fresh.firstFlightFlow.selectionState === 'cell_selected' &&
         fresh.firstFlightFlow.selectionEventCount === 1 &&
@@ -274,12 +300,12 @@
         missionReady.firstFlightFlow.acceptedEventCount === 1 &&
         missionReady.firstFlightFlow.canonicalAcceptance &&
         missionReady.firstFlightFlow.saveCalls === 1);
-    test('mission_active presents the exact read-only active mission without lifecycle controls',
+    test('mission_active presents the exact mission with only Complete First Mission',
       missionReady.firstFlightFlow.activeHeading === 'Your First Mission is active.' &&
         missionReady.firstFlightFlow.activeTitle === 'Make the first move' &&
         missionReady.firstFlightFlow.activeAction === 'Complete one focused beta task' &&
         missionReady.firstFlightFlow.activeInProgress === 'In progress' &&
-        missionReady.firstFlightFlow.activeNoControls &&
+        missionReady.firstFlightFlow.activeCompletionOnly &&
         missionReady.firstFlightFlow.activeFocused &&
         missionReady.firstFlightFlow.interfaceCount === 1);
     test('mission acceptance has no learning, completion, evidence, bee, unlock or reward effects',
@@ -323,20 +349,26 @@
           report.firstFlightFlow.title === 'Make the first move' &&
           report.firstFlightFlow.action === 'Complete one focused beta task' &&
           report.firstFlightFlow.inProgress === 'In progress' &&
-          report.firstFlightFlow.noControls && report.firstFlightFlow.interfaceCount === 1 &&
+          report.firstFlightFlow.completionOnly && report.firstFlightFlow.completionFocusable &&
+          report.firstFlightFlow.interfaceCount === 1 &&
           report.firstFlightFlow.eventsPreserved && report.firstFlightFlow.startupSaveCalls === 0 &&
           report.firstFlightFlow.completionOperationCalls === 0 &&
           report.firstFlightFlow.addLearningCalls === 0 &&
           report.firstFlightFlow.unlockCalls === 0;
       }));
-    test('the genuine production path reaches mission_active and completes through the domain operation',
+    test('the genuine production UI reaches mission_active and invokes the domain operation once',
       genuineCompletion.firstFlightFlow.startupAvailable&&
         genuineCompletion.firstFlightFlow.selectionSavedCanonical&&
         genuineCompletion.firstFlightFlow.readyStatus==='mission_ready'&&
         genuineCompletion.firstFlightFlow.activeStatus==='mission_active'&&
+        genuineCompletion.firstFlightFlow.completionButtonCount===1&&
+        genuineCompletion.firstFlightFlow.completionButtonText==='Complete First Mission'&&
+        genuineCompletion.firstFlightFlow.completionButtonType==='button'&&
+        genuineCompletion.firstFlightFlow.completionButtonFocused&&
         genuineCompletion.firstFlightFlow.completionOk&&
         genuineCompletion.firstFlightFlow.completionCalls===1&&
-        genuineCompletion.firstFlightFlow.requestUnchanged&&
+        genuineCompletion.firstFlightFlow.requestCanonical&&
+        genuineCompletion.firstFlightFlow.reentrantActivationBlocked&&
         genuineCompletion.firstFlightFlow.completedStatus==='mission_completed'&&
         genuineCompletion.firstFlightFlow.persistedCompleted);
     test('genuine completion promotes exactly two answers and consumes only the selected canonical pair',
@@ -358,14 +390,145 @@
     test('genuine completion persists once with neutral outcome and no evidence or reward',
       genuineCompletion.firstFlightFlow.deliberateSaveCallsBeforeCompletion===4&&
         genuineCompletion.firstFlightFlow.completionSaveCalls===1&&
+        genuineCompletion.firstFlightFlow.domainOwnedSaveCalls===1&&
+        genuineCompletion.firstFlightFlow.uiSaveCalls===0&&
         genuineCompletion.firstFlightFlow.neutralCompletion&&
         genuineCompletion.firstFlightFlow.zeroStrategyEvidence&&
         genuineCompletion.firstFlightFlow.noNormalLearningCalls&&
         genuineCompletion.firstFlightFlow.noAdditionalReward&&
         genuineCompletion.firstFlightFlow.savedMatchesLive);
+    test('successful completion removes First Flight and announces the normal Hive return',
+      genuineCompletion.firstFlightFlow.interfaceRemoved&&
+        genuineCompletion.firstFlightFlow.normalPresentation&&
+        genuineCompletion.firstFlightFlow.successAnnouncement&&
+        genuineCompletion.firstFlightFlow.onboardingUnchanged);
+    test('a stale rendered mission is blocked, rerendered from authority and safely retried',
+      completionStale.firstFlightFlow.initialStatus==='mission_active'&&
+        completionStale.firstFlightFlow.authoritativeStatus==='mission_active'&&
+        completionStale.firstFlightFlow.displayedActionChanged&&
+        completionStale.firstFlightFlow.staleActivationBlocked&&
+        completionStale.firstFlightFlow.zeroCallsBeforeRetry&&
+        completionStale.firstFlightFlow.freshButton&&
+        completionStale.firstFlightFlow.freshFocus&&
+        completionStale.firstFlightFlow.changedAnnouncement&&
+        completionStale.firstFlightFlow.retryCompleted&&
+        completionStale.firstFlightFlow.completionCalls===1&&
+        completionStale.firstFlightFlow.domainSaveCalls===1&&
+        completionStale.firstFlightFlow.uiSaveCalls===0&&
+        completionStale.firstFlightFlow.controlsRemoved);
+    test('a malformed authoritative mission fails closed without calls, saves or effects',
+      completionMalformed.firstFlightFlow.derivedStatus==='mission_ready'&&
+        completionMalformed.firstFlightFlow.completionCalls===0&&
+        completionMalformed.firstFlightFlow.saveCalls===0&&
+        completionMalformed.firstFlightFlow.statePreserved&&
+        completionMalformed.firstFlightFlow.storedBytesPreserved&&
+        completionMalformed.firstFlightFlow.noCompletionEffects&&
+        completionMalformed.firstFlightFlow.completionControlAbsent&&
+        completionMalformed.firstFlightFlow.changedAnnouncement);
+    test('non-save domain rejection and thrown completion both roll back and permit one retry',
+      [completionDomainFailure,completionThrow].every(function(report){
+        return report.firstFlightFlow.initialStatus==='mission_active'&&
+          report.firstFlightFlow.failedStatus==='mission_active'&&
+          report.firstFlightFlow.failedSnapshotRestored&&
+          report.firstFlightFlow.failedStoredBytesRestored&&
+          report.firstFlightFlow.failedControlRestored&&
+          report.firstFlightFlow.failedFocus&&
+          report.firstFlightFlow.failedAnnouncement&&
+          report.firstFlightFlow.busyObserved&&
+          report.firstFlightFlow.retryCompleted&&
+          report.firstFlightFlow.operationCalls===2&&
+          report.firstFlightFlow.domainSaveCalls===1&&
+          report.firstFlightFlow.uiSaveCalls===0&&
+          report.firstFlightFlow.exactEffectsOnce&&
+          report.firstFlightFlow.controlsRemoved;
+      }));
+    test('domain rejection and thrown failure remain distinct controlled scenarios',
+      completionDomainFailure.firstFlightFlow.failureKind==='domain'&&
+        completionThrow.firstFlightFlow.failureKind==='throw');
+    test('repeated Today rerenders keep one surface and one completion handler',
+      completionRerender.firstFlightFlow.rerenders===5&&
+        completionRerender.firstFlightFlow.rerenderUiSaveCalls===5&&
+        completionRerender.firstFlightFlow.exactlyOneSurfaceEach&&
+        completionRerender.firstFlightFlow.completionCalls===1&&
+        completionRerender.firstFlightFlow.domainSaveCalls===1&&
+        completionRerender.firstFlightFlow.uiSaveCallsDuringCompletion===0&&
+        completionRerender.firstFlightFlow.completedStatus==='mission_completed'&&
+        completionRerender.firstFlightFlow.handlersDidNotAccumulate&&
+        completionRerender.firstFlightFlow.controlsRemoved);
+    test('completion save failure rolls back live and stored state and restores an accessible retry',
+      completionSaveFailure.firstFlightFlow.initialStatus==='mission_active'&&
+        completionSaveFailure.firstFlightFlow.failedResult&&
+        completionSaveFailure.firstFlightFlow.failedStatus==='mission_active'&&
+        completionSaveFailure.firstFlightFlow.failedSnapshotRestored&&
+        completionSaveFailure.firstFlightFlow.failedStoredBytesRestored&&
+        completionSaveFailure.firstFlightFlow.failedControlRestored&&
+        completionSaveFailure.firstFlightFlow.failedFocus&&
+        completionSaveFailure.firstFlightFlow.failedAnnouncement&&
+        completionSaveFailure.firstFlightFlow.busyObserved);
+    test('retry after completion save failure succeeds once without UI persistence or residual effects',
+      completionSaveFailure.firstFlightFlow.retryOk&&
+        completionSaveFailure.firstFlightFlow.retryStatus==='mission_completed'&&
+        completionSaveFailure.firstFlightFlow.operationCalls===2&&
+        completionSaveFailure.firstFlightFlow.domainSaveAttempts===2&&
+        completionSaveFailure.firstFlightFlow.uiSaveCalls===0&&
+        completionSaveFailure.firstFlightFlow.totalSaveAttempts===2&&
+        completionSaveFailure.firstFlightFlow.exactEffectsOnce&&
+        completionSaveFailure.firstFlightFlow.canonicalQuestionsConsumed&&
+        completionSaveFailure.firstFlightFlow.quietAttemptPerOperation&&
+        completionSaveFailure.firstFlightFlow.globalSeedCalls===0&&
+        completionSaveFailure.firstFlightFlow.zeroStrategyEvidence&&
+        completionSaveFailure.firstFlightFlow.interfaceRemoved&&
+        completionSaveFailure.firstFlightFlow.successAnnouncement);
+    test('all-unlocked completion accepts unlockedKey null through the real UI action',
+      completionNoReveal.firstFlightFlow.initialStatus==='mission_active'&&
+        completionNoReveal.firstFlightFlow.completedStatus==='mission_completed'&&
+        completionNoReveal.firstFlightFlow.completionOk&&
+        completionNoReveal.firstFlightFlow.unlockedKeyNull&&
+        completionNoReveal.firstFlightFlow.unlocksUnchanged&&
+        completionNoReveal.firstFlightFlow.completionCalls===1&&
+        completionNoReveal.firstFlightFlow.domainSaveCalls===1&&
+        completionNoReveal.firstFlightFlow.uiSaveCalls===0&&
+        completionNoReveal.firstFlightFlow.quietUnlockCalls===1&&
+        completionNoReveal.firstFlightFlow.quietUnlockRequest&&
+        completionNoReveal.firstFlightFlow.globalSeedCalls===0&&
+        completionNoReveal.firstFlightFlow.allCellsStillVisible&&
+        completionNoReveal.firstFlightFlow.interfaceRemoved);
+    test('reload after completion replays nothing and naturally resumes deferred onboarding',
+      completionReload.firstFlightFlow.status==='mission_completed'&&
+        completionReload.firstFlightFlow.selfContainedSeed&&
+        completionReload.firstFlightFlow.storedBytesUnchanged&&
+        completionReload.firstFlightFlow.noReplayCalls&&
+        completionReload.firstFlightFlow.normalInitSeedCalls===1&&
+        completionReload.firstFlightFlow.effectsRemainOnce&&
+        completionReload.firstFlightFlow.persistedQuietSwarmsClean&&
+        completionReload.firstFlightFlow.canonicalQuestionsConsumed&&
+        completionReload.firstFlightFlow.controlsAbsent&&
+        completionReload.firstFlightFlow.normalPresentation&&
+        completionReload.firstFlightFlow.automaticTourResumed&&
+        completionReload.firstFlightFlow.profileResumed&&
+        completionReload.firstFlightFlow.onboardingStorageUntouched);
+    test('ordinary experiment completion remains on the existing app-main UI path',
+      normalExperiment.normalExperiment.activeRendered&&
+        normalExperiment.normalExperiment.outcomeControl&&
+        normalExperiment.normalExperiment.reportExpanded&&
+        normalExperiment.normalExperiment.completionCount===1&&
+        normalExperiment.normalExperiment.helpedOutcome&&
+        normalExperiment.normalExperiment.completedLifecycle&&
+        normalExperiment.normalExperiment.positiveStrategyEvidence&&
+        normalExperiment.normalExperiment.saveCalls===1&&
+        normalExperiment.normalExperiment.insideFirstFlightSaveCalls===0&&
+        normalExperiment.normalExperiment.ordinaryUiSaveCalls===1&&
+        normalExperiment.normalExperiment.firstFlightCompletionCalls===0&&
+        normalExperiment.normalExperiment.closedFocused&&
+        normalExperiment.normalExperiment.closedCopy&&
+        normalExperiment.normalExperiment.storedMatchesLive&&
+        normalExperiment.normalExperiment.firstFlightControlsAbsent);
     test('automatic tour and beta profile defer only while First Flight is incomplete',
       [fresh,resumeSelected,progress,missionReady,missionActive,missionActiveWide,
-        acceptSaveFailure].every(function(report){
+        acceptSaveFailure,genuineCompletion,completionSaveFailure,completionNoReveal,
+        completionStale,completionMalformed,completionDomainFailure,completionThrow,
+        completionRerender]
+        .every(function(report){
         return report.onboardingCoordination.automaticTourHidden &&
           report.onboardingCoordination.tourFlagAbsent &&
           !report.onboardingCoordination.profileCardPresent;
@@ -384,7 +547,17 @@
         fresh.firstFlightFlow.readyFocused &&
         missionReady.firstFlightFlow.activeFocused &&
         acceptSaveFailure.firstFlightFlow.failureFocus &&
-        acceptSaveFailure.firstFlightFlow.retryFocused);
+        acceptSaveFailure.firstFlightFlow.retryFocused&&
+        genuineCompletion.firstFlightFlow.completionButtonFocused&&
+        genuineCompletion.firstFlightFlow.successAnnouncement&&
+        completionSaveFailure.firstFlightFlow.failedFocus&&
+        completionSaveFailure.firstFlightFlow.failedAnnouncement&&
+        completionStale.firstFlightFlow.freshFocus&&
+        completionStale.firstFlightFlow.changedAnnouncement&&
+        completionDomainFailure.firstFlightFlow.failedFocus&&
+        completionDomainFailure.firstFlightFlow.failedAnnouncement&&
+        completionThrow.firstFlightFlow.failedFocus&&
+        completionThrow.firstFlightFlow.failedAnnouncement);
     test('First Flight layout stays within the viewport at 390×844 and 1600×900',
       fresh.firstFlightLayout && fresh.firstFlightLayout.cardWithinViewport &&
         !fresh.firstFlightLayout.horizontalOverflow &&
@@ -398,11 +571,13 @@
         freshWide.firstFlightLayout.frameHeight === 900);
     test('active mission layout has no horizontal overflow at 390×844 and 1600×900',
       missionActive.firstFlightLayout && missionActive.firstFlightLayout.cardWithinViewport &&
+        missionActive.firstFlightLayout.completionWithinViewport&&
         !missionActive.firstFlightLayout.horizontalOverflow &&
         missionActive.firstFlightLayout.frameWidth === 390 &&
         missionActive.firstFlightLayout.frameHeight === 844 &&
         missionActiveWide.firstFlightLayout &&
         missionActiveWide.firstFlightLayout.cardWithinViewport &&
+        missionActiveWide.firstFlightLayout.completionWithinViewport&&
         !missionActiveWide.firstFlightLayout.horizontalOverflow &&
         missionActiveWide.firstFlightLayout.frameWidth === 1600 &&
         missionActiveWide.firstFlightLayout.frameHeight === 900);
