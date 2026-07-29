@@ -1,0 +1,22 @@
+# B HIVE beta-only Git-connected deployment configuration.
+# Project: b-hive-beta
+# URL: https://b-hive-beta.netlify.app
+# Project ID: 333cb4a6-3d19-4a04-b496-4eef42e819a0
+# Branch: main
+#
+# The read-only Netlify build metadata below makes this configuration fail
+# closed outside the confirmed beta project. It does not link or select a site.
+
+[build]
+  publish = "netlify-publish"
+  command = """
+    test "$NETLIFY" = "true" &&
+    test "$CONTEXT" = "production" &&
+    test "$SITE_ID" = "333cb4a6-3d19-4a04-b496-4eef42e819a0" &&
+    test "$SITE_NAME" = "b-hive-beta" &&
+    test "$URL" = "https://b-hive-beta.netlify.app" &&
+    test "$BRANCH" = "main" &&
+    test ! -e netlify-publish &&
+    mkdir netlify-publish &&
+    mv index.html manifest.webmanifest sw.js apple-touch-icon.png icon-192.png icon-512.png icon-512-maskable.png icon.svg css js netlify-publish/
+  """

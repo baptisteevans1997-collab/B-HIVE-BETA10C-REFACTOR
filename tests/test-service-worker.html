@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>B HIVE service-worker upgrade tests</title>
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; max-width: 920px; margin: 30px auto; padding: 0 18px; }
+  .test { padding: 6px 0; border-bottom: 1px solid #ddd; }
+  .pass { color: #176b32; }
+  .fail { color: #a01818; }
+  .summary { margin-top: 22px; padding: 12px; border: 1px solid #aaa; border-radius: 8px; }
+</style>
+</head>
+<body>
+<h1>B HIVE service-worker upgrade tests</h1>
+<div id="results"></div>
+<div id="summary" class="summary">Running v93 upgrade scenario…</div>
+<script>
+(function () {
+  'use strict';
+
+  var OLD_CACHE = 'brainmap-v93-beta10c-unlock-reveal1';
+  var NEW_CACHE = 'brainmap-v94-beta10c-first-flight-step3d-predeploy1';
+  var TOKEN = 'beta10c-first-flight-step3d-predeploy1';
+  var ORIGIN_SENTINEL_CACHE = 'bhive-test-unrelated-origin-sentinel';
+  var ORIGIN_SENTINEL_URL = './bhive-test-unrelated-origin-sentinel';
+  var OLD_ASSETS = [
+    '../css/app.css',
+    '../js/ui-experiments.js?v=beta10c-stage5c-fix2',
+    '../js/app-main.js?v=beta10c-integ-hld-stage5c'
+  ];
+  var NEW_ASSETS = [
+    '../css/app.css?v=' + TOKEN,
+    '../js/ui-experiments.js?v=' + TOKEN,
+    '../js/app-main.js?v=' + TOKEN
+  ];
+  var results = document.getElementById('results');
+  var summary = document.getElementById('summary');
+  var passed = 0;
+  var failed = 0;
+  var uncaught = [];
+
+  window.addEventListener('error', function (event) { uncaught.push(event.message); });
+  window.addEventListener('unhandledrejection', function (event) {
+    uncaught.push(String(event.reason));
+  });
+
+  function test(name, ok, detail) {
+    var row = document.createElement('div');
+    row.className = 'test ' + (ok ? 'pass' : 'fail');
+    row.textContent = (ok ? '✓ ' : '✗ ') + name + (ok || !detail ? '' : ' — ' + detail);
+    results.appendChild(row);
+    if (ok) passed++; else failed++;
+  }
+
+  function finish() {
+    var total = passed + failed;
+    summary.innerHTML = '<b>' + passed + '/' + total + ' passed</b>' +
+      (failed ? ' — service-worker upgrade failed' : ' — service-worker upgrade passed');
+    document.documentElement.dataset.testStatus = failed ? 'failed' : 'passed';
+    window.__BHIVE_TEST_RESULTS = {passed: passed, failed: failed};
+  }
+
+  function waitForMessage(type, expectedOrigin, timeout) {
+    return new Promise(function (resolve, reject) {
+      var timer = window.setTimeout(function () {
+        window.removeEventListener('message', onMessage);
+        reject(new Error('Timed out waiting for ' + type));
+      }, timeout || 10000);
+      function onMessage(event) {
+        if (event.origin !== expectedOrigin || !event.data || event.data.type !== type) return;
+        window.clearTimeout(timer);
+        window.removeEventListener('message', onMessage);
+        resolve(event.data);
+      }
+      window.addEventListener('message', onMessage);
+    });
+  }
+
+  function waitForActiveScript(registration, pathname) {
+    return new Promise(function (resolve, reject) {
+      var deadline = Date.now() + 15000;
+      function inspect() {
+        var active = registration.active;
+        if (active && active.state === 'activated' && new URL(active.scriptURL).pathname === pathname) {
+          resolve(active);
+          return;
+        }
+        if (Date.now() >= deadline) {
+          reject(new Error('Worker did not activate: ' + pathname));
+          return;
+        }
+        window.setTimeout(inspect, 40);
+      }
+      inspect();
+    });
+  }
+
+  function fetchText(url) {
+    return fetch(url, {cache: 'no-store'}).then(function (response) {
+      if (!response.ok) throw new Error(url + ' returned HTTP ' + response.status);
+      return response.text();
+    });
+  }
+
+  function parseWorker(source) {
+    var cacheMatch = source.match(/var CACHE = '([^']+)'/);
+    var coreMatch = source.match(/var CORE = \[([\s\S]*?)\];/);
+    if (!cacheMatch || !coreMatch) throw new Error('Unable to parse service-worker constants');
+    var core = [];
+    coreMatch[1].replace(/'([^']+)'/g, function (_, value) {
+      core.push(value);
+      return _;
+    });
+    return {cache: cacheMatch[1], core: core};
+  }
+
+  function indexAssetUrls(source) {
+    var documentCopy = new DOMParser().parseFromString(source, 'text/html');
+    return [
+      documentCopy.querySelector('link[href^="./css/app.css"]').getAttribute('href'),
+      documentCopy.querySelector('script[src^="./js/ui-experiments.js"]').getAttribute('src'),
+      documentCopy.querySelector('script[src^="./js/app-main.js"]').getAttribute('src')
+    ];
+  }
+
+  function exerciseFetchPolicy(workerSource, indexBody, otherOrigin) {
+    var listeners = {};
+    var shellUrl = new URL('../index.html', location.href).href;
+    var workerUrl = new URL('../sw.js', location.href).href;
+    var fetchCalls = 0;
+    var fakeSelf = {
+      addEventListener: function (type, listener) { listeners[type] = listener; },
+      skipWaiting: function () {},
+      clients: {claim: function () { return Promise.resolve(); }}
+    };
+    var fakeCaches = {
+      match: function (request) {
+        var raw = typeof request === 'string' ? request : request.url;
+        var absolute = new URL(raw, workerUrl).href;
+        return Promise.resolve(absolute === shellUrl ? new Response(indexBody) : undefined);
+      },
+      open: function () { return Promise.reject(new Error('Unexpected cache open')); },
+      keys: function () { return Promise.resolve([]); },
+      delete: function () { return Promise.resolve(false); }
+    };
+    var fakeFetch = function () {
+      fetchCalls++;
+      return Promise.reject(new Error('offline'));
+    };
+    var metadata = new Function(
+      'self', 'caches', 'fetch', 'location', 'Response', 'URL',
+      workerSource + '\nreturn {cache:CACHE,core:CORE.slice()};'
+    )(fakeSelf, fakeCaches, fakeFetch, {origin: location.origin}, Response, URL);
+    var navigationResponse;
+    listeners.fetch({
+      request: {method: 'GET', url: location.origin + '/offline-route', mode: 'navigate'},
+      respondWith: function (promise) { navigationResponse = promise; }
+    });
+    var crossOriginIntercepted = false;
+    listeners.fetch({
+      request: {method: 'GET', url: otherOrigin + '/asset.js', mode: 'cors'},
+      respondWith: function () { crossOriginIntercepted = true; }
+    });
+    return navigationResponse.then(function (response) {
+      return response.text();
+    }).then(function (offlineBody) {
+      return {
+        cache: metadata.cache,
+        core: metadata.core,
+        offlineBody: offlineBody,
+        fetchCalls: fetchCalls,
+        crossOriginIntercepted: crossOriginIntercepted
+      };
+    });
+  }
+
+  function runOriginSentinel() {
+    caches.open(ORIGIN_SENTINEL_CACHE).then(function (cache) {
+      return cache.put(ORIGIN_SENTINEL_URL, new Response('unrelated-origin-preserved'));
+    }).then(function () {
+      parent.postMessage({type: 'bhive-origin-sentinel-ready'}, '*');
+    });
+    window.addEventListener('message', function (event) {
+      if (event.source !== parent || !event.data) return;
+      if (event.data.type === 'bhive-origin-sentinel-check') {
+        caches.match(ORIGIN_SENTINEL_URL).then(function (response) {
+          return response ? response.text() : '';
+        }).then(function (body) {
+          return caches.delete(ORIGIN_SENTINEL_CACHE).then(function () {
+            parent.postMessage({
+              type: 'bhive-origin-sentinel-result',
+              preserved: body === 'unrelated-origin-preserved'
+            }, event.origin);
+          });
+        });
+      }
+      if (event.data.type === 'bhive-origin-sentinel-cleanup') {
+        caches.delete(ORIGIN_SENTINEL_CACHE).then(function () {
+          parent.postMessage({type: 'bhive-origin-sentinel-cleaned'}, event.origin);
+        });
+      }
+    });
+  }
+
+  async function cleanup(registration, originFrame, otherOrigin) {
+    if (registration) await registration.unregister();
+    await caches.delete(OLD_CACHE);
+    await caches.delete(NEW_CACHE);
+    if (originFrame && originFrame.contentWindow) {
+      var cleaned = waitForMessage('bhive-origin-sentinel-cleaned', otherOrigin, 3000);
+      originFrame.contentWindow.postMessage({type: 'bhive-origin-sentinel-cleanup'}, otherOrigin);
+      try { await cleaned; } catch (_) {}
+      originFrame.remove();
+    }
+  }
+
+  async function run() {
+    if (!('serviceWorker' in navigator) || !('caches' in window)) {
+      test('service workers and CacheStorage are available', false);
+      finish();
+      return;
+    }
+
+    var registration = null;
+    var originFrame = null;
+    var port = location.port ? ':' + location.port : '';
+    var otherHost = location.hostname === '127.0.0.1' ? 'localhost' : '127.0.0.1';
+    var otherOrigin = location.protocol + '//' + otherHost + port;
+    var testScope = new URL('./', location.href).href;
+
+    try {
+      var registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.filter(function (item) {
+        return item.scope === testScope;
+      }).map(function (item) { return item.unregister(); }));
+      await caches.delete(OLD_CACHE);
+      await caches.delete(NEW_CACHE);
+
+      var workerSourcePromise = fetchText('../sw.js?upgrade-test=' + Date.now());
+      var indexSourcePromise = fetchText('../index.html?upgrade-test=' + Date.now());
+      var currentBodiesPromise = Promise.all(NEW_ASSETS.map(fetchText));
+
+      var sentinelReady = waitForMessage('bhive-origin-sentinel-ready', otherOrigin);
+      originFrame = document.createElement('iframe');
+      originFrame.hidden = true;
+      originFrame.src = otherOrigin + location.pathname + '?origin-sentinel=1';
+      document.body.appendChild(originFrame);
+      await sentinelReady;
+      test('alternate-origin cache sentinel is ready', true);
+
+      registration = await navigator.serviceWorker.register(
+        './service-worker-v93-fixture.js?run=' + Date.now(),
+        {scope: './', updateViaCache: 'none'}
+      );
+      await waitForActiveScript(registration, '/tests/service-worker-v93-fixture.js');
+      var legacyKeys = await caches.keys();
+      test('returning-device v93 cache is installed', legacyKeys.indexOf(OLD_CACHE) !== -1);
+      var legacyCache = await caches.open(OLD_CACHE);
+      var staleBodies = await Promise.all(OLD_ASSETS.map(function (asset) {
+        return legacyCache.match(new URL(asset, location.href).href).then(function (response) {
+          return response ? response.text() : '';
+        });
+      }));
+      test('v93 cache serves stale pre-Step-3D sentinels', staleBodies.every(function (body) {
+        return body.indexOf('v93-stale:') === 0;
+      }), staleBodies.map(function (body) { return body.slice(0, 60); }).join(' | '));
+
+      registration = await navigator.serviceWorker.register('../sw.js', {
+        scope: './',
+        updateViaCache: 'none'
+      });
+      await waitForActiveScript(registration, '/sw.js');
+
+      var workerSource = await workerSourcePromise;
+      var indexSource = await indexSourcePromise;
+      var currentBodies = await currentBodiesPromise;
+      var worker = parseWorker(workerSource);
+      var cacheKeys = await caches.keys();
+      test('the Step 3D beta worker activates', registration.active &&
+        new URL(registration.active.scriptURL).pathname === '/sw.js');
+      test('the new beta cache identifier is active', worker.cache === NEW_CACHE &&
+        cacheKeys.indexOf(NEW_CACHE) !== -1, worker.cache + ' | ' + cacheKeys.join(', '));
+      test('the obsolete v93 beta cache is removed', cacheKeys.indexOf(OLD_CACHE) === -1,
+        cacheKeys.join(', '));
+
+      var activeCache = await caches.open(NEW_CACHE);
+      var workerUrl = new URL('../sw.js', location.href).href;
+      var missingCore = [];
+      for (var i = 0; i < worker.core.length; i++) {
+        var coreResponse = await activeCache.match(new URL(worker.core[i], workerUrl).href);
+        if (!coreResponse) missingCore.push(worker.core[i]);
+      }
+      test('every required beta runtime asset is cached', missingCore.length === 0,
+        missingCore.join(', '));
+
+      var indexAssets = indexAssetUrls(indexSource);
+      var expectedIndexAssets = [
+        './css/app.css?v=' + TOKEN,
+        './js/ui-experiments.js?v=' + TOKEN,
+        './js/app-main.js?v=' + TOKEN
+      ];
+      var workerAssets = [
+        './css/app.css?v=' + TOKEN,
+        './js/ui-experiments.js?v=' + TOKEN,
+        './js/app-main.js?v=' + TOKEN
+      ];
+      test('index.html uses one Step 3D asset token', indexAssets.join('|') ===
+        expectedIndexAssets.join('|'), indexAssets.join(' | '));
+      test('index.html and sw.js agree on all Step 3D asset URLs', workerAssets.every(function (asset) {
+        return worker.core.indexOf(asset) !== -1;
+      }) && indexAssets.map(function (asset) {
+        return new URL(asset, location.origin + '/').href;
+      }).join('|') === workerAssets.map(function (asset) {
+        return new URL(asset, location.origin + '/').href;
+      }).join('|'));
+
+      var cachedBodies = await Promise.all(NEW_ASSETS.map(function (asset) {
+        return activeCache.match(new URL(asset, location.href).href).then(function (response) {
+          return response ? response.text() : '';
+        });
+      }));
+      test('Step 3D cache entries contain current source bytes', cachedBodies.every(function (body, index) {
+        return body === currentBodies[index] && body.indexOf('v93-stale:') !== 0;
+      }));
+      var oldResponses = await Promise.all(OLD_ASSETS.map(function (asset) {
+        return caches.match(new URL(asset, location.href).href);
+      }));
+      test('no pre-Step-3D asset key remains cached', oldResponses.every(function (response) {
+        return !response;
+      }));
+
+      var fetchPolicy = await exerciseFetchPolicy(workerSource, indexSource, otherOrigin);
+      test('offline navigation falls back to the cached beta shell',
+        fetchPolicy.offlineBody === indexSource && fetchPolicy.fetchCalls === 1);
+      test('the worker ignores cross-origin requests', !fetchPolicy.crossOriginIntercepted);
+
+      var sentinelResultPromise = waitForMessage('bhive-origin-sentinel-result', otherOrigin);
+      originFrame.contentWindow.postMessage({type: 'bhive-origin-sentinel-check'}, otherOrigin);
+      var sentinelResult = await sentinelResultPromise;
+      test('the upgrade cannot remove a different origin cache', sentinelResult.preserved === true);
+    } catch (error) {
+      test('service-worker upgrade scenario completes', false, error && error.stack || String(error));
+    } finally {
+      await cleanup(registration, originFrame, otherOrigin);
+      test('the focused test has no uncaught browser errors', uncaught.length === 0,
+        uncaught.join(' | '));
+      finish();
+    }
+  }
+
+  if (new URLSearchParams(location.search).get('origin-sentinel') === '1') {
+    runOriginSentinel();
+    return;
+  }
+  run();
+})();
+</script>
+</body>
+</html>
