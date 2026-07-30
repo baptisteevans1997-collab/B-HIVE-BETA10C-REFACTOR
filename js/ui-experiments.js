@@ -197,6 +197,55 @@
     }
     return '';
   }
+  function firstFlightExcerpt(value){
+    if(typeof value!=='string')return '';
+    var collapsed=value.replace(/\s+/g,' ').trim();
+    var points=Array.from(collapsed);
+    return points.length>80?points.slice(0,79).join('')+'\u2026':collapsed;
+  }
+  function renderFirstFlightRewardSummary(model){
+    if(!model||typeof model!=='object'||Array.isArray(model)||
+       typeof model.cellKey!=='string'||!model.cellKey.trim()||
+       typeof model.cellLabel!=='string'||!model.cellLabel.trim()||
+       !model.worker||typeof model.worker!=='object'||Array.isArray(model.worker)||
+       Object.keys(model.worker).sort().join(',')!=='age,b,p'||
+       model.worker.age!==3||model.worker.b!==0.5||model.worker.p!==0.5||
+       !Array.isArray(model.learningExcerpts)||model.learningExcerpts.length!==2||
+       (model.unlocked!==null&&(!model.unlocked||typeof model.unlocked!=='object'||
+         Array.isArray(model.unlocked)||typeof model.unlocked.cellKey!=='string'||
+         !model.unlocked.cellKey.trim()||typeof model.unlocked.label!=='string'||
+         !model.unlocked.label.trim())))return '';
+    var cellLabel=model.cellLabel.replace(/\s+/g,' ').trim();
+    var excerpts=model.learningExcerpts.map(firstFlightExcerpt);
+    if(!excerpts[0]||!excerpts[1])return '';
+    var unlockedLabel=model.unlocked?model.unlocked.label.replace(/\s+/g,' ').trim():'';
+    var supportingLabel=typeof model.supportingLabel==='string'?
+      model.supportingLabel.replace(/\s+/g,' ').trim():'';
+    return '<section class="ff-reward-summary" data-first-flight-reward role="dialog" tabindex="-1" '+
+        'aria-labelledby="ff-reward-title">'+
+      '<div class="ff-reward-live" role="status" aria-live="polite" aria-atomic="true">'+
+        'First Flight complete. Two learnings kept.</div>'+
+      '<h2 class="ff-reward-title" id="ff-reward-title" tabindex="-1">FIRST FLIGHT COMPLETE</h2>'+
+      '<div class="ff-reward-grid ff-reward-cards">'+
+        '<article class="ff-reward-card ff-reward-worker">'+
+          '<div class="ff-reward-card-k ff-reward-card-title">WORKER JOINED</div>'+
+          '<p class="ff-reward-cell ff-reward-cell-label">'+esc(cellLabel)+'</p>'+
+        '</article>'+
+        '<article class="ff-reward-card ff-reward-learnings">'+
+          '<div class="ff-reward-card-k ff-reward-card-title">2 LEARNINGS KEPT</div>'+
+          '<div class="ff-reward-excerpts">'+
+            '<p class="ff-reward-excerpt">'+esc(excerpts[0])+'</p>'+
+            '<p class="ff-reward-excerpt">'+esc(excerpts[1])+'</p>'+
+          '</div>'+
+        '</article>'+
+        (model.unlocked?'<article class="ff-reward-card ff-reward-unlock">'+
+          '<div class="ff-reward-card-k ff-reward-card-title">CELL AWAKENED \u2014 '+esc(unlockedLabel)+'</div>'+
+        '</article>':'')+
+      '</div>'+
+      (supportingLabel?'<p class="ff-reward-support ff-reward-supporting">'+esc(supportingLabel)+'</p>':'')+
+      '<button class="ff-enter-hive" type="button">ENTER THE HIVE</button>'+
+    '</section>';
+  }
   function toggleEditor(button){
     if(!button||!button.closest)return false;
     var root=button.closest('.td-experiment'),editor=root&&root.querySelector('.td-exp-editor');
@@ -237,6 +286,8 @@
     renderActive:renderActive,
     renderClosed:renderClosed,
     renderFirstFlight:renderFirstFlight,
+    firstFlightExcerpt:firstFlightExcerpt,
+    renderFirstFlightRewardSummary:renderFirstFlightRewardSummary,
     firstFlightMissionForState:firstFlightMissionForState,
     firstFlightCompletionMission:firstFlightCompletionMission,
     toggleEditor:toggleEditor,

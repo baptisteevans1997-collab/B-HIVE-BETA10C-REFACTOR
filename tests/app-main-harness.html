@@ -99,7 +99,10 @@
     'progress','completed','resume-selected','mission-ready','mission-active','mission-active-wide',
     'accept-save-failure','completion-save-failure','completion-no-reveal','completion-reload',
     'completion-stale','completion-malformed','completion-domain-failure','completion-throw',
-    'completion-rerender'
+    'completion-rerender','completion-invalid-worker','completion-invalid-learning',
+    'completion-invalid-completion','completion-already-result','completion-presentation-throw',
+    'completion-presentation-dispose',
+    'completion-private-copy','completed-elder','completed-zero'
   ].indexOf(scenario) >= 0;
   var isolatedFirstFlight = freshEligible || stagedFirstFlight;
   var keys = ['lw','free','craft','money','career','growth','finance','health','people','identity','clients','ink','side','recruit'];
@@ -142,6 +145,9 @@
     swarms: scenario === 'migration' ?
       {lw:[{age:4,b:0.5,p:0.5}],craft:[{age:5,b:0.6,p:0.4}],free:[{age:8,b:0.3,p:0.7}]} :
       completionReload ? {lw:[],health:[],people:[]} :
+      scenario === 'completed-zero' ? {lw:[],health:[],people:[]} :
+      scenario === 'completed-elder' ?
+      {lw:[{age:9,b:0.4,p:0.6}],health:[],people:[]} :
       stagedFirstFlight ?
       {lw:[{age:6,b:0.4,p:0.6}],health:[{age:7,b:0.5,p:0.5}],people:[{age:8,b:0.6,p:0.4}]} :
       {lw:[{age:4,b:0.5,p:0.5}],craft:[{age:5,b:0.6,p:0.4}]},
@@ -176,7 +182,10 @@
       'mission-active','mission-active-wide','accept-save-failure','genuine-completion',
       'completion-save-failure','completion-no-reveal','completion-reload','completion-stale',
       'completion-malformed','completion-domain-failure','completion-throw',
-      'completion-rerender','legacy-auto']
+      'completion-rerender','completion-invalid-worker','completion-invalid-learning',
+      'completion-invalid-completion','completion-already-result','completion-presentation-throw',
+      'completion-presentation-dispose',
+      'completion-private-copy','completed-elder','completed-zero','legacy-auto']
       .indexOf(scenario) < 0) {
     localStorage.setItem('lw-brainmap-tour-v2', '1');
   }
@@ -290,12 +299,25 @@
     'progress','completed','resume-selected','mission-ready','mission-active','mission-active-wide',
     'accept-save-failure','completion-save-failure','completion-no-reveal','completion-reload',
     'completion-stale','completion-malformed','completion-domain-failure','completion-throw',
-    'completion-rerender'
+    'completion-rerender','completion-invalid-worker','completion-invalid-learning',
+    'completion-invalid-completion','completion-already-result','completion-presentation-throw',
+    'completion-presentation-dispose',
+    'completion-private-copy','completed-elder','completed-zero'
   ].indexOf(scenario) >= 0;
   if (staged) {
     var fixture = JSON.parse(localStorage.getItem(storageKey));
     var B = window.BHIVE;
     var ts = 1700002000000;
+    var privateFirstFlightAnswers = [
+      '<img src=x onerror="window.__HARNESS_PRIVATE_LEAK=1"> Private context ' +
+        new Array(181).join('x'),
+      'Only a short escaped proof should appear; keep the remainder private ' +
+        new Array(181).join('y')
+    ];
+    var stagedAnswers = scenario === 'completion-private-copy' ? privateFirstFlightAnswers :
+      ['Finishing the beta matters most','Complete one focused beta task'];
+    window.__HARNESS_PRIVATE_ANSWERS = scenario === 'completion-private-copy' ?
+      stagedAnswers.slice() : null;
     B.init();
     fixture.qver = 3;
     fixture.questions = JSON.parse(JSON.stringify(B.questions));
@@ -307,7 +329,7 @@
     if (scenario !== 'resume-selected') {
       B.recordEvent('first_flight_answered', {
         ts:ts+2,cellKey:'lw',
-        payload:{version:1,question:1,answer:'Finishing the beta matters most'}
+        payload:{version:1,question:1,answer:stagedAnswers[0]}
       });
     }
     if (scenario === 'completed' || scenario === 'mission-ready' ||
@@ -316,10 +338,15 @@
         scenario === 'completion-no-reveal' || scenario === 'completion-reload' ||
         scenario === 'completion-stale' || scenario === 'completion-malformed' ||
         scenario === 'completion-domain-failure' || scenario === 'completion-throw' ||
-        scenario === 'completion-rerender') {
+        scenario === 'completion-rerender' || scenario === 'completion-invalid-worker' ||
+        scenario === 'completion-invalid-learning' || scenario === 'completion-invalid-completion' ||
+        scenario === 'completion-already-result' || scenario === 'completion-presentation-throw' ||
+        scenario === 'completion-presentation-dispose' ||
+        scenario === 'completion-private-copy' || scenario === 'completed-elder' ||
+        scenario === 'completed-zero') {
       B.recordEvent('first_flight_answered', {
         ts:ts+3,cellKey:'lw',
-        payload:{version:1,question:2,answer:'Complete one focused beta task'}
+        payload:{version:1,question:2,answer:stagedAnswers[1]}
       });
     }
     if (scenario === 'completed' || scenario === 'mission-active' ||
@@ -327,14 +354,20 @@
         scenario === 'completion-no-reveal' || scenario === 'completion-reload' ||
         scenario === 'completion-stale' || scenario === 'completion-malformed' ||
         scenario === 'completion-domain-failure' || scenario === 'completion-throw' ||
-        scenario === 'completion-rerender') {
+        scenario === 'completion-rerender' || scenario === 'completion-invalid-worker' ||
+        scenario === 'completion-invalid-learning' || scenario === 'completion-invalid-completion' ||
+        scenario === 'completion-already-result' || scenario === 'completion-presentation-throw' ||
+        scenario === 'completion-presentation-dispose' ||
+        scenario === 'completion-private-copy' || scenario === 'completed-elder' ||
+        scenario === 'completed-zero') {
       var ready = B.experiments.firstFlightState(B.learning.events);
       B.recordEvent('experiment_accepted', {
         id:'evt_harness_first_flight_accepted',ts:ts+4,cellKey:'lw',
         payload:B.experiments.decisionPayload(ready.mission,'accepted')
       });
     }
-    if (scenario === 'completed') {
+    if (scenario === 'completed' || scenario === 'completed-elder' ||
+        scenario === 'completed-zero') {
       B.recordEvent('experiment_completed', {
         id:'evt_first_flight_v1_completed_lw',ts:ts+5,cellKey:'lw',
         payload:B.experiments.completionPayload(ready.mission,'completed')
@@ -398,6 +431,8 @@
   window.__HARNESS_COMPLETE_RESULTS = [];
   window.__HARNESS_BUSY_OBSERVATIONS = [];
   window.__HARNESS_REENTERED_COMPLETION = false;
+  window.__HARNESS_INVALID_WORKER_REMOVED = null;
+  window.__HARNESS_REWARD_RENDER_CALLS = 0;
   window.__HARNESS_FAIL_DOMAIN_ONCE = scenario === 'completion-domain-failure';
   window.__HARNESS_THROW_COMPLETION_ONCE = scenario === 'completion-throw';
   window.__HARNESS_ADD_LEARNING_CALLS = 0;
@@ -473,6 +508,27 @@
       }else{
         result=originalComplete.apply(window.BHIVE,arguments);
       }
+      if(result&&result.ok&&!result.alreadyCompleted){
+        if(scenario==='completion-invalid-worker'){
+          var invalidWorkerKey=arguments[0]&&arguments[0].cellKey;
+          var invalidWorkerSwarm=invalidWorkerKey&&window.BHIVE.swarms[invalidWorkerKey];
+          if(Array.isArray(invalidWorkerSwarm)&&invalidWorkerSwarm.length){
+            window.__HARNESS_INVALID_WORKER_REMOVED={
+              cellKey:invalidWorkerKey,
+              worker:invalidWorkerSwarm.pop()
+            };
+          }
+        }else if(scenario==='completion-invalid-learning'){
+          result.learningEventIds=(result.learningEventIds||[]).slice();
+          result.learningEventIds[1]='evt_harness_missing_first_flight_learning';
+        }else if(scenario==='completion-invalid-completion'){
+          result.completionEventId='evt_harness_missing_first_flight_completion';
+        }else if(scenario==='completion-already-result'){
+          result.alreadyCompleted=true;
+          delete result.learningEventIds;
+          delete result.unlockedKey;
+        }
+      }
       window.__HARNESS_COMPLETE_RESULTS.push(JSON.parse(JSON.stringify(result)));
       return result;
     }finally{
@@ -498,6 +554,25 @@
 }());
 </script>
 <script src="../js/ui-experiments.js?first-flight-step3d"></script>
+<script>
+(function(){
+  'use strict';
+  var scenario=new URLSearchParams(location.search).get('scenario')||'widest';
+  var ui=window.BHIVE&&window.BHIVE.experimentUI;
+  var original=ui&&ui.renderFirstFlightRewardSummary;
+  if(typeof original!=='function')return;
+  ui.renderFirstFlightRewardSummary=function(){
+    window.__HARNESS_REWARD_RENDER_CALLS++;
+    if(scenario==='completion-presentation-throw'){
+      throw new Error('fixture reward presentation exception');
+    }
+    if(scenario==='completion-presentation-dispose'){
+      window.dispatchEvent(new Event('pagehide'));
+    }
+    return original.apply(ui,arguments);
+  };
+}());
+</script>
 <script src="../js/app-main.js?first-flight-step3d-context-fix"></script>
 <script src="../js/beta-profile-data.js"></script>
 <script src="../js/beta-profile.js?first-flight-step3b"></script>
@@ -510,6 +585,10 @@
     'mission-ready','mission-active','mission-active-wide','accept-save-failure',
     'completion-save-failure','completion-no-reveal','completion-reload','completion-stale',
     'completion-malformed','completion-domain-failure','completion-throw','completion-rerender',
+    'completion-invalid-worker','completion-invalid-learning','completion-invalid-completion',
+    'completion-already-result','completion-presentation-throw','completion-presentation-dispose',
+    'completion-private-copy',
+    'completed-elder','completed-zero',
     'normal-experiment','legacy-auto']
     .indexOf(scenarioName) >= 0 ? Date.now() + 700 : 0;
 
@@ -537,7 +616,10 @@
       'locked','progress','completed','resume-selected','mission-ready','mission-active',
       'mission-active-wide','accept-save-failure','completion-save-failure',
       'completion-stale','completion-malformed','completion-domain-failure','completion-throw',
-      'completion-rerender'
+      'completion-rerender','completion-invalid-worker','completion-invalid-learning',
+      'completion-invalid-completion','completion-already-result','completion-presentation-throw',
+      'completion-presentation-dispose',
+      'completion-private-copy','completed-elder','completed-zero'
     ].indexOf(readyScenario) >= 0;
     var expectedRenderedCells = readyScenario === 'completion-reload' ? 4 :
       foundationOnly ? 3 : readyScenario === 'migration' ? 6 : 14;
@@ -764,6 +846,80 @@
         return saved&&saved.learning?
           window.BHIVE.experiments.firstFlightState(saved.learning.events):null;
       }
+      function ffRewardSnapshot(){
+        var summary=document.querySelector('.ff-reward-summary[data-first-flight-reward]');
+        var live=summary&&summary.querySelector('.ff-reward-live');
+        var enter=summary&&summary.querySelector('.ff-enter-hive');
+        var excerpts=summary?Array.prototype.map.call(
+          summary.querySelectorAll('.ff-reward-excerpt'),function(node){return node.textContent;}):[];
+        var cards=summary?summary.querySelectorAll('.ff-reward-card'):[];
+        var unlock=summary&&summary.querySelector('.ff-reward-unlock');
+        var cell=summary&&summary.querySelector('.ff-reward-cell');
+        return {
+          count:document.querySelectorAll('.ff-reward-summary[data-first-flight-reward]').length,
+          cardCount:cards.length,
+          dialog:!!summary&&summary.getAttribute('role')==='dialog'&&
+            summary.getAttribute('tabindex')==='-1'&&
+            summary.getAttribute('aria-labelledby')==='ff-reward-title'&&
+            !!summary.querySelector('#ff-reward-title'),
+          focusContained:!!summary&&(document.activeElement===summary||summary.contains(document.activeElement)),
+          title:(summary&&summary.querySelector('#ff-reward-title')||{}).textContent||'',
+          live:!!live&&live.getAttribute('role')==='status'&&
+            live.getAttribute('aria-live')==='polite'&&live.getAttribute('aria-atomic')==='true',
+          liveText:live&&live.textContent||'',
+          workerText:(summary&&summary.querySelector('.ff-reward-worker')||{}).textContent||'',
+          learningText:(summary&&summary.querySelector('.ff-reward-learnings')||{}).textContent||'',
+          cellText:cell&&cell.textContent||'',
+          excerpts:excerpts,
+          unlockCount:summary?summary.querySelectorAll('.ff-reward-unlock').length:0,
+          unlockText:unlock&&unlock.textContent||'',
+          enter:!!enter&&enter.tagName==='BUTTON'&&enter.type==='button'&&
+            enter.textContent.trim()==='ENTER THE HIVE'
+        };
+      }
+      function ffWorkerMarker(key){
+        var marker=document.querySelector(
+          '#hivesvg .ff-worker-marker[data-cell-key="'+key+'"]');
+        return {
+          count:document.querySelectorAll(
+            '#hivesvg .ff-worker-marker[data-cell-key="'+key+'"]').length,
+          text:marker?marker.textContent.replace(/\s+/g,' ').trim():''
+        };
+      }
+      function ffDismissReward(){
+        var summary=document.querySelector('.ff-reward-summary[data-first-flight-reward]');
+        var enter=summary&&summary.querySelector('.ff-enter-hive');
+        var calls=window.__HARNESS_COMPLETE_CALLS,saves=window.__HARNESS_SAVE_CALLS;
+        var before=ffCompletionSnapshot(),focused=false;
+        if(enter){
+          enter.focus();
+          focused=document.activeElement===enter;
+          enter.dispatchEvent(new KeyboardEvent('keydown',{
+            key:'Enter',code:'Enter',bubbles:true,cancelable:true
+          }));
+          enter.dispatchEvent(new KeyboardEvent('keyup',{
+            key:'Enter',code:'Enter',bubbles:true,cancelable:true
+          }));
+          if(document.querySelector('.ff-reward-summary[data-first-flight-reward]')){
+            enter.dispatchEvent(new MouseEvent('click',{
+              bubbles:true,cancelable:true,detail:0
+            }));
+          }
+          enter.dispatchEvent(new MouseEvent('click',{
+            bubbles:true,cancelable:true,detail:0
+          }));
+        }
+        return {
+          focused:focused,
+          removed:!document.querySelector('.ff-reward-summary[data-first-flight-reward]'),
+          repeatedHarmless:window.__HARNESS_COMPLETE_CALLS===calls&&
+            window.__HARNESS_SAVE_CALLS===saves&&ffCompletionSnapshot()===before,
+          normalFocus:!!document.activeElement&&
+            !document.activeElement.closest('.ff-reward-summary[data-first-flight-reward]'),
+          focusCellKey:document.activeElement&&
+            document.activeElement.getAttribute('data-cell-key')
+        };
+      }
 
       if(scenario==='fresh'){
         var ffOpening=document.querySelector('#hive-today .ff-title');
@@ -895,6 +1051,16 @@
         if(ffGenuineButton)ffGenuineButton.click();
         var ffGenuineRequest=window.__HARNESS_COMPLETE_REQUESTS[0];
         var ffGenuineResult=window.__HARNESS_COMPLETE_RESULTS[0];
+        var ffGenuineReward=ffRewardSnapshot();
+        var ffGenuineMarker=ffWorkerMarker('lw');
+        var ffGenuineChosenLabel=(window.BHIVE.cells.filter(function(cell){
+          return cell.key==='lw';
+        })[0]||{}).label;
+        var ffGenuineUnlockLabel=(window.BHIVE.cells.filter(function(cell){
+          return cell.key===(ffGenuineResult&&ffGenuineResult.unlockedKey);
+        })[0]||{}).label;
+        var ffGenuineDismiss=ffDismissReward();
+        var ffGenuineMarkerAfterDismiss=ffWorkerMarker('lw');
         var ffGenuineCompleted=ffState();
         var ffGenuineSaved=JSON.parse(localStorage.getItem(storageKey));
         var ffGenuineSavedState=window.BHIVE.experiments.firstFlightState(
@@ -948,6 +1114,27 @@
             ffGenuineRequest.now>0,
           reentrantActivationBlocked:window.__HARNESS_REENTERED_COMPLETION&&
             window.__HARNESS_COMPLETE_CALLS-ffGenuineCompletionCallStart===1,
+          rewardSummaryOnce:ffGenuineReward.count===1&&
+            window.__HARNESS_REWARD_RENDER_CALLS===1,
+          rewardSemantics:ffGenuineReward.dialog&&ffGenuineReward.focusContained&&
+            ffGenuineReward.live&&ffGenuineReward.enter&&
+            ffGenuineReward.title==='FIRST FLIGHT COMPLETE',
+          truthfulRewardCards:ffGenuineReward.cardCount===3&&
+            /WORKER JOINED/.test(ffGenuineReward.workerText)&&
+            /2 LEARNINGS KEPT/.test(ffGenuineReward.learningText)&&
+            ffGenuineReward.cellText===ffGenuineChosenLabel&&
+            ffGenuineReward.excerpts.join('|')===
+              'Finishing the beta matters most|Complete one focused beta task',
+          realUnlockCard:ffGenuineReward.unlockCount===1&&
+            /CELL AWAKENED/.test(ffGenuineReward.unlockText)&&
+            ffGenuineUnlockLabel&&
+            ffGenuineReward.unlockText.indexOf(ffGenuineUnlockLabel)>=0,
+          selectedMarker:ffGenuineMarker.count===1&&ffGenuineMarker.text==='WORKERS 1'&&
+            ffGenuineMarkerAfterDismiss.count===1&&
+            ffGenuineMarkerAfterDismiss.text===ffGenuineMarker.text,
+          enterDismissed:ffGenuineDismiss.focused&&ffGenuineDismiss.removed&&
+            ffGenuineDismiss.repeatedHarmless&&ffGenuineDismiss.normalFocus&&
+            ffGenuineDismiss.focusCellKey==='lw',
           interfaceRemoved:!document.querySelector('#hive-today [data-first-flight]')&&
             !document.querySelector('#hive-today .ff-complete'),
           normalPresentation:!!document.querySelector('#hive-today .td-status')&&
@@ -1035,7 +1222,10 @@
         var ffStaleFreshRestored=!!ffStaleFreshButton&&ffStaleFreshButton!==ffStaleOldButton&&
           !ffStaleFreshButton.disabled&&ffStaleFreshButton.getAttribute('aria-busy')===null;
         var ffStaleFreshFocus=document.activeElement===ffStaleFreshButton;
+        var ffStaleRewardBeforeRetry=ffRewardSnapshot();
         ffStaleFreshButton.click();
+        var ffStaleRewardAfterRetry=ffRewardSnapshot();
+        var ffStaleRewardDismiss=ffDismissReward();
         result.firstFlightFlow={
           initialStatus:ffStaleInitial&&ffStaleInitial.status,
           authoritativeStatus:ffStaleAuthoritative&&ffStaleAuthoritative.status,
@@ -1048,6 +1238,10 @@
           changedAnnouncement:!!ffStaleStatus&&
             ffStaleStatus.matches('[role="status"][aria-live="polite"][aria-atomic="true"]')&&
             ffStaleStatus.textContent==='Your First Mission changed. Review it and try again.',
+          staleRewardDisposed:ffStaleRewardBeforeRetry.count===0,
+          freshRewardAfterRetry:ffStaleRewardAfterRetry.count===1&&
+            ffStaleRewardAfterRetry.enter&&ffStaleRewardDismiss.removed&&
+            ffStaleRewardDismiss.repeatedHarmless,
           retryCompleted:ffState()&&ffState().status==='mission_completed',
           completionCalls:window.__HARNESS_COMPLETE_CALLS-ffStaleCalls,
           domainSaveCalls:window.__HARNESS_SAVE_INSIDE_COMPLETE,
@@ -1066,6 +1260,7 @@
         var ffMalformedSaves=window.__HARNESS_SAVE_CALLS;
         ffMalformedOldButton.click();
         var ffMalformedStatus=document.querySelector('#hive-today .ff-status');
+        var ffMalformedReward=ffRewardSnapshot();
         result.firstFlightFlow={
           derivedStatus:ffState()&&ffState().status,
           completionCalls:window.__HARNESS_COMPLETE_CALLS-ffMalformedCalls,
@@ -1074,6 +1269,8 @@
           storedBytesPreserved:ffMalformedStored===localStorage.getItem(storageKey),
           noCompletionEffects:ffEventCount('learning_added')===0&&
             ffEventCount('experiment_completed')===0,
+          rewardSuppressed:ffMalformedReward.count===0&&
+            ffMalformedReward.excerpts.length===0,
           completionControlAbsent:!document.querySelector('#hive-today .ff-complete'),
           changedAnnouncement:!!ffMalformedStatus&&
             ffMalformedStatus.matches('[role="status"][aria-live="polite"][aria-atomic="true"]')&&
@@ -1101,7 +1298,10 @@
           ffOperationFailureFreshButton!==ffOperationFailureOldButton&&
           !ffOperationFailureFreshButton.disabled&&
           ffOperationFailureFreshButton.getAttribute('aria-busy')===null;
+        var ffOperationFailureReward=ffRewardSnapshot();
         ffOperationFailureFreshButton.click();
+        var ffOperationRetryReward=ffRewardSnapshot();
+        var ffOperationRetryDismiss=ffDismissReward();
         var ffOperationFailureLearningEvents=window.BHIVE.learning.events.filter(function(event){
           return event.type==='learning_added'&&event.payload.firstFlightVersion===1;
         });
@@ -1122,6 +1322,9 @@
           busyObserved:!!ffOperationFailureBusy&&ffOperationFailureBusy.buttonDisabled&&
             ffOperationFailureBusy.ariaBusy==='true'&&ffOperationFailureBusy.reentrantClickBlocked&&
             ffOperationFailureBusy.reentrantEnterBlocked&&ffOperationFailureBusy.reentrantSpaceBlocked,
+          failedRewardAbsent:ffOperationFailureReward.count===0,
+          retryRewardOnce:ffOperationRetryReward.count===1&&ffOperationRetryReward.enter&&
+            ffOperationRetryDismiss.removed&&ffOperationRetryDismiss.repeatedHarmless,
           retryCompleted:ffState()&&ffState().status==='mission_completed',
           operationCalls:window.__HARNESS_COMPLETE_CALLS-ffOperationFailureCalls,
           domainSaveCalls:window.__HARNESS_SAVE_INSIDE_COMPLETE-ffOperationFailureInside,
@@ -1146,6 +1349,8 @@
         var ffRerenderInside=window.__HARNESS_SAVE_INSIDE_COMPLETE;
         var ffRerenderOutside=window.__HARNESS_SAVE_OUTSIDE_COMPLETE;
         document.querySelector('#hive-today .ff-complete').click();
+        var ffRerenderReward=ffRewardSnapshot();
+        var ffRerenderRewardDismiss=ffDismissReward();
         result.firstFlightFlow={
           rerenders:ffRerenderCounts.length,
           rerenderUiSaveCalls:ffRerenderOutside-ffRerenderOutsideStart,
@@ -1157,6 +1362,10 @@
           uiSaveCallsDuringCompletion:window.__HARNESS_SAVE_OUTSIDE_COMPLETE-ffRerenderOutside,
           completedStatus:ffState()&&ffState().status,
           handlersDidNotAccumulate:window.__HARNESS_COMPLETE_CALLS-ffRerenderCalls===1,
+          rewardSummaryOnce:ffRerenderReward.count===1&&
+            ffRerenderReward.cardCount===3&&ffRerenderReward.enter,
+          rewardDismissNoMutation:ffRerenderRewardDismiss.removed&&
+            ffRerenderRewardDismiss.repeatedHarmless,
           controlsRemoved:!document.querySelector('#hive-today .ff-complete')
         };
       }else if(scenario==='completion-save-failure'){
@@ -1182,8 +1391,11 @@
         var ffCompletionFailureEnabled=!!ffCompletionRetryButton&&
           ffCompletionRetryButton!==ffCompletionFailureButton&&!ffCompletionRetryButton.disabled&&
           ffCompletionRetryButton.getAttribute('aria-busy')===null;
+        var ffCompletionFailureReward=ffRewardSnapshot();
         window.__HARNESS_FAIL_COMPLETION_SAVE=false;
         ffCompletionRetryButton.click();
+        var ffCompletionRetryReward=ffRewardSnapshot();
+        var ffCompletionRetryDismiss=ffDismissReward();
         var ffCompletionRetryState=ffState();
         var ffCompletionRetryResult=window.__HARNESS_COMPLETE_RESULTS[1];
         var ffCompletionRetryLearnings=(window.BHIVE.learning.events||[]).filter(function(event){
@@ -1214,6 +1426,9 @@
             ffCompletionFailureBusy.reentrantClickBlocked&&
             ffCompletionFailureBusy.reentrantEnterBlocked&&
             ffCompletionFailureBusy.reentrantSpaceBlocked,
+          failedRewardAbsent:ffCompletionFailureReward.count===0,
+          retryRewardOnce:ffCompletionRetryReward.count===1&&ffCompletionRetryReward.enter&&
+            ffCompletionRetryDismiss.removed&&ffCompletionRetryDismiss.repeatedHarmless,
           retryOk:ffCompletionRetryResult&&ffCompletionRetryResult.ok&&
             !ffCompletionRetryResult.alreadyCompleted,
           retryStatus:ffCompletionRetryState&&ffCompletionRetryState.status,
@@ -1255,12 +1470,20 @@
         var ffNoRevealSeedCalls=window.__HARNESS_ENGINE_SEED_CALLS;
         document.querySelector('#hive-today .ff-complete').click();
         var ffNoRevealResult=window.__HARNESS_COMPLETE_RESULTS[0];
+        var ffNoRevealReward=ffRewardSnapshot();
+        var ffNoRevealMarker=ffWorkerMarker('lw');
+        var ffNoRevealDismiss=ffDismissReward();
         result.firstFlightFlow={
           initialStatus:ffNoRevealState&&ffNoRevealState.status,
           completedStatus:ffState()&&ffState().status,
           completionOk:ffNoRevealResult&&ffNoRevealResult.ok&&!ffNoRevealResult.alreadyCompleted,
           unlockedKeyNull:ffNoRevealResult&&ffNoRevealResult.unlockedKey===null,
           unlocksUnchanged:JSON.stringify(window.BHIVE.unlocks)===JSON.stringify(ffNoRevealUnlocks),
+          rewardWithoutUnlock:ffNoRevealReward.count===1&&
+            ffNoRevealReward.cardCount===2&&ffNoRevealReward.unlockCount===0&&
+            !/CELL AWAKENED/.test(ffNoRevealReward.workerText+ffNoRevealReward.learningText)&&
+            ffNoRevealDismiss.removed&&ffNoRevealDismiss.repeatedHarmless,
+          selectedMarker:ffNoRevealMarker.count===1&&ffNoRevealMarker.text==='WORKERS 2',
           completionCalls:window.__HARNESS_COMPLETE_CALLS-ffNoRevealCalls,
           domainSaveCalls:window.__HARNESS_SAVE_INSIDE_COMPLETE-ffNoRevealInsideSaves,
           uiSaveCalls:window.__HARNESS_SAVE_OUTSIDE_COMPLETE-ffNoRevealOutsideSaves,
@@ -1281,6 +1504,8 @@
         var ffReloadCompletionEvents=window.BHIVE.learning.events.filter(function(event){
           return event.type==='experiment_completed'&&event.id==='evt_first_flight_v1_completed_lw';
         });
+        var ffReloadReward=ffRewardSnapshot();
+        var ffReloadMarker=ffWorkerMarker('lw');
         result.firstFlightFlow={
           status:ffReloadCompleted&&ffReloadCompleted.status,
           selfContainedSeed:window.__HARNESS_STORAGE_CLEARED&&
@@ -1289,6 +1514,9 @@
           storedBytesUnchanged:window.__HARNESS_STORED_HIVE===localStorage.getItem(storageKey),
           noReplayCalls:window.__HARNESS_COMPLETE_CALLS===0&&window.__HARNESS_SAVE_CALLS===0&&
             window.__HARNESS_UNLOCK_CALLS===0&&window.__HARNESS_ADD_LEARNING_CALLS===0,
+          noRestoredReward:ffReloadReward.count===0&&
+            window.__HARNESS_REWARD_RENDER_CALLS===0,
+          restoredMarker:ffReloadMarker.count===1&&ffReloadMarker.text==='WORKERS 1',
           normalInitSeedCalls:window.__HARNESS_ENGINE_SEED_CALLS,
           effectsRemainOnce:ffReloadLearningEvents.length===2&&
             ffReloadCompletionEvents.length===1&&
@@ -1310,6 +1538,125 @@
           onboardingStorageUntouched:localStorage.getItem('lw-brainmap-tour-v2')===null&&
             localStorage.getItem('bhive_beta_profile_answers')===null&&
             localStorage.getItem('bhive_beta_profile_result')===null
+        };
+      }else if(['completion-invalid-worker','completion-invalid-learning',
+        'completion-invalid-completion','completion-already-result'].indexOf(scenario)>=0){
+        var ffInvalidCalls=window.__HARNESS_COMPLETE_CALLS;
+        var ffInvalidInside=window.__HARNESS_SAVE_INSIDE_COMPLETE;
+        var ffInvalidOutside=window.__HARNESS_SAVE_OUTSIDE_COMPLETE;
+        document.querySelector('#hive-today .ff-complete').click();
+        var ffInvalidResult=window.__HARNESS_COMPLETE_RESULTS[0];
+        var ffInvalidReward=ffRewardSnapshot();
+        var ffInvalidSaved=JSON.parse(localStorage.getItem(storageKey));
+        var ffInvalidSavedState=ffInvalidSaved&&ffInvalidSaved.learning?
+          window.BHIVE.experiments.firstFlightState(ffInvalidSaved.learning.events):null;
+        if(window.__HARNESS_INVALID_WORKER_REMOVED){
+          var ffInvalidWorkerRecord=window.__HARNESS_INVALID_WORKER_REMOVED;
+          window.BHIVE.swarms[ffInvalidWorkerRecord.cellKey].push(ffInvalidWorkerRecord.worker);
+        }
+        result.firstFlightFlow={
+          evidenceKind:scenario.replace('completion-',''),
+          completedStatus:ffState()&&ffState().status,
+          persistedCompleted:ffInvalidSavedState&&
+            ffInvalidSavedState.status==='mission_completed',
+          oneDomainCall:window.__HARNESS_COMPLETE_CALLS-ffInvalidCalls===1,
+          domainSaveCalls:window.__HARNESS_SAVE_INSIDE_COMPLETE-ffInvalidInside,
+          uiSaveCalls:window.__HARNESS_SAVE_OUTSIDE_COMPLETE-ffInvalidOutside,
+          rewardSuppressed:ffInvalidReward.count===0&&ffInvalidReward.cardCount===0&&
+            ffInvalidReward.excerpts.length===0&&
+            !document.querySelector('.ff-enter-hive'),
+          normalCompletedPresentation:!!document.querySelector('#hive-today .td-status')&&
+            !document.querySelector('#hive-today .ff-complete'),
+          corruptedAsPlanned:scenario==='completion-invalid-worker'?
+            !!window.__HARNESS_INVALID_WORKER_REMOVED:
+            scenario==='completion-invalid-learning'?
+              !!ffInvalidResult&&Array.isArray(ffInvalidResult.learningEventIds)&&
+                ffInvalidResult.learningEventIds[1]===
+                'evt_harness_missing_first_flight_learning':
+            scenario==='completion-invalid-completion'?
+              !!ffInvalidResult&&ffInvalidResult.completionEventId===
+                'evt_harness_missing_first_flight_completion':
+              !!ffInvalidResult&&ffInvalidResult.alreadyCompleted===true&&
+                !ffInvalidResult.learningEventIds&&!('unlockedKey' in ffInvalidResult),
+          authoritativeEffectsRemain:!!ffInvalidSaved&&
+            (ffInvalidSaved.learnings.lw||[]).filter(function(item){
+              return item&&item.s==='you';
+            }).length===2&&
+            (ffInvalidSaved.swarms.lw||[]).length===2&&
+            (window.BHIVE.swarms.lw||[]).length===2
+        };
+      }else if(scenario==='completion-presentation-throw'||
+          scenario==='completion-presentation-dispose'){
+        var ffPresentationCalls=window.__HARNESS_COMPLETE_CALLS;
+        var ffPresentationInside=window.__HARNESS_SAVE_INSIDE_COMPLETE;
+        var ffPresentationOutside=window.__HARNESS_SAVE_OUTSIDE_COMPLETE;
+        document.querySelector('#hive-today .ff-complete').click();
+        var ffPresentationReward=ffRewardSnapshot();
+        result.firstFlightFlow={
+          completedStatus:ffState()&&ffState().status,
+          persistedCompleted:ffSavedState()&&ffSavedState().status==='mission_completed',
+          oneDomainCall:window.__HARNESS_COMPLETE_CALLS-ffPresentationCalls===1,
+          domainSaveCalls:window.__HARNESS_SAVE_INSIDE_COMPLETE-ffPresentationInside,
+          uiSaveCalls:window.__HARNESS_SAVE_OUTSIDE_COMPLETE-ffPresentationOutside,
+          rendererCalledOnce:window.__HARNESS_REWARD_RENDER_CALLS===1,
+          exceptionContained:window.__APP_MAIN_ERRORS.length===0,
+          disposedDuringRender:scenario==='completion-presentation-dispose',
+          rewardSuppressed:ffPresentationReward.count===0&&
+            !document.querySelector('.ff-enter-hive'),
+          normalCompletedPresentation:!!document.querySelector('#hive-today .td-status')&&
+            !document.querySelector('#hive-today .ff-complete')
+        };
+      }else if(scenario==='completion-private-copy'){
+        var ffPrivateAnswers=window.__HARNESS_PRIVATE_ANSWERS.slice();
+        document.querySelector('#hive-today .ff-complete').click();
+        var ffPrivateReward=ffRewardSnapshot();
+        var ffPrivateRoot=document.querySelector(
+          '.ff-reward-summary[data-first-flight-reward]');
+        var ffPrivateEvents=window.BHIVE.learning.events.filter(function(event){
+          return event.type==='learning_added'&&event.payload&&
+            event.payload.firstFlightVersion===1;
+        });
+        var ffPrivateDismiss=ffDismissReward();
+        result.firstFlightFlow={
+          completedStatus:ffState()&&ffState().status,
+          rewardSummary:ffPrivateReward.count===1&&ffPrivateReward.excerpts.length===2,
+          escaped:!!ffPrivateRoot&&!ffPrivateRoot.querySelector('img,script')&&
+            window.__HARNESS_PRIVATE_LEAK===undefined&&
+            ffPrivateReward.excerpts[0].indexOf('<img src=x onerror=')===0,
+          truncated:ffPrivateReward.excerpts.every(function(excerpt){
+            return Array.from(excerpt).length<=80;
+          })&&ffPrivateReward.excerpts[0].slice(-1)==='\u2026'&&
+            ffPrivateReward.excerpts[1].slice(-1)==='\u2026',
+          fullPrivateTextAbsent:!!ffPrivateRoot&&
+            ffPrivateAnswers.every(function(answer){
+              return ffPrivateRoot.textContent.indexOf(answer)===-1&&
+                document.body.textContent.indexOf(answer)===-1;
+            }),
+          privateLiveRegion:ffPrivateReward.live&&
+            ffPrivateReward.liveText==='First Flight complete. Two learnings kept.'&&
+            ffPrivateAnswers.every(function(answer){
+              return ffPrivateReward.liveText.indexOf(answer)===-1;
+            }),
+          persistedFullText:ffPrivateEvents.length===2&&
+            ffPrivateEvents[0].payload.text===ffPrivateAnswers[0]&&
+            ffPrivateEvents[1].payload.text===ffPrivateAnswers[1],
+          dismissedWithoutMutation:ffPrivateDismiss.removed&&
+            ffPrivateDismiss.repeatedHarmless
+        };
+      }else if(scenario==='completed'||scenario==='completed-elder'||scenario==='completed-zero'){
+        var ffCompletedReward=ffRewardSnapshot();
+        var ffCompletedMarker=ffWorkerMarker('lw');
+        result.firstFlightFlow={
+          status:ffState()&&ffState().status,
+          noRestoredReward:ffCompletedReward.count===0&&
+            window.__HARNESS_REWARD_RENDER_CALLS===0,
+          noCompletionCallOrSave:window.__HARNESS_COMPLETE_CALLS===0&&
+            window.__HARNESS_SAVE_CALLS===0,
+          selectedMarker:ffCompletedMarker.count===1,
+          markerText:ffCompletedMarker.text,
+          stageTwoCount:(window.BHIVE.swarms.lw||[]).filter(function(worker){
+            return window.BHIVE.stageOf(worker.age)===2;
+          }).length
         };
       }else if(scenario==='health-select'||scenario==='people-select'){
         var ffSelectKey=scenario==='health-select'?'health':'people';

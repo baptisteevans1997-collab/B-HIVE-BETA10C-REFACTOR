@@ -940,6 +940,7 @@
       applyPriorityPulse();
       markCells();       /* beta10c: was monkey-patched, now inline */
       applyLockStates(); /* beta10c: was monkey-patched, now inline */
+      renderFirstFlightWorkerMarker();
     }
     /* ── the Core: a queen cell at the heart of the hive ── */
     function drawCore(){
@@ -2862,6 +2863,39 @@
         els[i].setAttribute('aria-label',c.full+(st==='dormant'?' (asleep)':''));
       }
     }
+    function renderFirstFlightWorkerMarker(){
+      var old=svg.querySelectorAll('.ff-worker-marker'),state=currentFirstFlightState();
+      var swarm,target,cell=null,count=0,i,beeRecord,marker,icon,label;
+      for(i=0;i<old.length;i++)old[i].parentNode.removeChild(old[i]);
+      if(!state||state.version!==1||state.status!=='mission_completed'||
+         typeof state.cellKey!=='string')return;
+      swarm=swarms[state.cellKey];
+      if(!Array.isArray(swarm))return;
+      for(i=0;i<swarm.length;i++){
+        beeRecord=swarm[i];
+        if(!beeRecord||typeof beeRecord!=='object'||
+           typeof beeRecord.age!=='number'||!isFinite(beeRecord.age))return;
+        if(stageOf(beeRecord.age)===2)count++;
+      }
+      for(i=0;i<cells.length;i++)if(cells[i].key===state.cellKey){cell=cells[i];break;}
+      if(!cell)return;
+      target=svg.querySelector('.hive-cell[data-cell-key="'+state.cellKey+'"]');
+      if(!target)return;
+      marker=B.el('g',{'class':'ff-worker-marker','data-cell-key':state.cellKey,
+        transform:'translate('+cell.x+','+(cell.y+20)+')','aria-hidden':'true'});
+      marker.appendChild(B.el('rect',{x:'-38',y:'-7',width:'76',height:'14',rx:'7',
+        'class':'ff-worker-marker-bg'}));
+      icon=B.el('g',{'class':'ff-worker-marker-icon',transform:'translate(-29,0)'});
+      icon.appendChild(B.el('ellipse',{cx:'0',cy:'0',rx:'3.2',ry:'2.2'}));
+      icon.appendChild(B.el('ellipse',{cx:'-1.6',cy:'-2.4',rx:'1.8',ry:'1.2'}));
+      icon.appendChild(B.el('ellipse',{cx:'1.6',cy:'-2.4',rx:'1.8',ry:'1.2'}));
+      marker.appendChild(icon);
+      label=B.el('text',{x:'-21',y:'3','class':'ff-worker-marker-label'});
+      label.textContent='WORKERS '+count;
+      marker.appendChild(label);
+      target.appendChild(marker);
+      target.setAttribute('aria-label',cell.full+', Workers '+count);
+    }
     var currentTodayInsight=null,currentTodayExperiment=null,currentTodayReview=null;
     var renderedFirstFlightCompletionContext=null;
     function trustedMemoryUse(now,observations){
@@ -2900,6 +2934,13 @@
     function renderToday(){
       var el=document.getElementById('hive-today');
       if(!el)return;
+      if(activeFirstFlightAttempt&&activeFirstFlightAttempt.phase==='summary'&&
+         !activeFirstFlightAttempt.disposed){
+        if(el.querySelector('[data-first-flight-reward]'))return;
+        activeFirstFlightAttempt.phase='dismissed';
+        activeFirstFlightAttempt.disposed=true;
+        activeFirstFlightAttempt=null;
+      }
       var now=Date.now(),events=(BHIVE.learning&&BHIVE.learning.events)||[];
       var firstFlight=currentFirstFlightState();
       var firstFlightCompletion=firstFlightCompletionContext(firstFlight);
@@ -3188,6 +3229,206 @@
     if(lb)lb.addEventListener('click',logCheckin);
     var todayEl=document.getElementById('hive-today');
     var firstFlightBusy=false;
+    var firstFlightAttemptSequence=0;
+    var activeFirstFlightAttempt=null;
+    function cloneFirstFlightValue(value){
+      try{return JSON.parse(JSON.stringify(value));}catch(e){return null;}
+    }
+    function sameFirstFlightValue(a,b){
+      try{return JSON.stringify(a)===JSON.stringify(b);}catch(e){return false;}
+    }
+    function firstFlightCellByKey(key){
+      for(var i=0;i<cells.length;i++)if(cells[i].key===key)return cells[i];
+      return null;
+    }
+    function createFirstFlightAttempt(state,mission,renderedContext){
+      var selectedSwarm=BHIVE.swarms&&BHIVE.swarms[state.cellKey];
+      var selectedLearnings=BHIVE.learnings&&BHIVE.learnings[state.cellKey];
+      var config=B.experiments&&B.experiments.FIRST_FLIGHT&&
+        B.experiments.FIRST_FLIGHT[state.cellKey];
+      var events=BHIVE.learning&&Array.isArray(BHIVE.learning.events)?BHIVE.learning.events:[];
+      var eventIds={},missionCopy=cloneFirstFlightValue(mission),swarmCopy,learningCopy,i,event;
+      if(!Array.isArray(selectedSwarm)||!config||!Array.isArray(config.questions)||
+         config.questions.length!==2||!missionCopy)return null;
+      swarmCopy=cloneFirstFlightValue(selectedSwarm);
+      learningCopy=cloneFirstFlightValue(Array.isArray(selectedLearnings)?selectedLearnings:[]);
+      if(!Array.isArray(swarmCopy)||!Array.isArray(learningCopy))return null;
+      for(i=0;i<events.length;i++){
+        event=events[i];
+        if(event&&typeof event.id==='string'&&event.id){
+          eventIds[event.id]=(eventIds[event.id]||0)+1;
+        }
+      }
+      return {
+        id:++firstFlightAttemptSequence,
+        phase:'completing',
+        disposed:false,
+        presentationClaimed:false,
+        cellKey:state.cellKey,
+        mission:missionCopy,
+        answers:state.answers.slice(),
+        questions:config.questions.slice(),
+        renderedContext:renderedContext,
+        preSwarm:swarmCopy,
+        preLearnings:learningCopy,
+        preUnlocks:unlocks.slice(),
+        preEventIds:eventIds,
+        rewardModel:null
+      };
+    }
+    function uniqueFirstFlightEvent(events,id){
+      var found=null,count=0,i,event;
+      if(typeof id!=='string'||!id)return null;
+      for(i=0;i<events.length;i++){
+        event=events[i];
+        if(event&&event.id===id){found=event;count++;}
+      }
+      return count===1?found:null;
+    }
+    function freezeFirstFlightRewardModel(model){
+      if(typeof Object.freeze!=='function')return model;
+      Object.freeze(model.worker);
+      Object.freeze(model.learningExcerpts);
+      if(model.unlocked)Object.freeze(model.unlocked);
+      return Object.freeze(model);
+    }
+    function validatedFirstFlightRewardModel(attempt,result,completedState){
+      var events=BHIVE.learning&&Array.isArray(BHIVE.learning.events)?BHIVE.learning.events:[];
+      var afterLearnings=BHIVE.learnings&&BHIVE.learnings[attempt.cellKey];
+      var afterSwarm=BHIVE.swarms&&BHIVE.swarms[attempt.cellKey];
+      var completionEvent,expectedCompletion,learningEvents=[],learningIds=result&&result.learningEventIds;
+      var addedLearnings,newWorker,chosenCell,unlockedCell=null,excerpts=[],i,event,payload;
+      if(activeFirstFlightAttempt!==attempt||attempt.disposed||attempt.phase!=='completing'||
+         attempt.presentationClaimed||!result||result.ok!==true||
+         result.alreadyCompleted!==false||result.cellKey!==attempt.cellKey||
+         !completedState||completedState.status!=='mission_completed'||
+         completedState.cellKey!==attempt.cellKey||
+         typeof result.completionEventId!=='string'||!result.completionEventId||
+         completedState.completedEventId!==result.completionEventId||
+         attempt.preEventIds[result.completionEventId]||
+         !Array.isArray(learningIds)||learningIds.length!==2||
+         typeof learningIds[0]!=='string'||!learningIds[0]||
+         typeof learningIds[1]!=='string'||!learningIds[1]||learningIds[0]===learningIds[1]||
+         attempt.preEventIds[learningIds[0]]||attempt.preEventIds[learningIds[1]])return null;
+      completionEvent=uniqueFirstFlightEvent(events,result.completionEventId);
+      expectedCompletion=B.experiments&&typeof B.experiments.completionPayload==='function'?
+        B.experiments.completionPayload(attempt.mission,'completed'):null;
+      if(!completionEvent||completionEvent.type!=='experiment_completed'||
+         completionEvent.cellKey!==attempt.cellKey||!expectedCompletion||
+         !sameFirstFlightValue(completionEvent.payload,expectedCompletion))return null;
+      for(i=0;i<2;i++){
+        event=uniqueFirstFlightEvent(events,learningIds[i]);
+        payload=event&&event.payload;
+        if(!event||event.type!=='learning_added'||event.cellKey!==attempt.cellKey||!payload||
+           payload.text!==attempt.answers[i]||payload.source!=='you'||
+           payload.question!==attempt.questions[i]||payload.firstFlightVersion!==1)return null;
+        learningEvents.push(event);
+      }
+      if(!Array.isArray(afterLearnings)||afterLearnings.length!==attempt.preLearnings.length+2||
+         !sameFirstFlightValue(afterLearnings.slice(0,attempt.preLearnings.length),attempt.preLearnings))return null;
+      addedLearnings=afterLearnings.slice(attempt.preLearnings.length);
+      for(i=0;i<2;i++){
+        if(!addedLearnings[i]||addedLearnings[i].t!==attempt.answers[i]||
+           addedLearnings[i].s!=='you'||addedLearnings[i].q!==attempt.questions[i]||
+           learningEvents[i].payload.text!==addedLearnings[i].t)return null;
+      }
+      if(!Array.isArray(afterSwarm)||afterSwarm.length!==attempt.preSwarm.length+1||
+         !sameFirstFlightValue(afterSwarm.slice(0,attempt.preSwarm.length),attempt.preSwarm))return null;
+      newWorker=afterSwarm[attempt.preSwarm.length];
+      if(!newWorker||typeof newWorker!=='object'||Array.isArray(newWorker)||
+         Object.keys(newWorker).sort().join(',')!=='age,b,p'||newWorker.age!==3||
+         newWorker.b!==0.5||newWorker.p!==0.5||stageOf(newWorker.age)!==2)return null;
+      if(result.unlockedKey===null){
+        if(!sameFirstFlightValue(unlocks,attempt.preUnlocks))return null;
+      }else{
+        if(typeof result.unlockedKey!=='string'||!result.unlockedKey||
+           attempt.preUnlocks.indexOf(result.unlockedKey)>=0||
+           unlocks.length!==attempt.preUnlocks.length+1||
+           !sameFirstFlightValue(unlocks.slice(0,attempt.preUnlocks.length),attempt.preUnlocks)||
+           unlocks[unlocks.length-1]!==result.unlockedKey||!isUnlocked(result.unlockedKey))return null;
+        unlockedCell=firstFlightCellByKey(result.unlockedKey);
+        if(!unlockedCell)return null;
+      }
+      chosenCell=firstFlightCellByKey(attempt.cellKey);
+      if(!chosenCell||!B.experimentUI||
+         typeof B.experimentUI.firstFlightExcerpt!=='function')return null;
+      for(i=0;i<2;i++){
+        excerpts.push(B.experimentUI.firstFlightExcerpt(learningEvents[i].payload.text));
+        if(!excerpts[i]||Array.from(excerpts[i]).length>80)return null;
+      }
+      return freezeFirstFlightRewardModel({
+        cellKey:attempt.cellKey,
+        cellLabel:chosenCell.label,
+        worker:{age:newWorker.age,b:newWorker.b,p:newWorker.p},
+        learningExcerpts:excerpts,
+        unlocked:unlockedCell?{cellKey:unlockedCell.key,label:unlockedCell.label}:null,
+        supportingLabel:attempt.cellKey==='lw'?'Your Life & Work choice':''
+      });
+    }
+    function announceFirstFlightCompleted(){
+      if(!todayEl)return;
+      var status=todayEl.querySelector('.td-status');
+      if(!status){
+        status=document.createElement('div');
+        status.className='td-status';
+        todayEl.insertBefore(status,todayEl.firstChild);
+      }
+      status.setAttribute('role','status');
+      status.setAttribute('aria-live','polite');
+      status.setAttribute('aria-atomic','true');
+      status.textContent='First Flight complete.';
+    }
+    function renderCompletedFirstFlightBase(){
+      try{renderHive(false);}catch(e){console.warn('hive:',e);}
+      try{renderToday();}
+      catch(e){
+        console.warn('hive:',e);
+        if(todayEl){
+          todayEl.textContent='';
+          announceFirstFlightCompleted();
+        }
+      }
+    }
+    function disposeFirstFlightAttempt(attempt){
+      if(!attempt)return;
+      attempt.phase='dismissed';
+      attempt.disposed=true;
+      if(activeFirstFlightAttempt===attempt)activeFirstFlightAttempt=null;
+    }
+    function mountFirstFlightRewardSummary(attempt,model){
+      if(activeFirstFlightAttempt!==attempt||attempt.disposed||attempt.presentationClaimed)return null;
+      attempt.phase='eligible';
+      attempt.presentationClaimed=true;
+      attempt.rewardModel=model;
+      try{
+        if(!B.experimentUI||typeof B.experimentUI.renderFirstFlightRewardSummary!=='function')return false;
+        var html=B.experimentUI.renderFirstFlightRewardSummary(model);
+        if(activeFirstFlightAttempt!==attempt||attempt.disposed)return null;
+        if(!html||!todayEl)return false;
+        todayEl.innerHTML=html;
+        var summaries=todayEl.querySelectorAll('.ff-reward-summary[data-first-flight-reward]');
+        if(summaries.length!==1)return false;
+        attempt.phase='summary';
+        var heading=summaries[0].querySelector('#ff-reward-title');
+        if(heading&&heading.focus)heading.focus();
+        else summaries[0].focus();
+        return true;
+      }catch(e){
+        console.warn('hive:',e);
+        return false;
+      }
+    }
+    function enterFirstFlightHive(button){
+      var attempt=activeFirstFlightAttempt,cellKey;
+      if(!button||!attempt||attempt.disposed||attempt.phase!=='summary'||
+         !button.closest||!button.closest('[data-first-flight-reward]'))return;
+      cellKey=attempt.cellKey;
+      disposeFirstFlightAttempt(attempt);
+      renderCompletedFirstFlightBase();
+      announceFirstFlightCompleted();
+      var target=svg.querySelector('.hive-cell[data-cell-key="'+cellKey+'"]');
+      if(target&&target.focus)target.focus();
+    }
     function firstFlightStepMessage(card){
       var status=card&&card.getAttribute('data-first-flight-state');
       if(status==='available')return 'Choose one foundation cell to begin.';
@@ -3331,6 +3572,16 @@
           'Your First Mission changed. Review it and try again.','.ff-complete');
         return;
       }
+      var attempt=createFirstFlightAttempt(
+        state,mission,renderedFirstFlightCompletionContext);
+      if(!attempt){
+        firstFlightBusy=false;
+        renderToday();
+        showFirstFlightError(
+          'Your First Mission changed. Review it and try again.','.ff-complete');
+        return;
+      }
+      activeFirstFlightAttempt=attempt;
       var request={
         storageKey:STORAGE_KEY,
         mission:mission,
@@ -3343,23 +3594,27 @@
       catch(e){completed={ok:false};}
       bindState();
       var completedState=currentFirstFlightState();
-      if(!completed||!completed.ok||!completedState||
-         completedState.status!=='mission_completed'||completedState.cellKey!==state.cellKey){
+      var authorityCompleted=!!(completedState&&
+        completedState.status==='mission_completed'&&completedState.cellKey===state.cellKey);
+      if(!authorityCompleted){
+        attempt.phase='failed';
+        attempt.disposed=true;
+        if(activeFirstFlightAttempt===attempt)activeFirstFlightAttempt=null;
         firstFlightBusy=false;
         renderToday();
         showFirstFlightError('First Mission could not be completed. Please try again.',
           '.ff-complete');
         return;
       }
-      renderHive(false);
-      renderToday();
-      var status=todayEl.querySelector('.td-status');
-      if(status){
-        status.setAttribute('role','status');
-        status.setAttribute('aria-live','polite');
-        status.setAttribute('aria-atomic','true');
-        status.textContent='First Flight complete.';
+      var rewardModel=validatedFirstFlightRewardModel(attempt,completed,completedState);
+      renderCompletedFirstFlightBase();
+      if(rewardModel){
+        var mounted=mountFirstFlightRewardSummary(attempt,rewardModel);
+        if(mounted===true||mounted===null)return;
+        renderCompletedFirstFlightBase();
       }
+      disposeFirstFlightAttempt(attempt);
+      announceFirstFlightCompleted();
     }
     if(todayEl)todayEl.addEventListener('input',function(ev){
       var input=ev.target&&ev.target.closest?ev.target.closest('.ff-answer'):null;
@@ -3380,6 +3635,12 @@
       submitFirstFlightAnswer(form);
     });
     if(todayEl)todayEl.addEventListener('click',function(ev){
+      var enterHive=ev.target&&ev.target.closest?
+        ev.target.closest('.ff-enter-hive'):null;
+      if(enterHive){
+        enterFirstFlightHive(enterHive);
+        return;
+      }
       var firstFlightComplete=ev.target&&ev.target.closest?
         ev.target.closest('.ff-complete'):null;
       if(firstFlightComplete){
@@ -3557,6 +3818,9 @@
         var idx=parseInt(b.getAttribute('data-idx'),10);
         if(!isNaN(idx))select(idx);
       }
+    });
+    window.addEventListener('pagehide',function(){
+      if(activeFirstFlightAttempt)disposeFirstFlightAttempt(activeFirstFlightAttempt);
     });
     var mlk=document.getElementById('hive-manual-link');
     if(mlk)mlk.addEventListener('click',function(){

@@ -598,6 +598,100 @@
     var activeBegin=box.querySelectorAll('.ff-begin').length;
     return readyBegin===1&&answerBegin===0&&activeBegin===0&&U.renderFirstFlight(completed)==='';
   });
+  function firstFlightRewardModel(unlocked){
+    return {
+      cellKey:'lw',cellLabel:'Main Project',worker:{age:3,b:0.5,p:0.5},
+      learningExcerpts:['Finishing the beta matters most','Complete one focused beta task'],
+      unlocked:unlocked
+    };
+  }
+  test('First Flight reward summary exposes the complete accessible structure and real unlock card',function(){
+    var model=firstFlightRewardModel({cellKey:'craft',label:'Creative craft'});
+    model.supportingLabel='Your Life & Work choice';
+    box.innerHTML=U.renderFirstFlightRewardSummary(model);
+    var root=box.querySelector('.ff-reward-summary[data-first-flight-reward]');
+    var titles=Array.prototype.map.call(root.querySelectorAll('.ff-reward-card-title'),function(item){
+      return item.textContent;
+    });
+    return !!root&&root.getAttribute('role')==='dialog'&&root.tabIndex===-1&&
+      root.getAttribute('aria-labelledby')==='ff-reward-title'&&
+      root.querySelector('#ff-reward-title').textContent==='FIRST FLIGHT COMPLETE'&&
+      titles.join('|')==='WORKER JOINED|2 LEARNINGS KEPT|CELL AWAKENED \u2014 Creative craft'&&
+      root.querySelector('.ff-reward-worker .ff-reward-cell-label').textContent==='Main Project'&&
+      root.querySelectorAll('.ff-reward-excerpt').length===2&&
+      root.querySelectorAll('.ff-reward-supporting').length===1&&
+      root.querySelector('.ff-enter-hive').type==='button'&&
+      root.querySelector('.ff-enter-hive').textContent==='ENTER THE HIVE';
+  });
+  test('First Flight reward summary omits the unlock card when authoritative unlocked is null',function(){
+    var model=firstFlightRewardModel(null);
+    model.supportingLabel='  Your   Life & Work\nchoice  ';
+    box.innerHTML=U.renderFirstFlightRewardSummary(model);
+    return !!box.querySelector('[data-first-flight-reward]')&&
+      !box.querySelector('.ff-reward-unlock')&&
+      box.querySelector('.ff-reward-supporting').textContent==='Your Life & Work choice'&&
+      box.querySelectorAll('.ff-reward-supporting').length===1;
+  });
+  test('First Flight excerpts collapse whitespace and cap Unicode at 80 code points',function(){
+    var long=Array(82).join('\ud83d\udc1d'),shortened=U.firstFlightExcerpt(long);
+    var exact=Array(81).join('\ud83d\udc1d');
+    return U.firstFlightExcerpt('  one\n\t two   three  ')==='one two three'&&
+      Array.from(shortened).length===80&&shortened.charAt(shortened.length-1)==='\u2026'&&
+      shortened.split('\u2026').length===2&&
+      U.firstFlightExcerpt(exact)===exact&&U.firstFlightExcerpt(null)==='';
+  });
+  test('First Flight reward dynamic strings are escaped into text and never used as attributes',function(){
+    var unsafe='\"><img src=x onerror=alert(1)>',model=firstFlightRewardModel({
+      cellKey:'craft\" data-forged="yes',label:unsafe
+    });
+    model.cellKey='lw\" data-forged="yes';
+    model.cellLabel=unsafe;
+    model.learningExcerpts=[unsafe,'<svg onload=alert(2)>unsafe</svg>'];
+    model.supportingLabel='<b data-forged="yes">Supporting label</b>';
+    box.innerHTML=U.renderFirstFlightRewardSummary(model);
+    var root=box.firstElementChild,attributes=Array.prototype.slice.call(
+      root.querySelectorAll('*')).reduce(function(all,node){
+        return all.concat(Array.prototype.slice.call(node.attributes));
+      },Array.prototype.slice.call(root.attributes));
+    return !root.querySelector('img,script,[onerror],[data-forged]')&&
+      root.querySelector('.ff-reward-cell-label').textContent===unsafe&&
+      root.querySelectorAll('.ff-reward-excerpt')[0].textContent===unsafe&&
+      root.querySelectorAll('.ff-reward-excerpt')[1].textContent==='<svg onload=alert(2)>unsafe</svg>'&&
+      attributes.every(function(attribute){
+        return attribute.value.indexOf('<img')<0&&attribute.value.indexOf('<svg')<0&&
+          attribute.value.indexOf('data-forged')<0;
+      });
+  });
+  test('First Flight reward live region contains no private learning excerpts',function(){
+    var model=firstFlightRewardModel(null);
+    model.learningExcerpts=['Private memory alpha','Private memory beta'];
+    box.innerHTML=U.renderFirstFlightRewardSummary(model);
+    var live=box.querySelector('.ff-reward-live'),excerpts=box.querySelectorAll('.ff-reward-excerpt');
+    return box.querySelectorAll('[role="status"][aria-live="polite"][aria-atomic="true"]').length===1&&
+      live.textContent==='First Flight complete. Two learnings kept.'&&
+      live.textContent.indexOf('Private memory')<0&&
+      Array.prototype.every.call(excerpts,function(excerpt){
+        return !excerpt.hasAttribute('role')&&!excerpt.hasAttribute('aria-live');
+      });
+  });
+  test('First Flight reward summary fails closed for incomplete or malformed authority',function(){
+    var valid=firstFlightRewardModel(null);
+    var variants=[null,{},
+      Object.assign({},valid,{cellKey:''}),
+      Object.assign({},valid,{cellLabel:'  '}),
+      Object.assign({},valid,{worker:null}),
+      Object.assign({},valid,{worker:[]}),
+      Object.assign({},valid,{worker:{age:3,b:0.5,p:0.4}}),
+      Object.assign({},valid,{worker:{age:3,b:0.5,p:0.5,id:'invented'}}),
+      Object.assign({},valid,{learningExcerpts:['only one']}),
+      Object.assign({},valid,{learningExcerpts:['one','  ']}),
+      Object.assign({},valid,{learningExcerpts:['one','two','three']}),
+      Object.assign({},valid,{unlocked:undefined}),
+      Object.assign({},valid,{unlocked:{cellKey:'',label:'Creative craft'}}),
+      Object.assign({},valid,{unlocked:{cellKey:'craft',label:'  '}})
+    ];
+    return variants.every(function(model){return U.renderFirstFlightRewardSummary(model)==='';});
+  });
 
   test('proposal UI exposes try, edit, and not-now choices',function(){
     var data=source();box.innerHTML=U.renderProposal(data.proposal);

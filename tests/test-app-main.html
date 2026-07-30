@@ -29,7 +29,11 @@
     'save-failure','answer-save-failure','genuine-completion','completion-reload',
     'completion-save-failure','completion-no-reveal','completion-stale',
     'completion-malformed','completion-domain-failure','completion-throw',
-    'completion-rerender','normal-experiment','completed','legacy-auto','evolve','widest',
+    'completion-rerender','completion-invalid-worker','completion-invalid-learning',
+    'completion-invalid-completion','completion-already-result','completion-presentation-throw',
+    'completion-presentation-dispose',
+    'completion-private-copy','normal-experiment','completed','completed-elder','completed-zero',
+    'legacy-auto','evolve','widest',
     'locked','migration'
   ];
   var reports = {};
@@ -105,8 +109,17 @@
       completionDomainFailure = reports['completion-domain-failure'],
       completionThrow = reports['completion-throw'],
       completionRerender = reports['completion-rerender'],
+      completionInvalidWorker = reports['completion-invalid-worker'],
+      completionInvalidLearning = reports['completion-invalid-learning'],
+      completionInvalidCompletion = reports['completion-invalid-completion'],
+      completionAlreadyResult = reports['completion-already-result'],
+      completionPresentationThrow = reports['completion-presentation-throw'],
+      completionPresentationDispose = reports['completion-presentation-dispose'],
+      completionPrivateCopy = reports['completion-private-copy'],
       normalExperiment = reports['normal-experiment'],
-      completed = reports.completed, legacyAuto = reports['legacy-auto'],
+      completed = reports.completed, completedElder = reports['completed-elder'],
+      completedZero = reports['completed-zero'],
+      legacyAuto = reports['legacy-auto'],
       evolve = reports.evolve, widest = reports.widest, locked = reports.locked,
       migration = reports.migration;
     var allReports=scenarios.map(function(scenario){return reports[scenario];});
@@ -159,7 +172,10 @@
     test('resumable incomplete states reconcile canonical questions in memory without data loss or save',
       [resumeSelected,progress,missionReady,missionActive,missionActiveWide,
         acceptSaveFailure,completionSaveFailure,completionNoReveal,completionStale,
-        completionMalformed,completionDomainFailure,completionThrow,completionRerender]
+        completionMalformed,completionDomainFailure,completionThrow,completionRerender,
+        completionInvalidWorker,completionInvalidLearning,completionInvalidCompletion,
+        completionAlreadyResult,completionPresentationThrow,completionPresentationDispose,
+        completionPrivateCopy]
         .every(function(report){
         return report.firstFlightStartup.canonicalFoundationQuestions&&
           report.firstFlightStartup.noFoundationSeedQuestions&&
@@ -402,6 +418,16 @@
         genuineCompletion.firstFlightFlow.normalPresentation&&
         genuineCompletion.firstFlightFlow.successAnnouncement&&
         genuineCompletion.firstFlightFlow.onboardingUnchanged);
+    test('fresh completion mounts exactly one truthful player-controlled reward summary under reentry',
+      genuineCompletion.firstFlightFlow.rewardSummaryOnce&&
+        genuineCompletion.firstFlightFlow.rewardSemantics&&
+        genuineCompletion.firstFlightFlow.truthfulRewardCards&&
+        genuineCompletion.firstFlightFlow.completionCalls===1);
+    test('the reward summary names the genuine unlock and the Hive keeps one authoritative Worker marker',
+      genuineCompletion.firstFlightFlow.realUnlockCard&&
+        genuineCompletion.firstFlightFlow.selectedMarker);
+    test('ENTER THE HIVE dismisses from keyboard focus without another completion, save or mutation',
+      genuineCompletion.firstFlightFlow.enterDismissed);
     test('a stale rendered mission is blocked, rerendered from authority and safely retried',
       completionStale.firstFlightFlow.initialStatus==='mission_active'&&
         completionStale.firstFlightFlow.authoritativeStatus==='mission_active'&&
@@ -411,6 +437,8 @@
         completionStale.firstFlightFlow.freshButton&&
         completionStale.firstFlightFlow.freshFocus&&
         completionStale.firstFlightFlow.changedAnnouncement&&
+        completionStale.firstFlightFlow.staleRewardDisposed&&
+        completionStale.firstFlightFlow.freshRewardAfterRetry&&
         completionStale.firstFlightFlow.retryCompleted&&
         completionStale.firstFlightFlow.completionCalls===1&&
         completionStale.firstFlightFlow.domainSaveCalls===1&&
@@ -423,6 +451,7 @@
         completionMalformed.firstFlightFlow.statePreserved&&
         completionMalformed.firstFlightFlow.storedBytesPreserved&&
         completionMalformed.firstFlightFlow.noCompletionEffects&&
+        completionMalformed.firstFlightFlow.rewardSuppressed&&
         completionMalformed.firstFlightFlow.completionControlAbsent&&
         completionMalformed.firstFlightFlow.changedAnnouncement);
     test('non-save domain rejection and thrown completion both roll back and permit one retry',
@@ -435,6 +464,8 @@
           report.firstFlightFlow.failedFocus&&
           report.firstFlightFlow.failedAnnouncement&&
           report.firstFlightFlow.busyObserved&&
+          report.firstFlightFlow.failedRewardAbsent&&
+          report.firstFlightFlow.retryRewardOnce&&
           report.firstFlightFlow.retryCompleted&&
           report.firstFlightFlow.operationCalls===2&&
           report.firstFlightFlow.domainSaveCalls===1&&
@@ -454,6 +485,8 @@
         completionRerender.firstFlightFlow.uiSaveCallsDuringCompletion===0&&
         completionRerender.firstFlightFlow.completedStatus==='mission_completed'&&
         completionRerender.firstFlightFlow.handlersDidNotAccumulate&&
+        completionRerender.firstFlightFlow.rewardSummaryOnce&&
+        completionRerender.firstFlightFlow.rewardDismissNoMutation&&
         completionRerender.firstFlightFlow.controlsRemoved);
     test('completion save failure rolls back live and stored state and restores an accessible retry',
       completionSaveFailure.firstFlightFlow.initialStatus==='mission_active'&&
@@ -464,7 +497,8 @@
         completionSaveFailure.firstFlightFlow.failedControlRestored&&
         completionSaveFailure.firstFlightFlow.failedFocus&&
         completionSaveFailure.firstFlightFlow.failedAnnouncement&&
-        completionSaveFailure.firstFlightFlow.busyObserved);
+        completionSaveFailure.firstFlightFlow.busyObserved&&
+        completionSaveFailure.firstFlightFlow.failedRewardAbsent);
     test('retry after completion save failure succeeds once without UI persistence or residual effects',
       completionSaveFailure.firstFlightFlow.retryOk&&
         completionSaveFailure.firstFlightFlow.retryStatus==='mission_completed'&&
@@ -478,6 +512,7 @@
         completionSaveFailure.firstFlightFlow.globalSeedCalls===0&&
         completionSaveFailure.firstFlightFlow.zeroStrategyEvidence&&
         completionSaveFailure.firstFlightFlow.interfaceRemoved&&
+        completionSaveFailure.firstFlightFlow.retryRewardOnce&&
         completionSaveFailure.firstFlightFlow.successAnnouncement);
     test('all-unlocked completion accepts unlockedKey null through the real UI action',
       completionNoReveal.firstFlightFlow.initialStatus==='mission_active'&&
@@ -492,12 +527,16 @@
         completionNoReveal.firstFlightFlow.quietUnlockRequest&&
         completionNoReveal.firstFlightFlow.globalSeedCalls===0&&
         completionNoReveal.firstFlightFlow.allCellsStillVisible&&
+        completionNoReveal.firstFlightFlow.rewardWithoutUnlock&&
+        completionNoReveal.firstFlightFlow.selectedMarker&&
         completionNoReveal.firstFlightFlow.interfaceRemoved);
     test('reload after completion replays nothing and naturally resumes deferred onboarding',
       completionReload.firstFlightFlow.status==='mission_completed'&&
         completionReload.firstFlightFlow.selfContainedSeed&&
         completionReload.firstFlightFlow.storedBytesUnchanged&&
         completionReload.firstFlightFlow.noReplayCalls&&
+        completionReload.firstFlightFlow.noRestoredReward&&
+        completionReload.firstFlightFlow.restoredMarker&&
         completionReload.firstFlightFlow.normalInitSeedCalls===1&&
         completionReload.firstFlightFlow.effectsRemainOnce&&
         completionReload.firstFlightFlow.persistedQuietSwarmsClean&&
@@ -507,6 +546,81 @@
         completionReload.firstFlightFlow.automaticTourResumed&&
         completionReload.firstFlightFlow.profileResumed&&
         completionReload.firstFlightFlow.onboardingStorageUntouched);
+    test('completed and reloaded saves never restore the one-time reward summary',
+      completed.firstFlightFlow.status==='mission_completed'&&
+        completed.firstFlightFlow.noRestoredReward&&
+        completed.firstFlightFlow.noCompletionCallOrSave&&
+        completionReload.firstFlightFlow.noRestoredReward);
+    test('the persistent selected-cell marker counts only stage-2 Workers',
+      completed.firstFlightFlow.selectedMarker&&
+        completed.firstFlightFlow.stageTwoCount===1&&
+        completed.firstFlightFlow.markerText==='WORKERS 1');
+    test('an elder-only completed swarm permanently shows an authoritative zero Worker count',
+      completedElder.firstFlightFlow.status==='mission_completed'&&
+        completedElder.firstFlightFlow.noRestoredReward&&
+        completedElder.firstFlightFlow.noCompletionCallOrSave&&
+        completedElder.firstFlightFlow.selectedMarker&&
+        completedElder.firstFlightFlow.stageTwoCount===0&&
+        completedElder.firstFlightFlow.markerText==='WORKERS 0');
+    test('an empty completed swarm also keeps its permanent zero Worker marker',
+      completedZero.firstFlightFlow.status==='mission_completed'&&
+        completedZero.firstFlightFlow.noRestoredReward&&
+        completedZero.firstFlightFlow.noCompletionCallOrSave&&
+        completedZero.firstFlightFlow.selectedMarker&&
+        completedZero.firstFlightFlow.stageTwoCount===0&&
+        completedZero.firstFlightFlow.markerText==='WORKERS 0');
+    test('invalid Worker, learning or completion evidence suppresses reward details but keeps completion',
+      [completionInvalidWorker,completionInvalidLearning,completionInvalidCompletion]
+        .every(function(report){
+          return report.firstFlightFlow.completedStatus==='mission_completed'&&
+            report.firstFlightFlow.persistedCompleted&&
+            report.firstFlightFlow.oneDomainCall&&
+            report.firstFlightFlow.domainSaveCalls===1&&
+            report.firstFlightFlow.uiSaveCalls===0&&
+            report.firstFlightFlow.rewardSuppressed&&
+            report.firstFlightFlow.normalCompletedPresentation&&
+            report.firstFlightFlow.corruptedAsPlanned&&
+            report.firstFlightFlow.authoritativeEffectsRemain;
+        }));
+    test('an alreadyCompleted result never starts or restores a reward summary',
+      completionAlreadyResult.firstFlightFlow.completedStatus==='mission_completed'&&
+        completionAlreadyResult.firstFlightFlow.persistedCompleted&&
+        completionAlreadyResult.firstFlightFlow.oneDomainCall&&
+        completionAlreadyResult.firstFlightFlow.domainSaveCalls===1&&
+        completionAlreadyResult.firstFlightFlow.uiSaveCalls===0&&
+        completionAlreadyResult.firstFlightFlow.rewardSuppressed&&
+        completionAlreadyResult.firstFlightFlow.normalCompletedPresentation&&
+        completionAlreadyResult.firstFlightFlow.corruptedAsPlanned);
+    test('a reward presentation exception cannot undo completion or escape as an app error',
+      completionPresentationThrow.firstFlightFlow.completedStatus==='mission_completed'&&
+        completionPresentationThrow.firstFlightFlow.persistedCompleted&&
+        completionPresentationThrow.firstFlightFlow.oneDomainCall&&
+        completionPresentationThrow.firstFlightFlow.domainSaveCalls===1&&
+        completionPresentationThrow.firstFlightFlow.uiSaveCalls===0&&
+        completionPresentationThrow.firstFlightFlow.rendererCalledOnce&&
+        completionPresentationThrow.firstFlightFlow.exceptionContained&&
+        completionPresentationThrow.firstFlightFlow.rewardSuppressed&&
+        completionPresentationThrow.firstFlightFlow.normalCompletedPresentation);
+    test('a disposed live attempt cannot mount stale presentation after page teardown',
+      completionPresentationDispose.firstFlightFlow.completedStatus==='mission_completed'&&
+        completionPresentationDispose.firstFlightFlow.persistedCompleted&&
+        completionPresentationDispose.firstFlightFlow.oneDomainCall&&
+        completionPresentationDispose.firstFlightFlow.domainSaveCalls===1&&
+        completionPresentationDispose.firstFlightFlow.uiSaveCalls===0&&
+        completionPresentationDispose.firstFlightFlow.rendererCalledOnce&&
+        completionPresentationDispose.firstFlightFlow.exceptionContained&&
+        completionPresentationDispose.firstFlightFlow.disposedDuringRender&&
+        completionPresentationDispose.firstFlightFlow.rewardSuppressed&&
+        completionPresentationDispose.firstFlightFlow.normalCompletedPresentation);
+    test('reward excerpts are escaped, bounded and do not expose full private answers',
+      completionPrivateCopy.firstFlightFlow.completedStatus==='mission_completed'&&
+        completionPrivateCopy.firstFlightFlow.rewardSummary&&
+        completionPrivateCopy.firstFlightFlow.escaped&&
+        completionPrivateCopy.firstFlightFlow.truncated&&
+        completionPrivateCopy.firstFlightFlow.fullPrivateTextAbsent&&
+        completionPrivateCopy.firstFlightFlow.privateLiveRegion&&
+        completionPrivateCopy.firstFlightFlow.persistedFullText&&
+        completionPrivateCopy.firstFlightFlow.dismissedWithoutMutation);
     test('ordinary experiment completion remains on the existing app-main UI path',
       normalExperiment.normalExperiment.activeRendered&&
         normalExperiment.normalExperiment.outcomeControl&&
@@ -527,7 +641,9 @@
       [fresh,resumeSelected,progress,missionReady,missionActive,missionActiveWide,
         acceptSaveFailure,genuineCompletion,completionSaveFailure,completionNoReveal,
         completionStale,completionMalformed,completionDomainFailure,completionThrow,
-        completionRerender]
+        completionRerender,completionInvalidWorker,completionInvalidLearning,
+        completionInvalidCompletion,completionAlreadyResult,completionPresentationThrow,
+        completionPresentationDispose,completionPrivateCopy]
         .every(function(report){
         return report.onboardingCoordination.automaticTourHidden &&
           report.onboardingCoordination.tourFlagAbsent &&
