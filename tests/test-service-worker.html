@@ -15,20 +15,20 @@
 <body>
 <h1>B HIVE service-worker upgrade tests</h1>
 <div id="results"></div>
-<div id="summary" class="summary">Running v93 upgrade scenario…</div>
+<div id="summary" class="summary">Running v94 upgrade scenario…</div>
 <script>
 (function () {
   'use strict';
 
-  var OLD_CACHE = 'brainmap-v93-beta10c-unlock-reveal1';
-  var NEW_CACHE = 'brainmap-v94-beta10c-first-flight-step3d-predeploy1';
-  var TOKEN = 'beta10c-first-flight-step3d-predeploy1';
+  var OLD_CACHE = 'brainmap-v94-beta10c-first-flight-step3d-predeploy1';
+  var NEW_CACHE = 'brainmap-v95-beta10c-first-flight-step3e-a-predeploy1';
+  var TOKEN = 'beta10c-first-flight-step3e-a-predeploy1';
   var ORIGIN_SENTINEL_CACHE = 'bhive-test-unrelated-origin-sentinel';
   var ORIGIN_SENTINEL_URL = './bhive-test-unrelated-origin-sentinel';
   var OLD_ASSETS = [
-    '../css/app.css',
-    '../js/ui-experiments.js?v=beta10c-stage5c-fix2',
-    '../js/app-main.js?v=beta10c-integ-hld-stage5c'
+    '../css/app.css?v=beta10c-first-flight-step3d-predeploy1',
+    '../js/ui-experiments.js?v=beta10c-first-flight-step3d-predeploy1',
+    '../js/app-main.js?v=beta10c-first-flight-step3d-predeploy1'
   ];
   var NEW_ASSETS = [
     '../css/app.css?v=' + TOKEN,
@@ -251,20 +251,20 @@
       test('alternate-origin cache sentinel is ready', true);
 
       registration = await navigator.serviceWorker.register(
-        './service-worker-v93-fixture.js?run=' + Date.now(),
+        './service-worker-v94-fixture.js?run=' + Date.now(),
         {scope: './', updateViaCache: 'none'}
       );
-      await waitForActiveScript(registration, '/tests/service-worker-v93-fixture.js');
+      await waitForActiveScript(registration, '/tests/service-worker-v94-fixture.js');
       var legacyKeys = await caches.keys();
-      test('returning-device v93 cache is installed', legacyKeys.indexOf(OLD_CACHE) !== -1);
+      test('returning-device v94 cache is installed', legacyKeys.indexOf(OLD_CACHE) !== -1);
       var legacyCache = await caches.open(OLD_CACHE);
       var staleBodies = await Promise.all(OLD_ASSETS.map(function (asset) {
         return legacyCache.match(new URL(asset, location.href).href).then(function (response) {
           return response ? response.text() : '';
         });
       }));
-      test('v93 cache serves stale pre-Step-3D sentinels', staleBodies.every(function (body) {
-        return body.indexOf('v93-stale:') === 0;
+      test('v94 cache serves stale Step 3D sentinels', staleBodies.every(function (body) {
+        return body.indexOf('v94-stale:') === 0;
       }), staleBodies.map(function (body) { return body.slice(0, 60); }).join(' | '));
 
       registration = await navigator.serviceWorker.register('../sw.js', {
@@ -278,11 +278,11 @@
       var currentBodies = await currentBodiesPromise;
       var worker = parseWorker(workerSource);
       var cacheKeys = await caches.keys();
-      test('the Step 3D beta worker activates', registration.active &&
+      test('the Step 3E-A beta worker activates', registration.active &&
         new URL(registration.active.scriptURL).pathname === '/sw.js');
       test('the new beta cache identifier is active', worker.cache === NEW_CACHE &&
         cacheKeys.indexOf(NEW_CACHE) !== -1, worker.cache + ' | ' + cacheKeys.join(', '));
-      test('the obsolete v93 beta cache is removed', cacheKeys.indexOf(OLD_CACHE) === -1,
+      test('the obsolete v94 beta cache is removed', cacheKeys.indexOf(OLD_CACHE) === -1,
         cacheKeys.join(', '));
 
       var activeCache = await caches.open(NEW_CACHE);
@@ -306,9 +306,9 @@
         './js/ui-experiments.js?v=' + TOKEN,
         './js/app-main.js?v=' + TOKEN
       ];
-      test('index.html uses one Step 3D asset token', indexAssets.join('|') ===
+      test('index.html uses one Step 3E-A asset token', indexAssets.join('|') ===
         expectedIndexAssets.join('|'), indexAssets.join(' | '));
-      test('index.html and sw.js agree on all Step 3D asset URLs', workerAssets.every(function (asset) {
+      test('index.html and sw.js agree on all Step 3E-A asset URLs', workerAssets.every(function (asset) {
         return worker.core.indexOf(asset) !== -1;
       }) && indexAssets.map(function (asset) {
         return new URL(asset, location.origin + '/').href;
@@ -321,13 +321,13 @@
           return response ? response.text() : '';
         });
       }));
-      test('Step 3D cache entries contain current source bytes', cachedBodies.every(function (body, index) {
-        return body === currentBodies[index] && body.indexOf('v93-stale:') !== 0;
+      test('Step 3E-A cache entries contain current source bytes', cachedBodies.every(function (body, index) {
+        return body === currentBodies[index] && body.indexOf('v94-stale:') !== 0;
       }));
       var oldResponses = await Promise.all(OLD_ASSETS.map(function (asset) {
         return caches.match(new URL(asset, location.href).href);
       }));
-      test('no pre-Step-3D asset key remains cached', oldResponses.every(function (response) {
+      test('no Step 3D asset key remains cached', oldResponses.every(function (response) {
         return !response;
       }));
 
