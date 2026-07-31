@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>B HIVE Experiment Loop Tests (beta10c)</title>
-<link rel="stylesheet" href="../css/app.css?test=first-flight-step3d">
+<link rel="stylesheet" href="../css/app.css?test=first-flight-step3e-b-first-honey-final">
 <style>
   body{background:#15120c;color:#ece4d2;font:14px/1.6 system-ui,sans-serif;max-width:780px;margin:40px auto;padding:0 20px}
   h1{color:#c9ae78;font-size:20px;border-bottom:1px solid rgba(237,228,210,.1);padding-bottom:10px}
@@ -22,7 +22,7 @@
 <script src="../js/bhive-inference.js?test=beta10c-stage4"></script>
 <script src="../js/bhive-memory-use.js?test=beta10c-stage5c-fix2"></script>
 <script src="../js/bhive-experiments.js?test=beta10c-stage5c-fix2"></script>
-<script src="../js/ui-experiments.js?test=first-flight-step3d"></script>
+<script src="../js/ui-experiments.js?test=first-flight-step3e-b-first-honey-final"></script>
 <script src="./fixtures/learning-fixtures.js?test=beta10c-stage4"></script>
 <script>
 (function(){
@@ -605,6 +605,14 @@
       unlocked:unlocked
     };
   }
+  function firstFlightCombGeometry(unlocked){
+    var geometry={
+      width:600,height:600,coreX:300,coreY:300,chosenX:400,chosenY:300,
+      flightStartX:331,flightStartY:300,flightControlX:350,flightControlY:240
+    };
+    if(unlocked){geometry.targetX=500;geometry.targetY=300;}
+    return geometry;
+  }
   test('First Flight reward summary exposes the complete accessible structure and real unlock card',function(){
     var model=firstFlightRewardModel({cellKey:'craft',label:'Creative craft'});
     model.supportingLabel='Your Life & Work choice';
@@ -691,6 +699,191 @@
       Object.assign({},valid,{unlocked:{cellKey:'craft',label:'  '}})
     ];
     return variants.every(function(model){return U.renderFirstFlightRewardSummary(model)==='';});
+  });
+  test('First Honey publishes exactly the 14 ordered authoritative domains and labels',function(){
+    var domains=U.firstFlightCombDomains();
+    var expectedKeys='lw|free|craft|money|career|growth|finance|health|people|identity|clients|ink|side|recruit';
+    var expectedLabels='Main Project|Freedom|Craft|Money|Career|Growth|Next Path|Health|People|Identity|Client Work|Play|Side Builds|New Ideas';
+    return domains.length===14&&
+      domains.map(function(domain){return domain.key;}).join('|')===expectedKeys&&
+      domains.map(function(domain){return domain.label;}).join('|')===expectedLabels&&
+      domains[13].key==='recruit'&&domains[13].label==='New Ideas'&&
+      domains.every(function(domain){
+        var lookup=U.firstFlightCombDomain(domain.key);
+        return lookup&&lookup.key===domain.key&&lookup.label===domain.label&&
+          lookup.signature===domain.signature&&lookup.crest===domain.crest;
+      })&&U.firstFlightCombDomain('unknown')===null;
+  });
+  test('First Honey gives every domain one unique crest and the exact signature mechanic',function(){
+    var domains=U.firstFlightCombDomains();
+    var signatures='keystone|open-gate|facet-snap|store-caps|level-course|inner-ring|fork-choice|living-pulse|linked-points|mirror-axis|handoff|loose-loop|annex-dock|bench-row';
+    var crestMarkup=domains.map(function(domain){return domain.crest;});
+    return domains.map(function(domain){return domain.signature;}).join('|')===signatures&&
+      new Set(crestMarkup).size===14&&domains.every(function(domain){
+        var model=firstFlightRewardModel({cellKey:domain.key,label:domain.label});
+        var summary=U.renderFirstFlightRewardSummary(model);
+        var markup=U.renderFirstFlightCombCeremony(
+          model,firstFlightCombGeometry(true),summary);
+        box.innerHTML=markup;
+        var root=box.querySelector('[data-first-flight-comb]');
+        var build=root&&root.querySelector('.ff-comb-build');
+        return /<(?:path|polygon|circle|line)\b/.test(domain.crest)&&root&&
+          root.classList.contains('ff-comb-signature-'+domain.signature)&&
+          build&&build.getAttribute('data-comb-domain')===domain.key&&
+          build.getAttribute('data-comb-signature')===domain.signature&&
+          markup.indexOf(domain.crest)>=0;
+      });
+  });
+  test('First Honey awakened timeline is exact, ordered and stable at 3.20 seconds',function(){
+    var timeline=U.firstFlightCombTimeline({cellKey:'craft'});
+    var expected='hush@0|skip@100|target@260|launch@320|flight@420|impact@940|impact-label@1040|supply@1160|construct@1340|impact-clear@1460|lock@1720|delivery@1860|memory-one@2020|memory-two@2280|crest@2520|signature@2720|register@2820|enter@3020|settled@3200';
+    return timeline.variant==='awakened'&&timeline.stable===3200&&timeline.watchdog===3900&&
+      timeline.events.map(function(event){return event.phase+'@'+event.at;}).join('|')===expected&&
+      timeline.events.every(function(event,index,events){
+        return index===0||event.at>=events[index-1].at;
+      });
+  });
+  test('First Honey no-unlock timeline is exact and contains no invented build sequence',function(){
+    var timeline=U.firstFlightCombTimeline(null);
+    var expected='hush@0|skip@100|target@260|launch@320|flight@420|impact@940|impact-label@1040|register@1300|impact-clear@1460|receipts@1580|memory-one@1740|memory-two@2080|enter@2420|settled@2620';
+    var forbidden=['supply','construct','lock','delivery','crest','signature'];
+    return timeline.variant==='no-unlock'&&timeline.stable===2620&&timeline.watchdog===3200&&
+      timeline.events.map(function(event){return event.phase+'@'+event.at;}).join('|')===expected&&
+      timeline.events.every(function(event,index,events){
+        return (index===0||event.at>=events[index-1].at)&&forbidden.indexOf(event.phase)<0;
+      });
+  });
+  test('First Honey awakened renderer binds canonical variant, geometry and comb content',function(){
+    var model=firstFlightRewardModel({cellKey:'craft',label:'Craft'});
+    model.supportingLabel='Your Life & Work choice';
+    var summary=U.renderFirstFlightRewardSummary(model);
+    var markup=U.renderFirstFlightCombCeremony(model,firstFlightCombGeometry(true),summary);
+    box.innerHTML=markup;
+    var root=box.querySelector('.ff-comb-ceremony[data-first-flight-comb]');
+    var build=root&&root.querySelector('.ff-comb-build');
+    var style=root&&root.style;
+    return root&&root.getAttribute('data-comb-variant')==='awakened'&&
+      root.getAttribute('data-comb-phase')==='hush'&&
+      root.classList.contains('ff-comb-signature-facet-snap')&&
+      style.getPropertyValue('--ff-comb-core-x')==='300px'&&
+      style.getPropertyValue('--ff-comb-chosen-x')==='400px'&&
+      style.getPropertyValue('--ff-comb-target-x')==='500px'&&
+      style.getPropertyValue('--ff-comb-supply-x')==='100px'&&
+      root.querySelector('.ff-comb-flight-trail').getAttribute('d')==='M 331 300 Q 350 240 400 300'&&
+      root.querySelector('.ff-comb-supply-line').getAttribute('d')==='M 432 300 L 461.6 300'&&
+      root.querySelector('.ff-comb-notch').getAttribute('d')==='M -39 -2 L -43 0 L -39 2'&&
+      build&&build.getAttribute('data-comb-domain')==='craft'&&
+      build.getAttribute('data-comb-signature')==='facet-snap'&&
+      build.querySelectorAll('.ff-comb-wall').length===6&&
+      build.querySelectorAll('.ff-comb-memory').length===2&&
+      build.querySelector('.ff-comb-build-label').textContent==='Craft'&&
+      root.querySelector('.ff-comb-chosen-label').textContent==='Main Project'&&
+      root.querySelector('.ff-comb-worker-count').textContent==='WORKERS 1'&&
+      root.querySelector('.ff-comb-stage').getAttribute('aria-hidden')==='true'&&
+      root.querySelector('.ff-comb-register-preview').hasAttribute('inert')&&
+      root.querySelector('.ff-comb-skip').type==='button'&&
+      root.querySelector('.ff-comb-skip').textContent==='SKIP ANIMATION'&&
+      markup.indexOf(summary)>=0;
+  });
+  test('First Honey no-unlock renderer contains absolutely no target, supply or build geometry',function(){
+    var model=firstFlightRewardModel(null);
+    var summary=U.renderFirstFlightRewardSummary(model);
+    var markup=U.renderFirstFlightCombCeremony(model,firstFlightCombGeometry(false),summary);
+    box.innerHTML=markup;
+    var root=box.querySelector('.ff-comb-ceremony[data-first-flight-comb]');
+    return root&&root.getAttribute('data-comb-variant')==='no-unlock'&&
+      root.classList.contains('ff-comb-variant-no-unlock')&&
+      root.querySelectorAll('.ff-comb-build,.ff-comb-supply-line,.ff-comb-supply-bead').length===0&&
+      root.querySelectorAll('[data-comb-domain],[data-comb-signature]').length===0&&
+      root.getAttribute('style').indexOf('--ff-comb-target-')<0&&
+      root.getAttribute('style').indexOf('--ff-comb-supply-')<0&&
+      root.querySelectorAll('.ff-reward-unlock').length===0&&
+      root.querySelectorAll('.ff-reward-summary[data-first-flight-reward]').length===1;
+  });
+  test('First Honey preserves the reward summary contract and keeps excerpts private',function(){
+    var model=firstFlightRewardModel({cellKey:'craft',label:'Craft'});
+    model.supportingLabel='Your Life & Work choice';
+    model.learningExcerpts=['Private memory alpha zeta','Private memory beta zeta'];
+    var summaryHTML=U.renderFirstFlightRewardSummary(model);
+    var expectedHost=document.createElement('div');
+    expectedHost.innerHTML=summaryHTML;
+    var ceremonyHTML=U.renderFirstFlightCombCeremony(
+      model,firstFlightCombGeometry(true),summaryHTML);
+    box.innerHTML=ceremonyHTML;
+    var root=box.querySelector('[data-first-flight-comb]');
+    var summary=root&&root.querySelector('.ff-reward-summary[data-first-flight-reward]');
+    var stage=root&&root.querySelector('.ff-comb-stage');
+    var live=summary&&summary.querySelector('.ff-reward-live');
+    var titles=summary?Array.prototype.map.call(
+      summary.querySelectorAll('.ff-reward-card-title'),function(node){return node.textContent;}):[];
+    var order=summary?Array.prototype.map.call(summary.children,function(node){
+      return node.className.split(' ')[0];
+    }):[];
+    return root&&summary&&summary.outerHTML===expectedHost.firstElementChild.outerHTML&&
+      root.querySelectorAll('.ff-reward-summary[data-first-flight-reward]').length===1&&
+      !stage.contains(summary)&&stage.textContent.indexOf('Private memory')<0&&
+      live.textContent==='First Flight complete. Two learnings kept.'&&
+      live.textContent.indexOf('Private memory')<0&&
+      summary.querySelector('#ff-reward-title').textContent==='FIRST FLIGHT COMPLETE'&&
+      summary.getAttribute('role')==='dialog'&&summary.tabIndex===-1&&
+      summary.getAttribute('aria-labelledby')==='ff-reward-title'&&
+      titles.join('|')==='WORKER JOINED|2 LEARNINGS KEPT|CELL AWAKENED \u2014 Craft'&&
+      order.join('|')==='ff-reward-live|ff-reward-title|ff-reward-grid|ff-reward-support|ff-enter-hive'&&
+      summary.querySelector('.ff-enter-hive').textContent==='ENTER THE HIVE'&&
+      root.querySelectorAll('.ff-reward-excerpt').length===2&&
+      ceremonyHTML.split('Private memory alpha zeta').length===2&&
+      ceremonyHTML.split('Private memory beta zeta').length===2;
+  });
+  test('First Honey rejects unsafe labels and fails closed for malformed authority or geometry',function(){
+    var unsafe='\"><img src=x onerror=alert(1) data-forged="yes">';
+    var unsafeModel=firstFlightRewardModel({cellKey:'craft',label:unsafe});
+    unsafeModel.cellLabel=unsafe;
+    var unsafeSummary=U.renderFirstFlightRewardSummary(unsafeModel);
+    var unsafeHost=document.createElement('div');
+    unsafeHost.innerHTML=unsafeSummary;
+    var unsafeCeremony=U.renderFirstFlightCombCeremony(
+      unsafeModel,firstFlightCombGeometry(true),unsafeSummary);
+    var valid=firstFlightRewardModel({cellKey:'craft',label:'Craft'});
+    var validSummary=U.renderFirstFlightRewardSummary(valid);
+    var geometry=firstFlightCombGeometry(true);
+    var invalidModels=[null,{},[],
+      Object.assign({},valid,{cellKey:' '}),
+      Object.assign({},valid,{cellLabel:' '}),
+      Object.assign({},valid,{unlocked:undefined}),
+      Object.assign({},valid,{unlocked:{cellKey:'unknown',label:'Unknown'}}),
+      Object.assign({},valid,{unlocked:{cellKey:'craft',label:' '}})
+    ];
+    var invalidGeometry=[null,[],{},
+      Object.assign({},geometry,{width:0}),
+      Object.assign({},geometry,{height:Infinity}),
+      Object.assign({},geometry,{flightStartX:undefined}),
+      Object.assign({},geometry,{flightStartY:NaN}),
+      Object.assign({},geometry,{flightControlX:undefined}),
+      Object.assign({},geometry,{targetX:undefined}),
+      Object.assign({},geometry,{targetY:NaN})
+    ];
+    return unsafeSummary&&unsafeCeremony===''&&
+      !unsafeHost.querySelector('img,script,[onerror],[data-forged]')&&
+      unsafeHost.querySelector('.ff-reward-cell-label').textContent===unsafe&&
+      unsafeHost.querySelector('.ff-reward-unlock').textContent.indexOf(unsafe)>=0&&
+      invalidModels.every(function(model){
+        return U.renderFirstFlightCombCeremony(model,geometry,validSummary)==='';
+      })&&invalidGeometry.every(function(item){
+        return U.renderFirstFlightCombCeremony(valid,item,validSummary)==='';
+      })&&U.renderFirstFlightCombCeremony(valid,geometry,'')===''&&
+      U.renderFirstFlightCombCeremony(
+        valid,geometry,'<div data-first-flight-reward></div>')==='';
+  });
+  test('First Honey decorative stage introduces no chip, circuit, card, coin or XP metaphor',function(){
+    var model=firstFlightRewardModel({cellKey:'craft',label:'Craft'});
+    var summary=U.renderFirstFlightRewardSummary(model);
+    box.innerHTML=U.renderFirstFlightCombCeremony(
+      model,firstFlightCombGeometry(true),summary);
+    var stage=box.querySelector('.ff-comb-stage');
+    var ceremonyOnly=(stage.innerHTML+' '+stage.textContent).toLowerCase();
+    return !/\b(?:chip|circuit|card|coin|xp)\b/.test(ceremonyOnly)&&
+      !stage.querySelector(
+        '[class*="chip"],[class*="circuit"],[class*="card"],[class*="coin"],[class*="xp"]');
   });
 
   test('proposal UI exposes try, edit, and not-now choices',function(){

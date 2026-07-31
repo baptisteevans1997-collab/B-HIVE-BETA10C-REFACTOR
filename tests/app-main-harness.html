@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>B HIVE app-main controlled harness</title>
-<link rel="stylesheet" href="../css/app.css?first-flight-step3d">
+<link rel="stylesheet" href="../css/app.css?first-flight-step3eb-final3">
 <link rel="stylesheet" href="../css/beta-mobile-polish.css?navigation-consolidation">
 <link rel="stylesheet" href="../css/beta-overlays.css?navigation-consolidation">
 </head>
@@ -91,6 +92,8 @@
   var scenario = new URLSearchParams(location.search).get('scenario') || 'widest';
   var storageKey = 'lw-brainmap-hive-v1';
   var completionReload = scenario === 'completion-reload';
+  var combScenario = /^comb-/.test(scenario);
+  var combRealTimers = combScenario&&new URLSearchParams(location.search).get('real')==='1';
   var freshEligible = [
     'fresh','fresh-wide','health-select','people-select','save-failure','answer-save-failure',
     'genuine-completion'
@@ -102,7 +105,10 @@
     'completion-rerender','completion-invalid-worker','completion-invalid-learning',
     'completion-invalid-completion','completion-already-result','completion-presentation-throw',
     'completion-presentation-dispose',
-    'completion-private-copy','completed-elder','completed-zero'
+    'completion-private-copy','completed-elder','completed-zero',
+    'comb-awakened','comb-awakened-small','comb-awakened-wide','comb-no-unlock','comb-skip','comb-skip-impact','comb-skip-build',
+    'comb-background','comb-watchdog','comb-animationcancel','comb-pagehide','comb-render-failure','comb-reduced',
+    'comb-enter'
   ].indexOf(scenario) >= 0;
   var isolatedFirstFlight = freshEligible || stagedFirstFlight;
   var keys = ['lw','free','craft','money','career','growth','finance','health','people','identity','clients','ink','side','recruit'];
@@ -151,7 +157,7 @@
       stagedFirstFlight ?
       {lw:[{age:6,b:0.4,p:0.6}],health:[{age:7,b:0.5,p:0.5}],people:[{age:8,b:0.6,p:0.4}]} :
       {lw:[{age:4,b:0.5,p:0.5}],craft:[{age:5,b:0.6,p:0.4}]},
-    unlocks: scenario === 'completion-no-reveal' ? keys.slice() :
+    unlocks: scenario === 'completion-no-reveal' || scenario === 'comb-no-unlock' ? keys.slice() :
       scenario === 'locked' || stagedFirstFlight ? ['lw','health','people'] : keys.slice()
   };
   if (scenario === 'evolve' || scenario === 'widest' || scenario === 'normal-experiment' ||
@@ -185,7 +191,10 @@
       'completion-rerender','completion-invalid-worker','completion-invalid-learning',
       'completion-invalid-completion','completion-already-result','completion-presentation-throw',
       'completion-presentation-dispose',
-      'completion-private-copy','completed-elder','completed-zero','legacy-auto']
+      'completion-private-copy','completed-elder','completed-zero','legacy-auto',
+      'comb-awakened','comb-awakened-small','comb-awakened-wide','comb-no-unlock','comb-skip','comb-skip-impact','comb-skip-build',
+      'comb-background','comb-watchdog','comb-animationcancel','comb-pagehide','comb-render-failure','comb-reduced',
+      'comb-enter']
       .indexOf(scenario) < 0) {
     localStorage.setItem('lw-brainmap-tour-v2', '1');
   }
@@ -211,10 +220,82 @@
     window.__CONFIRM_MESSAGE = String(message || '');
     return false;
   };
+  if (combScenario&&!combRealTimers) {
+    var combManualParams = new URLSearchParams(location.search);
+    var combManualValue = Number(combManualParams.get('phase'));
+    var combManualPhase = combManualParams.get('manual') === '1' &&
+      isFinite(combManualValue) && combManualValue >= 0 ? combManualValue : null;
+    window.__BHIVE_FIRST_FLIGHT_SCHEDULER__ = (function () {
+      var clock = 0, sequence = 0, tasks = [], scheduledDelays = [], manualQueued = false;
+      function activeTasks() {
+        return tasks.filter(function (task) { return !task.cancelled && !task.fired; });
+      }
+      function run(task) {
+        if (!task || task.cancelled || task.fired) return false;
+        task.fired = true;
+        clock = Math.max(clock, task.at);
+        task.callback();
+        return true;
+      }
+      return {
+        schedule: function (callback, delay) {
+          var wait = Number(delay);
+          if (typeof callback !== 'function' || !isFinite(wait) || wait < 0) return null;
+          var task = {
+            id: ++sequence,
+            at: clock + wait,
+            delay: wait,
+            callback: callback,
+            cancelled: false,
+            fired: false
+          };
+          tasks.push(task);
+          scheduledDelays.push(wait);
+          if (combManualPhase !== null && !manualQueued) {
+            manualQueued = true;
+            Promise.resolve().then(function () {
+              window.__BHIVE_FIRST_FLIGHT_SCHEDULER__.advanceTo(combManualPhase);
+            });
+          }
+          return task.id;
+        },
+        cancel: function (id) {
+          tasks.forEach(function (task) {
+            if (task.id === id) task.cancelled = true;
+          });
+        },
+        advanceTo: function (target) {
+          target = Number(target);
+          if (!isFinite(target) || target < clock) return false;
+          var next;
+          do {
+            next = activeTasks().filter(function (task) { return task.at <= target; })
+              .sort(function (a, b) { return a.at - b.at || a.id - b.id; })[0];
+            if (next) run(next);
+          } while (next);
+          clock = target;
+          return true;
+        },
+        fireDelay: function (delay) {
+          delay = Number(delay);
+          var task = activeTasks().filter(function (candidate) {
+            return candidate.delay === delay;
+          }).sort(function (a, b) { return a.id - b.id; })[0];
+          return run(task);
+        },
+        delays: function () { return scheduledDelays.slice(); },
+        pendingDelays: function () {
+          return activeTasks().map(function (task) { return task.delay; });
+        },
+        now: function () { return clock; }
+      };
+    }());
+  }
   window.matchMedia = function (query) {
     var max = /max-width\s*:\s*(\d+)px/.exec(query);
     var min = /min-width\s*:\s*(\d+)px/.exec(query);
-    var matches = query.indexOf('prefers-reduced-motion') !== -1;
+    var matches = query.indexOf('prefers-reduced-motion') !== -1 &&
+      (!combScenario || scenario === 'comb-reduced');
     if (max) matches = innerWidth <= Number(max[1]);
     if (min) matches = innerWidth >= Number(min[1]);
     return {
@@ -295,6 +376,7 @@
   'use strict';
   var scenario = new URLSearchParams(location.search).get('scenario') || 'widest';
   var storageKey = 'lw-brainmap-hive-v1';
+  var combScenario = /^comb-/.test(scenario);
   var staged = [
     'progress','completed','resume-selected','mission-ready','mission-active','mission-active-wide',
     'accept-save-failure','completion-save-failure','completion-no-reveal','completion-reload',
@@ -302,7 +384,10 @@
     'completion-rerender','completion-invalid-worker','completion-invalid-learning',
     'completion-invalid-completion','completion-already-result','completion-presentation-throw',
     'completion-presentation-dispose',
-    'completion-private-copy','completed-elder','completed-zero'
+    'completion-private-copy','completed-elder','completed-zero',
+    'comb-awakened','comb-awakened-small','comb-awakened-wide','comb-no-unlock','comb-skip','comb-skip-impact','comb-skip-build',
+    'comb-background','comb-watchdog','comb-animationcancel','comb-pagehide','comb-render-failure','comb-reduced',
+    'comb-enter'
   ].indexOf(scenario) >= 0;
   if (staged) {
     var fixture = JSON.parse(localStorage.getItem(storageKey));
@@ -332,7 +417,7 @@
         payload:{version:1,question:1,answer:stagedAnswers[0]}
       });
     }
-    if (scenario === 'completed' || scenario === 'mission-ready' ||
+    if (combScenario || scenario === 'completed' || scenario === 'mission-ready' ||
         scenario === 'mission-active' || scenario === 'mission-active-wide' ||
         scenario === 'accept-save-failure' || scenario === 'completion-save-failure' ||
         scenario === 'completion-no-reveal' || scenario === 'completion-reload' ||
@@ -349,7 +434,7 @@
         payload:{version:1,question:2,answer:stagedAnswers[1]}
       });
     }
-    if (scenario === 'completed' || scenario === 'mission-active' ||
+    if (combScenario || scenario === 'completed' || scenario === 'mission-active' ||
         scenario === 'mission-active-wide' || scenario === 'completion-save-failure' ||
         scenario === 'completion-no-reveal' || scenario === 'completion-reload' ||
         scenario === 'completion-stale' || scenario === 'completion-malformed' ||
@@ -361,10 +446,14 @@
         scenario === 'completion-private-copy' || scenario === 'completed-elder' ||
         scenario === 'completed-zero') {
       var ready = B.experiments.firstFlightState(B.learning.events);
-      B.recordEvent('experiment_accepted', {
-        id:'evt_harness_first_flight_accepted',ts:ts+4,cellKey:'lw',
-        payload:B.experiments.decisionPayload(ready.mission,'accepted')
-      });
+      window.__HARNESS_STAGED_READY=ready?JSON.parse(JSON.stringify(ready)):null;
+      window.__HARNESS_STAGED_EVENTS=JSON.parse(JSON.stringify(B.learning.events));
+      if (ready&&ready.mission) {
+        B.recordEvent('experiment_accepted', {
+          id:'evt_harness_first_flight_accepted',ts:ts+4,cellKey:'lw',
+          payload:B.experiments.decisionPayload(ready.mission,'accepted')
+        });
+      }
     }
     if (scenario === 'completed' || scenario === 'completed-elder' ||
         scenario === 'completed-zero') {
@@ -433,6 +522,7 @@
   window.__HARNESS_REENTERED_COMPLETION = false;
   window.__HARNESS_INVALID_WORKER_REMOVED = null;
   window.__HARNESS_REWARD_RENDER_CALLS = 0;
+  window.__HARNESS_COMB_RENDER_CALLS = 0;
   window.__HARNESS_FAIL_DOMAIN_ONCE = scenario === 'completion-domain-failure';
   window.__HARNESS_THROW_COMPLETION_ONCE = scenario === 'completion-throw';
   window.__HARNESS_ADD_LEARNING_CALLS = 0;
@@ -553,27 +643,38 @@
   };
 }());
 </script>
-<script src="../js/ui-experiments.js?first-flight-step3d"></script>
+<script src="../js/ui-experiments.js?first-flight-step3eb-final3"></script>
 <script>
 (function(){
   'use strict';
   var scenario=new URLSearchParams(location.search).get('scenario')||'widest';
   var ui=window.BHIVE&&window.BHIVE.experimentUI;
   var original=ui&&ui.renderFirstFlightRewardSummary;
-  if(typeof original!=='function')return;
-  ui.renderFirstFlightRewardSummary=function(){
-    window.__HARNESS_REWARD_RENDER_CALLS++;
-    if(scenario==='completion-presentation-throw'){
-      throw new Error('fixture reward presentation exception');
-    }
-    if(scenario==='completion-presentation-dispose'){
-      window.dispatchEvent(new Event('pagehide'));
-    }
-    return original.apply(ui,arguments);
-  };
+  var originalComb=ui&&ui.renderFirstFlightCombCeremony;
+  if(typeof original==='function'){
+    ui.renderFirstFlightRewardSummary=function(){
+      window.__HARNESS_REWARD_RENDER_CALLS++;
+      if(scenario==='completion-presentation-throw'){
+        throw new Error('fixture reward presentation exception');
+      }
+      if(scenario==='completion-presentation-dispose'){
+        window.dispatchEvent(new Event('pagehide'));
+      }
+      return original.apply(ui,arguments);
+    };
+  }
+  if(typeof originalComb==='function'){
+    ui.renderFirstFlightCombCeremony=function(){
+      window.__HARNESS_COMB_RENDER_CALLS++;
+      if(scenario==='comb-render-failure'){
+        throw new Error('fixture comb ceremony presentation exception');
+      }
+      return originalComb.apply(ui,arguments);
+    };
+  }
 }());
 </script>
-<script src="../js/app-main.js?first-flight-step3d-context-fix"></script>
+<script src="../js/app-main.js?first-flight-step3eb-final3"></script>
 <script src="../js/beta-profile-data.js"></script>
 <script src="../js/beta-profile.js?first-flight-step3b"></script>
 <script>
@@ -610,6 +711,7 @@
 
   function ready() {
     var readyScenario = new URLSearchParams(location.search).get('scenario');
+    var combFoundation = /^comb-/.test(readyScenario) && readyScenario !== 'comb-no-unlock';
     var foundationOnly = [
       'fresh','fresh-wide','health-select','people-select','save-failure','answer-save-failure',
       'genuine-completion',
@@ -620,7 +722,7 @@
       'completion-invalid-completion','completion-already-result','completion-presentation-throw',
       'completion-presentation-dispose',
       'completion-private-copy','completed-elder','completed-zero'
-    ].indexOf(readyScenario) >= 0;
+    ].indexOf(readyScenario) >= 0 || combFoundation;
     var expectedRenderedCells = readyScenario === 'completion-reload' ? 4 :
       foundationOnly ? 3 : readyScenario === 'migration' ? 6 : 14;
     return Date.now() >= settleAt && document.readyState !== 'loading' &&
@@ -666,6 +768,7 @@
       migrationVisibility: null,
       firstFlightStartup: null,
       firstFlightFlow: null,
+      firstFlightComb: null,
       firstFlightLayout: null,
       onboardingCoordination: null,
       navigation: {mobile:null,desktop:null,production:window.__INDEX_SIGNATURE}
@@ -918,6 +1021,203 @@
             !document.activeElement.closest('.ff-reward-summary[data-first-flight-reward]'),
           focusCellKey:document.activeElement&&
             document.activeElement.getAttribute('data-cell-key')
+        };
+      }
+      function ffCombMilestone(time){
+        var ceremony=document.querySelector('#hive-today [data-first-flight-comb]');
+        var stage=ceremony&&ceremony.querySelector('.ff-comb-stage');
+        var skip=ceremony&&ceremony.querySelector('.ff-comb-skip');
+        var preview=ceremony&&ceremony.querySelector('.ff-comb-register-preview');
+        var skipRect=skip&&skip.getBoundingClientRect();
+        var style=ceremony&&ceremony.style;
+        function active(phase){
+          return !!ceremony&&ceremony.classList.contains('ff-comb-has-'+phase);
+        }
+        var targetCount=ceremony?ceremony.querySelectorAll('.ff-comb-build').length:0;
+        var supplyCount=ceremony?ceremony.querySelectorAll(
+          '.ff-comb-supply-line,.ff-comb-supply-bead').length:0;
+        var wallCount=ceremony?ceremony.querySelectorAll('.ff-comb-wall').length:0;
+        var memoryCount=ceremony?ceremony.querySelectorAll('.ff-comb-memory').length:0;
+        var core=ceremony&&ceremony.querySelector('.ff-comb-core');
+        var chosen=ceremony&&ceremony.querySelector('.ff-comb-chosen');
+        var build=ceremony&&ceremony.querySelector('.ff-comb-build');
+        var coreRect=core&&core.getBoundingClientRect();
+        var chosenRect=chosen&&chosen.getBoundingClientRect();
+        var buildRect=build&&build.getBoundingClientRect();
+        var stageRect=stage&&stage.getBoundingClientRect();
+        var stageLeft=stageRect?stageRect.left:0,stageTop=stageRect?stageRect.top:0;
+        var flightPath=ceremony&&ceremony.querySelector('.ff-comb-flight-trail');
+        var supplyPath=ceremony&&ceremony.querySelector('.ff-comb-supply-line');
+        var notch=ceremony&&ceremony.querySelector('.ff-comb-notch');
+        var flightNumbers=flightPath?(flightPath.getAttribute('d').match(/-?\d+(?:\.\d+)?/g)||[]).map(Number):[];
+        var supplyNumbers=supplyPath?(supplyPath.getAttribute('d').match(/-?\d+(?:\.\d+)?/g)||[]).map(Number):[];
+        var notchNumbers=notch?(notch.getAttribute('d').match(/-?\d+(?:\.\d+)?/g)||[]).map(Number):[];
+        var coreX=parseFloat(style&&style.getPropertyValue('--ff-comb-core-x'));
+        var coreY=parseFloat(style&&style.getPropertyValue('--ff-comb-core-y'));
+        var chosenX=parseFloat(style&&style.getPropertyValue('--ff-comb-chosen-x'));
+        var chosenY=parseFloat(style&&style.getPropertyValue('--ff-comb-chosen-y'));
+        var targetX=parseFloat(style&&style.getPropertyValue('--ff-comb-target-x'));
+        var targetY=parseFloat(style&&style.getPropertyValue('--ff-comb-target-y'));
+        var deliveryX=parseFloat(style&&style.getPropertyValue('--ff-comb-delivery-x'));
+        var deliveryY=parseFloat(style&&style.getPropertyValue('--ff-comb-delivery-y'));
+        function rectsOverlap(a,b){
+          return !!(a&&b&&a.left<b.right&&a.right>b.left&&a.top<b.bottom&&a.bottom>b.top);
+        }
+        var flightMidX=flightNumbers.length===6?(flightNumbers[0]+flightNumbers[4])/2:0;
+        var flightMidY=flightNumbers.length===6?(flightNumbers[1]+flightNumbers[5])/2:0;
+        var flightBowCross=flightNumbers.length===6?
+          (flightNumbers[4]-flightNumbers[0])*(flightNumbers[3]-flightMidY)-
+          (flightNumbers[5]-flightNumbers[1])*(flightNumbers[2]-flightMidX):0;
+        var supplyDot=supplyNumbers.length===4?
+          (supplyNumbers[2]-supplyNumbers[0])*(targetX-chosenX)+
+          (supplyNumbers[3]-supplyNumbers[1])*(targetY-chosenY):0;
+        var notchTipDot=notchNumbers.length===6?
+          notchNumbers[2]*(chosenX-targetX)+notchNumbers[3]*(chosenY-targetY):0;
+        var pulseOne=ceremony&&ceremony.querySelector('.ff-comb-chosen-pulse-one');
+        var pulseTwo=ceremony&&ceremony.querySelector('.ff-comb-chosen-pulse-two');
+        var flightWorker=ceremony&&ceremony.querySelector('.ff-comb-worker');
+        return {
+          time:time,
+          phase:ceremony?ceremony.getAttribute('data-comb-phase'):
+            (document.querySelector('#hive-today > .ff-reward-summary')?'summary':'none'),
+          overlayCount:document.querySelectorAll('#hive-today [data-first-flight-comb]').length,
+          variant:ceremony&&ceremony.getAttribute('data-comb-variant'),
+          targetCount:targetCount,
+          targetActiveCount:active('target')?targetCount:0,
+          supplyCount:supplyCount,
+          supplyActiveCount:active('supply')?supplyCount:0,
+          wallCount:wallCount,
+          buildActiveCount:active('construct')?wallCount:0,
+          chamberActiveCount:active('lock')?targetCount:0,
+          memoryCount:memoryCount,
+          memoryOneActiveCount:active('memory-one')?Math.min(1,memoryCount):0,
+          memoryTwoActiveCount:active('memory-two')?memoryCount:0,
+          crestActiveCount:active('crest')&&ceremony?
+            ceremony.querySelectorAll('.ff-comb-crest').length:0,
+          signatureActiveCount:active('signature')&&ceremony?
+            ceremony.querySelectorAll('[data-comb-signature]').length:0,
+          registerActive:active('register'),
+          enterActive:active('enter'),
+          skipPresent:!!(ceremony&&ceremony.querySelector('.ff-comb-skip')),
+          skipWidth:skipRect&&skipRect.width||0,
+          skipHeight:skipRect&&skipRect.height||0,
+          stageAriaHidden:stage&&stage.getAttribute('aria-hidden'),
+          previewAriaHidden:preview&&preview.getAttribute('aria-hidden'),
+          previewInert:!!preview&&preview.hasAttribute('inert'),
+          previewSummaryCount:ceremony?ceremony.querySelectorAll(
+            '.ff-comb-register-preview .ff-reward-summary[data-first-flight-reward]').length:0,
+          stageCardCount:stage?stage.querySelectorAll('.ff-reward-card').length:0,
+          stageHasPrivateCopy:!!stage&&(
+            stage.textContent.indexOf('Finishing the beta matters most')>=0||
+            stage.textContent.indexOf('Complete one focused beta task')>=0),
+          targetGeometryPresent:!!style&&!!style.getPropertyValue('--ff-comb-target-x').trim(),
+          supplyGeometryPresent:!!style&&!!style.getPropertyValue('--ff-comb-supply-x').trim(),
+          actorsOverlap:rectsOverlap(coreRect,chosenRect)||rectsOverlap(coreRect,buildRect)||
+            rectsOverlap(chosenRect,buildRect),
+          actorCenterDelta:{
+            coreX:coreRect?Math.abs((coreRect.left+coreRect.right)/2-stageLeft-coreX):null,
+            coreY:coreRect?Math.abs((coreRect.top+coreRect.bottom)/2-stageTop-coreY):null,
+            chosenX:chosenRect?Math.abs((chosenRect.left+chosenRect.right)/2-stageLeft-chosenX):null,
+            chosenY:chosenRect?Math.abs((chosenRect.top+chosenRect.bottom)/2-stageTop-chosenY):null,
+            targetX:buildRect?Math.abs((buildRect.left+buildRect.right)/2-stageLeft-targetX):null,
+            targetY:buildRect?Math.abs((buildRect.top+buildRect.bottom)/2-stageTop-targetY):null
+          },
+          actorCentersCanonical:!!(coreRect&&chosenRect&&
+            Math.abs((coreRect.left+coreRect.right)/2-stageLeft-coreX)<0.6&&
+            Math.abs((coreRect.top+coreRect.bottom)/2-stageTop-coreY)<0.6&&
+            Math.abs((chosenRect.left+chosenRect.right)/2-stageLeft-chosenX)<0.6&&
+            Math.abs((chosenRect.top+chosenRect.bottom)/2-stageTop-chosenY)<0.6&&
+            (!buildRect||(Math.abs((buildRect.left+buildRect.right)/2-stageLeft-targetX)<0.6&&
+              Math.abs((buildRect.top+buildRect.bottom)/2-stageTop-targetY)<0.6))),
+          flightStartsAtCoreEdge:flightNumbers.length===6&&
+            Math.hypot(flightNumbers[0]-coreX,flightNumbers[1]-coreY)>20&&
+            Math.hypot(flightNumbers[0]-coreX,flightNumbers[1]-coreY)<40&&
+            (flightNumbers[0]-coreX)*(chosenX-coreX)+
+              (flightNumbers[1]-coreY)*(chosenY-coreY)>0,
+          flightClockwiseBow:flightBowCross>0,
+          supplyForward:!build||supplyDot>0,
+          deliveryAligned:!build||(supplyNumbers.length===4&&
+            Math.abs(deliveryX-(supplyNumbers[2]-supplyNumbers[0]))<0.1&&
+            Math.abs(deliveryY-(supplyNumbers[3]-supplyNumbers[1]))<0.1),
+          notchFacesSupply:!build||notchTipDot>0,
+          pulseOneStroke:pulseOne?getComputedStyle(pulseOne).strokeWidth:'',
+          pulseTwoStroke:pulseTwo?getComputedStyle(pulseTwo).strokeWidth:'',
+          workerOffsetRotate:flightWorker?getComputedStyle(flightWorker).offsetRotate:'',
+          workerAnimation:flightWorker?getComputedStyle(flightWorker).animationName:'',
+          workerPoseAnimation:flightWorker&&flightWorker.querySelector('svg')?
+            getComputedStyle(flightWorker.querySelector('svg')).animationName:'',
+          viewportWidth:document.documentElement.clientWidth,
+          viewportHeight:document.documentElement.clientHeight,
+          stageFitsViewport:!!stageRect&&getComputedStyle(stage).position==='fixed'&&
+            getComputedStyle(stage).overflow==='hidden',
+          stageMetrics:stageRect?{width:stageRect.width,height:stageRect.height,
+            overflow:getComputedStyle(stage).overflow}:null,
+          pageScrollLocked:getComputedStyle(document.documentElement).overflow==='hidden'&&
+            getComputedStyle(document.body).overflow==='hidden'
+        };
+      }
+      function ffCombFinalSnapshot(){
+        var summary=document.querySelector('#hive-today > .ff-reward-summary[data-first-flight-reward]');
+        var live=summary&&summary.querySelector('.ff-reward-live');
+        var title=summary&&summary.querySelector('#ff-reward-title');
+        var rest=document.querySelector('#hivesvg .ff-comb-rest');
+        var restFrame=rest&&rest.parentNode&&rest.parentNode.querySelector('.hive-frame');
+        var restFrameRect=restFrame&&restFrame.getBoundingClientRect();
+        var restCrest=rest&&rest.querySelector('.ff-comb-rest-crest');
+        var restStub=rest&&rest.querySelector('.ff-comb-rest-stub');
+        var restCell=rest&&window.BHIVE.cells.filter(function(cell){
+          return cell.key===rest.getAttribute('data-cell-key');
+        })[0];
+        var restRadius=restCell?window.BHIVE.hexRadius(restCell.imp):0;
+        var restDx=restStub&&restCell?parseFloat(restStub.getAttribute('x1'))-restCell.x:0;
+        var restDy=restStub&&restCell?parseFloat(restStub.getAttribute('y1'))-restCell.y:0;
+        var restBoundary=Math.max(Math.abs(restDy),
+          Math.abs(0.8660254*restDx+0.5*restDy),
+          Math.abs(0.8660254*restDx-0.5*restDy));
+        var summaryCell=summary&&summary.querySelector('.ff-reward-cell');
+        var summaryRect=summary&&summary.getBoundingClientRect();
+        var enter=summary&&summary.querySelector('.ff-enter-hive');
+        var enterRect=enter&&enter.getBoundingClientRect();
+        var viewportWidth=document.documentElement.clientWidth;
+        var viewportHeight=document.documentElement.clientHeight;
+        return {
+          overlayCount:document.querySelectorAll('#hive-today [data-first-flight-comb]').length,
+          summaryCount:document.querySelectorAll(
+            '#hive-today > .ff-reward-summary[data-first-flight-reward]').length,
+          allSummaryCount:document.querySelectorAll(
+            '#hive-today .ff-reward-summary[data-first-flight-reward]').length,
+          finalizedReason:summary&&summary.getAttribute('data-comb-finalized'),
+          focusAfterFinalize:!!summary&&(
+            document.activeElement===summary||document.activeElement===summary.querySelector('#ff-reward-title')),
+          headingFocused:!!summary&&document.activeElement===summary.querySelector('#ff-reward-title'),
+          summaryRole:summary&&summary.getAttribute('role'),
+          summaryLabelledBy:summary&&summary.getAttribute('aria-labelledby'),
+          titleTabIndex:title&&title.tabIndex,
+          liveText:live&&live.textContent||'',
+          liveRole:live&&live.getAttribute('role'),
+          livePoliteness:live&&live.getAttribute('aria-live'),
+          enterPresent:!!(summary&&summary.querySelector('.ff-enter-hive')),
+          reducedSummary:!!summary&&summary.classList.contains('ff-comb-reduced'),
+          registerSummary:!!summary&&summary.classList.contains('ff-comb-register'),
+          rewardCardCount:summary?summary.querySelectorAll('.ff-reward-card').length:0,
+          restCount:document.querySelectorAll('#hivesvg .ff-comb-rest').length,
+          restKey:rest&&rest.getAttribute('data-cell-key'),
+          restCrestCount:rest?rest.querySelectorAll('.ff-comb-rest-crest').length:0,
+          restMemoryCount:rest?rest.querySelectorAll('.ff-comb-rest-memory').length:0,
+          restHoneyLineCount:rest?rest.querySelectorAll('.ff-comb-rest-honey-line').length:0,
+          restFrameWidth:restFrameRect&&restFrameRect.width||0,
+          restCrestHidden:!!restCrest&&restCrest.getAttribute('display')==='none',
+          restStubCount:rest?rest.querySelectorAll('.ff-comb-rest-stub').length:0,
+          restNotchCount:rest?rest.querySelectorAll('.ff-comb-rest-notch').length:0,
+          restStubOnWall:!!restStub&&Math.abs(restBoundary-0.8660254*restRadius)<0.2,
+          restStubStroke:restStub?getComputedStyle(restStub).strokeWidth:'',
+          renderedCellText:summaryCell&&summaryCell.innerText.trim()||'',
+          renderedCellTransform:summaryCell&&getComputedStyle(summaryCell).textTransform||'',
+          summaryFitsWidth:!!summaryRect&&summaryRect.left>=-1&&summaryRect.right<=viewportWidth+1,
+          enterInViewport:!!enterRect&&enterRect.left>=-1&&enterRect.right<=viewportWidth+1&&
+            enterRect.top>=-1&&enterRect.bottom<=viewportHeight+1,
+          registerHeightBounded:!!summary&&summary.clientHeight<=viewportHeight*0.7+1,
+          registerScrollContained:!!summary&&summary.scrollWidth<=summary.clientWidth+1
         };
       }
 
@@ -1894,6 +2194,249 @@
           recoverableError:/could not save/.test(
             (document.querySelector('#hive-today .ff-status')||{}).textContent||''),
           focusReturned:document.activeElement===ffRestoredInput
+        };
+      }else if(/^comb-/.test(scenario)){
+        var combScheduler=window.__BHIVE_FIRST_FLIGHT_SCHEDULER__;
+        var combTimelineUnlocked=scenario!=='comb-no-unlock';
+        var combTimeline=window.BHIVE.experimentUI.firstFlightCombTimeline(combTimelineUnlocked);
+        var combBeforeState=ffCompletionSnapshot();
+        var combBeforeStored=localStorage.getItem(storageKey);
+        var combBeforeUnlocks=window.BHIVE.unlocks.slice();
+        var combBeforeWorkers=(window.BHIVE.swarms.lw||[]).length;
+        var combCallStart=window.__HARNESS_COMPLETE_CALLS;
+        var combSaveStart=window.__HARNESS_SAVE_CALLS;
+        var combInsideSaveStart=window.__HARNESS_SAVE_INSIDE_COMPLETE;
+        var combOutsideSaveStart=window.__HARNESS_SAVE_OUTSIDE_COMPLETE;
+        var combUnlockStart=window.__HARNESS_UNLOCK_CALLS;
+        var combRewardStart=window.__HARNESS_REWARD_RENDER_CALLS;
+        var combRenderStart=window.__HARNESS_COMB_RENDER_CALLS;
+        var combCompleteButton=document.querySelector('#hive-today .ff-complete');
+        if(combCompleteButton){combCompleteButton.focus();combCompleteButton.click();}
+        var combDomainState=ffCompletionSnapshot();
+        var combDomainStored=localStorage.getItem(storageKey);
+        var combInitial=ffCombMilestone(0);
+        var combMilestones=[combInitial];
+        var combSkipRepeatedHarmless=null,combSkipStage=null,combBackgroundFired=false;
+        var combWatchdogFired=false,combAnimationCancelFired=false,combPagehideFired=false;
+        function combAdvance(times){
+          times.forEach(function(time){
+            if(combScheduler)combScheduler.advanceTo(time);
+            combMilestones.push(ffCombMilestone(time));
+          });
+        }
+        if(scenario==='comb-awakened'||scenario==='comb-awakened-small'||
+           scenario==='comb-awakened-wide'||scenario==='comb-enter'){
+          combAdvance([100,940,1160,1340,1720,1860,2020,2280,2520,2720,2820,3020,3200]);
+        }else if(scenario==='comb-no-unlock'){
+          combAdvance([100,260,320,420,940,1040,1300,1460,1580,1740,2080,2420,2620]);
+        }else if(scenario==='comb-skip'||scenario==='comb-skip-impact'||
+                 scenario==='comb-skip-build'){
+          if(scenario==='comb-skip-impact'){
+            combSkipStage='impact';
+            combAdvance([940]);
+          }else if(scenario==='comb-skip-build'){
+            combSkipStage='build';
+            combAdvance([1720]);
+          }else{
+            combSkipStage='hush';
+          }
+          var combSkipButton=document.querySelector('#hive-today .ff-comb-skip');
+          if(combSkipButton)combSkipButton.click();
+          var combAfterFirstSkip=ffCompletionSnapshot();
+          if(combSkipButton)combSkipButton.click();
+          combSkipRepeatedHarmless=combAfterFirstSkip===ffCompletionSnapshot();
+          combMilestones.push(ffCombMilestone('skip'));
+        }else if(scenario==='comb-background'){
+          window.__BHIVE_FIRST_FLIGHT_TEST_HIDDEN__=true;
+          document.dispatchEvent(new Event('visibilitychange'));
+          window.__BHIVE_FIRST_FLIGHT_TEST_HIDDEN__=false;
+          combBackgroundFired=true;
+          combMilestones.push(ffCombMilestone('background'));
+        }else if(scenario==='comb-watchdog'){
+          combWatchdogFired=!!(combScheduler&&combScheduler.fireDelay(combTimeline.watchdog));
+          combMilestones.push(ffCombMilestone('watchdog'));
+        }else if(scenario==='comb-animationcancel'){
+          var combCeremonyRoot=document.querySelector('#hive-today [data-first-flight-comb]');
+          if(combCeremonyRoot){
+            combCeremonyRoot.dispatchEvent(new Event('animationcancel'));
+            combAnimationCancelFired=true;
+          }
+          combMilestones.push(ffCombMilestone('animationcancel'));
+        }else if(scenario==='comb-pagehide'){
+          combAdvance([940]);
+          var combPagehideEvent=new Event('pagehide');
+          try{Object.defineProperty(combPagehideEvent,'persisted',{value:true});}catch(ignore){}
+          window.dispatchEvent(combPagehideEvent);
+          window.dispatchEvent(new Event('pageshow'));
+          combPagehideFired=true;
+          combMilestones.push(ffCombMilestone('pagehide'));
+        }
+        var combFinal=ffCombFinalSnapshot();
+        var combEnterDismissed=null;
+        if(scenario==='comb-enter'){
+          var combBeforeEnterState=ffCompletionSnapshot();
+          var combBeforeEnterStored=localStorage.getItem(storageKey);
+          var combEnterButton=document.querySelector('#hive-today .ff-enter-hive');
+          if(combEnterButton)combEnterButton.click();
+          combEnterDismissed=!!combEnterButton&&
+            document.querySelectorAll('#hive-today [data-first-flight-comb],'+
+              '#hive-today [data-first-flight-reward]').length===0&&
+            combBeforeEnterState===ffCompletionSnapshot()&&
+            combBeforeEnterStored===localStorage.getItem(storageKey)&&
+            document.activeElement&&document.activeElement.getAttribute('data-cell-key')==='lw'&&
+            document.querySelectorAll('#hivesvg .ff-comb-rest').length===1;
+        }
+        var combPagehideEnterLive=null;
+        if(scenario==='comb-pagehide'){
+          var combPagehideBeforeState=ffCompletionSnapshot();
+          var combPagehideBeforeStored=localStorage.getItem(storageKey);
+          var combPagehideEnter=document.querySelector('#hive-today .ff-enter-hive');
+          if(combPagehideEnter)combPagehideEnter.click();
+          combPagehideEnterLive=!!combPagehideEnter&&
+            document.querySelectorAll('#hive-today [data-first-flight-comb],'+
+              '#hive-today [data-first-flight-reward]').length===0&&
+            combPagehideBeforeState===ffCompletionSnapshot()&&
+            combPagehideBeforeStored===localStorage.getItem(storageKey)&&
+            document.activeElement&&document.activeElement.getAttribute('data-cell-key')==='lw';
+        }
+        var combCompletedState=ffState();
+        var combCompletionResult=window.__HARNESS_COMPLETE_RESULTS[
+          window.__HARNESS_COMPLETE_RESULTS.length-1]||null;
+        var combUnlockedCell=combCompletionResult&&combCompletionResult.unlockedKey?
+          window.BHIVE.cells.filter(function(cell){
+            return cell.key===combCompletionResult.unlockedKey;
+          })[0]:null;
+        var combPhaseOrder=combMilestones.map(function(milestone){return milestone.phase;});
+        var combFlightMilestone=combMilestones.filter(function(milestone){
+          return milestone.phase==='impact';
+        })[0]||combInitial;
+        var combNoUnlockStructureAbsent=combMilestones.every(function(milestone){
+          return milestone.targetCount===0&&milestone.supplyCount===0&&milestone.wallCount===0&&
+            !milestone.targetGeometryPresent&&!milestone.supplyGeometryPresent;
+        });
+        result.firstFlightComb={
+          normalMotion:!window.matchMedia('(prefers-reduced-motion:reduce)').matches,
+          reducedMotion:window.matchMedia('(prefers-reduced-motion:reduce)').matches,
+          completeButtonPresent:!!combCompleteButton,
+          ceremonyVariant:combInitial.variant,
+          ceremonyPhase:combInitial.phase,
+          timelinePhases:combTimeline.events.map(function(event){return event.phase;}),
+          stableMs:combTimeline.stable,
+          watchdogMs:combTimeline.watchdog,
+          schedulerDelays:combScheduler?combScheduler.delays():[],
+          schedulerPendingAfter:combScheduler?combScheduler.pendingDelays():[],
+          milestones:combMilestones,
+          phaseOrder:combPhaseOrder,
+          initialTargetInactive:combInitial.targetActiveCount===0&&
+            combInitial.supplyActiveCount===0&&combInitial.buildActiveCount===0,
+          initialOverlayCount:combInitial.overlayCount,
+          initialTargetCount:combInitial.targetCount,
+          initialSupplyCount:combInitial.supplyCount,
+          initialBuildCount:combInitial.wallCount,
+          actorsOverlap:combInitial.actorsOverlap,
+          actorCenterDelta:combInitial.actorCenterDelta,
+          actorCentersCanonical:combInitial.actorCentersCanonical,
+          flightStartsAtCoreEdge:combInitial.flightStartsAtCoreEdge,
+          flightClockwiseBow:combInitial.flightClockwiseBow,
+          supplyForward:combInitial.supplyForward,
+          deliveryAligned:combInitial.deliveryAligned,
+          notchFacesSupply:combInitial.notchFacesSupply,
+          pulseOneStroke:combInitial.pulseOneStroke,
+          pulseTwoStroke:combInitial.pulseTwoStroke,
+          workerOffsetRotate:combInitial.workerOffsetRotate,
+          workerAnimation:combFlightMilestone.workerAnimation,
+          workerPoseAnimation:combFlightMilestone.workerPoseAnimation,
+          viewportWidth:combInitial.viewportWidth,
+          viewportHeight:combInitial.viewportHeight,
+          stageFitsViewport:combInitial.stageFitsViewport,
+          stageMetrics:combInitial.stageMetrics,
+          pageScrollLocked:combInitial.pageScrollLocked,
+          noUnlockStructureAbsentEveryPhase:combNoUnlockStructureAbsent,
+          targetGeometryAbsent:combMilestones.every(function(milestone){
+            return !milestone.targetGeometryPresent&&!milestone.supplyGeometryPresent;
+          }),
+          stageHasPrivateCopy:combMilestones.some(function(milestone){
+            return milestone.stageHasPrivateCopy;
+          }),
+          stageCardCount:combInitial.stageCardCount,
+          skipPresent:combInitial.skipPresent,
+          skipWidth:combInitial.skipWidth,
+          skipHeight:combInitial.skipHeight,
+          stageAriaHidden:combInitial.stageAriaHidden,
+          previewAriaHidden:combInitial.previewAriaHidden,
+          previewInert:combInitial.previewInert,
+          overlayCount:combFinal.overlayCount,
+          summaryCount:combFinal.summaryCount,
+          allSummaryCount:combFinal.allSummaryCount,
+          focusAfterFinalize:combFinal.focusAfterFinalize,
+          headingFocused:combFinal.headingFocused,
+          summaryRole:combFinal.summaryRole,
+          summaryLabelledBy:combFinal.summaryLabelledBy,
+          titleTabIndex:combFinal.titleTabIndex,
+          liveText:combFinal.liveText,
+          liveRole:combFinal.liveRole,
+          livePoliteness:combFinal.livePoliteness,
+          enterPresent:combFinal.enterPresent,
+          finalizedReason:combFinal.finalizedReason,
+          reducedSummary:combFinal.reducedSummary,
+          registerSummary:combFinal.registerSummary,
+          rewardCardCount:combFinal.rewardCardCount,
+          restCount:combFinal.restCount,
+          restKey:combFinal.restKey,
+          restCrestCount:combFinal.restCrestCount,
+          restMemoryCount:combFinal.restMemoryCount,
+          restHoneyLineCount:combFinal.restHoneyLineCount,
+          restFrameWidth:combFinal.restFrameWidth,
+          restCrestHidden:combFinal.restCrestHidden,
+          restStubCount:combFinal.restStubCount,
+          restNotchCount:combFinal.restNotchCount,
+          restStubOnWall:combFinal.restStubOnWall,
+          restStubStroke:combFinal.restStubStroke,
+          renderedCellText:combFinal.renderedCellText,
+          renderedCellTransform:combFinal.renderedCellTransform,
+          summaryFitsWidth:combFinal.summaryFitsWidth,
+          enterInViewport:combFinal.enterInViewport,
+          registerHeightBounded:combFinal.registerHeightBounded,
+          registerScrollContained:combFinal.registerScrollContained,
+          completionOk:!!combCompletionResult&&combCompletionResult.ok===true&&
+            combCompletionResult.alreadyCompleted===false,
+          unlockedKey:combCompletionResult&&combCompletionResult.unlockedKey,
+          unlockedCoordinates:combUnlockedCell?[combUnlockedCell.x,combUnlockedCell.y]:null,
+          renderedCellCount:document.querySelectorAll('#hivesvg .hive-cell').length,
+          completedStatus:combCompletedState&&combCompletedState.status,
+          workerDelta:(window.BHIVE.swarms.lw||[]).length-combBeforeWorkers,
+          unlockDelta:window.BHIVE.unlocks.length-combBeforeUnlocks.length,
+          completionCalls:window.__HARNESS_COMPLETE_CALLS-combCallStart,
+          saveCalls:window.__HARNESS_SAVE_CALLS-combSaveStart,
+          domainSaveCalls:window.__HARNESS_SAVE_INSIDE_COMPLETE-combInsideSaveStart,
+          uiSaveCalls:window.__HARNESS_SAVE_OUTSIDE_COMPLETE-combOutsideSaveStart,
+          unlockCalls:window.__HARNESS_UNLOCK_CALLS-combUnlockStart,
+          rewardRenderCalls:window.__HARNESS_REWARD_RENDER_CALLS-combRewardStart,
+          combRenderCalls:window.__HARNESS_COMB_RENDER_CALLS-combRenderStart,
+          stateChangedByDomain:combBeforeState!==combDomainState,
+          storedChangedByDomain:combBeforeStored!==combDomainStored,
+          stateStableAfterDomain:combDomainState===ffCompletionSnapshot(),
+          storedStableAfterDomain:combDomainStored===localStorage.getItem(storageKey),
+          skipRepeatedHarmless:combSkipRepeatedHarmless,
+          skipStage:combSkipStage,
+          summaryNotDismissed:scenario.indexOf('comb-skip')!==0||combFinal.summaryCount===1,
+          backgroundFired:combBackgroundFired,
+          watchdogFired:combWatchdogFired,
+          animationCancelFired:combAnimationCancelFired,
+          pagehideFired:combPagehideFired,
+          pagehideEnterLive:combPagehideEnterLive,
+          plainSummaryFallback:scenario!=='comb-render-failure'||
+            (combFinal.overlayCount===0&&combFinal.summaryCount===1&&
+             combFinal.finalizedReason===null),
+          reducedImmediate:scenario!=='comb-reduced'||
+            (combInitial.overlayCount===0&&combFinal.summaryCount===1&&combFinal.reducedSummary),
+          enterDismissedWithoutMutation:combEnterDismissed,
+          domainEffectsCommitted:combCompletedState&&combCompletedState.status==='mission_completed'&&
+            (window.BHIVE.swarms.lw||[]).length===combBeforeWorkers+1&&
+            window.BHIVE.learning.events.filter(function(event){
+              return event.type==='learning_added'&&event.cellKey==='lw'&&
+                event.payload&&event.payload.firstFlightVersion===1;
+            }).length===2
         };
       }else if(scenario==='normal-experiment'){
         var normalActive=window.BHIVE.experiments.activeExperiment(window.BHIVE.learning.events);

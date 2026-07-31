@@ -39,6 +39,7 @@
     window.scrollTo(0,0);
     var id=on.id;
     navLinks.forEach(function(a){a.classList.toggle('active',a.getAttribute('href')==='#'+id);});
+    try{document.dispatchEvent(new CustomEvent('bhive:screen-shown',{detail:{id:id}}));}catch(e){}
   }
   document.addEventListener('click',function(e){
     var a=e.target&&e.target.closest&&e.target.closest('.nav a');
@@ -940,6 +941,7 @@
       applyPriorityPulse();
       markCells();       /* beta10c: was monkey-patched, now inline */
       applyLockStates(); /* beta10c: was monkey-patched, now inline */
+      renderFirstFlightCombResting();
       renderFirstFlightWorkerMarker();
     }
     /* ── the Core: a queen cell at the heart of the hive ── */
@@ -2863,6 +2865,109 @@
         els[i].setAttribute('aria-label',c.full+(st==='dormant'?' (asleep)':''));
       }
     }
+    function firstFlightCombAwakenedKey(){
+      var state=currentFirstFlightState();
+      var events=BHIVE.learning&&Array.isArray(BHIVE.learning.events)?BHIVE.learning.events:[];
+      var completedId=state&&state.completedEventId,completedIndex=-1,completedCount=0;
+      var completed,unlockedEvent,learningOne,learningTwo,key,i;
+      if(!state||state.version!==1||state.status!=='mission_completed'||
+         typeof state.cellKey!=='string'||typeof completedId!=='string'||!completedId)return null;
+      for(i=0;i<events.length;i++)if(events[i]&&events[i].id===completedId){
+        completedIndex=i;completedCount++;
+      }
+      if(completedCount!==1||completedIndex<3)return null;
+      completed=events[completedIndex];
+      unlockedEvent=events[completedIndex-1];
+      learningTwo=events[completedIndex-2];
+      learningOne=events[completedIndex-3];
+      if(!completed||completed.type!=='experiment_completed'||completed.cellKey!==state.cellKey||
+         !unlockedEvent||unlockedEvent.type!=='cell_unlocked'||
+         !unlockedEvent.payload||unlockedEvent.payload.source!=='runtime'||
+         !learningOne||learningOne.id!=='evt_first_flight_v1_learning_'+state.cellKey+'_1'||
+         learningOne.type!=='learning_added'||learningOne.cellKey!==state.cellKey||
+         !learningTwo||learningTwo.id!=='evt_first_flight_v1_learning_'+state.cellKey+'_2'||
+         learningTwo.type!=='learning_added'||learningTwo.cellKey!==state.cellKey)return null;
+      key=unlockedEvent.cellKey;
+      if(typeof key!=='string'||!key||UNLOCK_START.indexOf(key)>=0||!isUnlocked(key)||
+         unlocks.indexOf(key)<0||!firstFlightCellByKey(key)||!B.experimentUI||
+         typeof B.experimentUI.firstFlightCombDomain!=='function'||
+         !B.experimentUI.firstFlightCombDomain(key))return null;
+      return key;
+    }
+    function firstFlightCombNearestUnlocked(cell,key){
+      var stop=unlocks.indexOf(key),candidates=[],i,c,dx,dy;
+      if(stop<=0)return null;
+      for(i=0;i<stop;i++){
+        c=firstFlightCellByKey(unlocks[i]);
+        if(!c||c.key===key)continue;
+        dx=c.x-cell.x;dy=c.y-cell.y;
+        candidates.push({cell:c,distance:dx*dx+dy*dy,
+          core:(c.x-300)*(c.x-300)+(c.y-300)*(c.y-300),order:i});
+      }
+      candidates.sort(function(a,b){
+        return a.distance-b.distance||a.core-b.core||a.order-b.order;
+      });
+      return candidates.length?candidates[0].cell:null;
+    }
+    function renderFirstFlightCombResting(){
+      var existing=svg.querySelectorAll('.ff-comb-rest'),all=svg.querySelectorAll('.hive-cell');
+      var key=firstFlightCombAwakenedKey(),cell,target,domain,r,inner,art,crest;
+      var neighbour,dx,dy,length,ux,uy,startX,startY,endX,endY,memory,i,frame,rect,crestRect;
+      for(i=0;i<existing.length;i++)existing[i].parentNode.removeChild(existing[i]);
+      for(i=0;i<all.length;i++)all[i].classList.remove('ff-comb-awakened-rest');
+      if(!key)return;
+      cell=firstFlightCellByKey(key);
+      target=svg.querySelector('.hive-cell[data-cell-key="'+key+'"]');
+      domain=B.experimentUI.firstFlightCombDomain(key);
+      if(!cell||!target||!domain||!isUnlocked(key))return;
+      r=B.hexRadius(cell.imp);
+      inner=Math.max(5,r-3.5);
+      art=B.el('g',{'class':'ff-comb-rest','data-cell-key':key,
+        'aria-hidden':'true','focusable':'false'});
+      art.appendChild(B.el('polygon',{points:B.hex(cell.x,cell.y,inner),
+        'class':'ff-comb-rest-wax'}));
+      crest=B.el('g',{'class':'ff-comb-rest-crest',
+        transform:'translate('+cell.x+','+(cell.y-r*0.25)+') scale('+(r/25).toFixed(3)+')'});
+      crest.innerHTML=domain.crest;
+      art.appendChild(crest);
+      frame=target.querySelector('.hive-frame');
+      rect=frame&&frame.getBoundingClientRect?frame.getBoundingClientRect():null;
+      memory=!!(rect&&rect.width>=48);
+      if(memory){
+        [-0.28,0.28].forEach(function(offset){
+          var mx=cell.x+r*offset,my=cell.y+r*0.42,mr=Math.max(3,r*0.18);
+          var group=B.el('g',{'class':'ff-comb-rest-memory'});
+          group.appendChild(B.el('polygon',{points:B.hex(mx,my,mr)}));
+          group.appendChild(B.el('line',{x1:(mx-mr*0.55).toFixed(2),
+            y1:(my-mr*0.32).toFixed(2),x2:(mx+mr*0.55).toFixed(2),
+            y2:(my-mr*0.32).toFixed(2),'class':'ff-comb-rest-seal'}));
+          art.appendChild(group);
+        });
+      }else{
+        art.appendChild(B.el('line',{x1:(cell.x-r*0.42).toFixed(2),
+          y1:(cell.y+r*0.43).toFixed(2),x2:(cell.x+r*0.42).toFixed(2),
+          y2:(cell.y+r*0.43).toFixed(2),'class':'ff-comb-rest-honey-line'}));
+      }
+      neighbour=firstFlightCombNearestUnlocked(cell,key);
+      if(neighbour){
+        dx=neighbour.x-cell.x;dy=neighbour.y-cell.y;length=Math.sqrt(dx*dx+dy*dy)||1;
+        ux=dx/length;uy=dy/length;
+        var restEdge=firstFlightCombHexEdge(cell,neighbour,r);
+        startX=restEdge.x;startY=restEdge.y;
+        endX=startX+ux*r*0.5;endY=startY+uy*r*0.5;
+        art.appendChild(B.el('line',{x1:startX.toFixed(2),y1:startY.toFixed(2),
+          x2:endX.toFixed(2),y2:endY.toFixed(2),'class':'ff-comb-rest-stub'}));
+        art.appendChild(B.el('path',{d:'M '+(startX-ux-uy*2).toFixed(2)+' '+
+          (startY-uy+ux*2).toFixed(2)+' L '+(startX+ux*3).toFixed(2)+' '+
+          (startY+uy*3).toFixed(2)+' L '+(startX-ux+uy*2).toFixed(2)+' '+
+          (startY-uy-ux*2).toFixed(2),'class':'ff-comb-rest-notch'}));
+      }
+      target.classList.add('ff-comb-awakened-rest');
+      var label=target.querySelector('.hive-label');
+      if(label)target.insertBefore(art,label);else target.appendChild(art);
+      crestRect=crest.getBoundingClientRect?crest.getBoundingClientRect():null;
+      if(!crestRect||crestRect.width<12)crest.setAttribute('display','none');
+    }
     function renderFirstFlightWorkerMarker(){
       var old=svg.querySelectorAll('.ff-worker-marker'),state=currentFirstFlightState();
       var swarm,target,cell=null,count=0,i,beeRecord,marker,icon,label;
@@ -2934,9 +3039,13 @@
     function renderToday(){
       var el=document.getElementById('hive-today');
       if(!el)return;
-      if(activeFirstFlightAttempt&&activeFirstFlightAttempt.phase==='summary'&&
-         !activeFirstFlightAttempt.disposed){
-        if(el.querySelector('[data-first-flight-reward]'))return;
+      if(activeFirstFlightAttempt&&!activeFirstFlightAttempt.disposed&&
+         (activeFirstFlightAttempt.phase==='ceremony'||activeFirstFlightAttempt.phase==='summary')){
+        if(activeFirstFlightAttempt.phase==='ceremony'&&el.querySelector('[data-first-flight-comb]'))return;
+        if(activeFirstFlightAttempt.phase==='summary'&&el.querySelector('[data-first-flight-reward]'))return;
+        if(activeFirstFlightAttempt.phase==='ceremony'&&
+           typeof activeFirstFlightAttempt.finalize==='function'&&
+           activeFirstFlightAttempt.finalize('rerender'))return;
         activeFirstFlightAttempt.phase='dismissed';
         activeFirstFlightAttempt.disposed=true;
         activeFirstFlightAttempt=null;
@@ -3273,7 +3382,14 @@
         preLearnings:learningCopy,
         preUnlocks:unlocks.slice(),
         preEventIds:eventIds,
-        rewardModel:null
+        rewardModel:null,
+        summaryHTML:'',
+        ceremonyRoot:null,
+        presentationTimers:[],
+        presentationScheduler:null,
+        presentationVisibility:null,
+        presentationAnimationCancel:null,
+        finalize:null
       };
     }
     function uniqueFirstFlightEvent(events,id){
@@ -3365,6 +3481,146 @@
         supportingLabel:attempt.cellKey==='lw'?'Your Life & Work choice':''
       });
     }
+    function firstFlightCombVisibleRatio(element){
+      var rect=element&&element.getBoundingClientRect?element.getBoundingClientRect():null;
+      var width=document.documentElement.clientWidth||window.innerWidth||0;
+      var height=document.documentElement.clientHeight||window.innerHeight||0;
+      var area,visibleWidth,visibleHeight;
+      if(!rect||rect.width<=0||rect.height<=0||width<=0||height<=0)return 0;
+      area=rect.width*rect.height;
+      visibleWidth=Math.max(0,Math.min(rect.right,width)-Math.max(rect.left,0));
+      visibleHeight=Math.max(0,Math.min(rect.bottom,height)-Math.max(rect.top,0));
+      return area?visibleWidth*visibleHeight/area:0;
+    }
+    function firstFlightCombScreenPoint(x,y){
+      var point,matrix,rect,viewBox;
+      try{
+        if(svg.createSVGPoint&&svg.getScreenCTM){
+          point=svg.createSVGPoint();point.x=x;point.y=y;matrix=svg.getScreenCTM();
+          if(matrix){point=point.matrixTransform(matrix);return{x:point.x,y:point.y};}
+        }
+      }catch(e){}
+      rect=svg.getBoundingClientRect?svg.getBoundingClientRect():null;
+      viewBox=svg.viewBox&&svg.viewBox.baseVal;
+      if(!rect||!viewBox||!viewBox.width||!viewBox.height)return null;
+      return {x:rect.left+(x-viewBox.x)/viewBox.width*rect.width,
+        y:rect.top+(y-viewBox.y)/viewBox.height*rect.height};
+    }
+    function firstFlightCombClamp(value,min,max){
+      if(max<min)return (min+max)/2;
+      return Math.max(min,Math.min(max,value));
+    }
+    function firstFlightCombPointDistance(a,b){
+      var dx=a.x-b.x,dy=a.y-b.y;
+      return Math.sqrt(dx*dx+dy*dy);
+    }
+    function firstFlightCombActorsOverlap(a,halfWidthA,halfHeightA,b,halfWidthB,halfHeightB){
+      return Math.abs(a.x-b.x)<halfWidthA+halfWidthB&&
+        Math.abs(a.y-b.y)<halfHeightA+halfHeightB;
+    }
+    function firstFlightCombHexEdge(from,toward,radius){
+      var dx=toward.x-from.x,dy=toward.y-from.y;
+      var length=Math.sqrt(dx*dx+dy*dy)||1,ux=dx/length,uy=dy/length;
+      var scale=0.8660254*radius/Math.max(Math.abs(uy),
+        Math.abs(0.8660254*ux+0.5*uy),Math.abs(0.8660254*ux-0.5*uy));
+      return {x:from.x+ux*scale,y:from.y+uy*scale};
+    }
+    function firstFlightCombGeometry(model){
+      var width=document.documentElement.clientWidth||window.innerWidth||390;
+      var height=document.documentElement.clientHeight||window.innerHeight||844;
+      var chosen=firstFlightCellByKey(model.cellKey);
+      var target=model.unlocked?firstFlightCellByKey(model.unlocked.cellKey):null;
+      var chosenNode=chosen&&svg.querySelector('.hive-cell[data-cell-key="'+chosen.key+'"]');
+      var targetNode=target&&svg.querySelector('.hive-cell[data-cell-key="'+target.key+'"]');
+      var coreNode=svg.querySelector('.hive-core');
+      var chosenPoint=chosen&&firstFlightCombScreenPoint(chosen.x,chosen.y);
+      var targetPoint=target&&firstFlightCombScreenPoint(target.x,target.y);
+      var corePoint=firstFlightCombScreenPoint(300,300);
+      var chosenFrame=chosenNode&&chosenNode.querySelector('.hive-frame');
+      var targetFrame=targetNode&&targetNode.querySelector('.hive-frame');
+      var chosenRatio=firstFlightCombVisibleRatio(chosenFrame);
+      var targetRatio=target?firstFlightCombVisibleRatio(targetFrame):1;
+      var coreRatio=firstFlightCombVisibleRatio(coreNode);
+      var separation=targetPoint&&chosenPoint?
+        Math.sqrt(Math.pow(targetPoint.x-chosenPoint.x,2)+Math.pow(targetPoint.y-chosenPoint.y,2)):
+        chosenPoint&&corePoint?
+          Math.sqrt(Math.pow(chosenPoint.x-corePoint.x,2)+Math.pow(chosenPoint.y-corePoint.y,2)):0;
+      var useActual=!!(chosenPoint&&corePoint&&chosenRatio>=0.7&&coreRatio>=0.7&&
+        targetRatio>=0.7&&separation>=120&&(!target||targetPoint));
+      var marginX=width*0.12,marginY=Math.max(34,height*0.07),cellHalf=44;
+      var dx,dy,length,ux,uy,distance,flightDx,flightDy,flightLength,bow,nx,ny;
+      var targetDistance,minChosenX,maxChosenX,minChosenY,maxChosenY;
+      var coreDirections,coreCandidate,bestCore,bestCoreScore,collisionCount,minDistance,score,i;
+      var mobile=width<=430,chosenHalfWidth=mobile?43:50,chosenHalfHeight=mobile?56:60;
+      var targetHalfWidth=mobile?43:50,targetHalfHeight=mobile?63:67;
+      var coreHalfWidth=mobile?39:44,coreHalfHeight=mobile?55:60;
+      var coreMinX=marginX+coreHalfWidth,coreMaxX=width-marginX-coreHalfWidth;
+      var coreMinY=marginY+coreHalfHeight,coreMaxY=height-marginY-coreHalfHeight;
+      var flightStart,coreRadius=mobile?31*74/84:31;
+      if(!chosen||width<1||height<1)return null;
+      if(!useActual){
+        chosenPoint={
+          x:firstFlightCombClamp(width*0.38,marginX+cellHalf,width-marginX-cellHalf),
+          y:firstFlightCombClamp(height*0.34,marginY+cellHalf,height-marginY-cellHalf)
+        };
+        if(target){
+          dx=target.x-chosen.x;dy=target.y-chosen.y;length=Math.sqrt(dx*dx+dy*dy)||1;
+          ux=dx/length;uy=dy/length;
+          targetDistance=Math.max(150,Math.min(190,Math.min(width,height)*0.4));
+          minChosenX=marginX+cellHalf-Math.min(0,ux*targetDistance);
+          maxChosenX=width-marginX-cellHalf-Math.max(0,ux*targetDistance);
+          minChosenY=marginY+cellHalf-Math.min(0,uy*targetDistance);
+          maxChosenY=height-marginY-cellHalf-Math.max(0,uy*targetDistance);
+          chosenPoint.x=firstFlightCombClamp(chosenPoint.x,minChosenX,maxChosenX);
+          chosenPoint.y=firstFlightCombClamp(chosenPoint.y,minChosenY,maxChosenY);
+          targetPoint={
+            x:chosenPoint.x+ux*targetDistance,
+            y:chosenPoint.y+uy*targetDistance
+          };
+        }
+        dx=300-chosen.x;dy=300-chosen.y;length=Math.sqrt(dx*dx+dy*dy)||1;
+        ux=dx/length;uy=dy/length;
+        distance=Math.max(150,Math.min(180,Math.min(width,height)*0.4));
+        coreDirections=[
+          {x:ux,y:uy},
+          {x:-uy,y:ux},{x:uy,y:-ux},
+          {x:0,y:1},{x:0,y:-1},{x:1,y:0},{x:-1,y:0},
+          {x:-ux,y:-uy}
+        ];
+        bestCore=null;bestCoreScore=Infinity;
+        for(i=0;i<coreDirections.length;i++){
+          coreCandidate={
+            x:firstFlightCombClamp(chosenPoint.x+coreDirections[i].x*distance,coreMinX,coreMaxX),
+            y:firstFlightCombClamp(chosenPoint.y+coreDirections[i].y*distance,coreMinY,coreMaxY)
+          };
+          collisionCount=firstFlightCombActorsOverlap(coreCandidate,coreHalfWidth,coreHalfHeight,
+            chosenPoint,chosenHalfWidth,chosenHalfHeight)?1:0;
+          if(targetPoint&&firstFlightCombActorsOverlap(coreCandidate,coreHalfWidth,coreHalfHeight,
+             targetPoint,targetHalfWidth,targetHalfHeight))collisionCount++;
+          minDistance=firstFlightCombPointDistance(coreCandidate,chosenPoint);
+          if(targetPoint)minDistance=Math.min(minDistance,
+            firstFlightCombPointDistance(coreCandidate,targetPoint));
+          score=collisionCount*1000000+i*1000-minDistance;
+          if(score<bestCoreScore){bestCoreScore=score;bestCore=coreCandidate;}
+        }
+        corePoint=bestCore;
+      }
+      flightStart=firstFlightCombHexEdge(corePoint,chosenPoint,coreRadius);
+      flightDx=chosenPoint.x-flightStart.x;flightDy=chosenPoint.y-flightStart.y;
+      flightLength=Math.sqrt(flightDx*flightDx+flightDy*flightDy)||1;
+      bow=Math.min(90,flightLength*0.33);
+      nx=-flightDy/flightLength;ny=flightDx/flightLength;
+      return {
+        width:width,height:height,
+        coreX:corePoint.x,coreY:corePoint.y,
+        flightStartX:flightStart.x,flightStartY:flightStart.y,
+        chosenX:chosenPoint.x,chosenY:chosenPoint.y,
+        targetX:targetPoint&&targetPoint.x,targetY:targetPoint&&targetPoint.y,
+        flightControlX:firstFlightCombClamp((flightStart.x+chosenPoint.x)/2+nx*bow,16,width-16),
+        flightControlY:firstFlightCombClamp((flightStart.y+chosenPoint.y)/2+ny*bow,16,height-16),
+        anchoredToBoard:useActual
+      };
+    }
     function announceFirstFlightCompleted(){
       if(!todayEl)return;
       var status=todayEl.querySelector('.td-status');
@@ -3389,10 +3645,98 @@
         }
       }
     }
+    function clearFirstFlightPresentation(attempt){
+      var scheduler=attempt&&attempt.presentationScheduler;
+      var timers=attempt&&attempt.presentationTimers||[],i;
+      for(i=0;i<timers.length;i++){
+        try{
+          if(scheduler&&typeof scheduler.cancel==='function')scheduler.cancel(timers[i]);
+          else window.clearTimeout(timers[i]);
+        }catch(e){}
+      }
+      if(attempt)attempt.presentationTimers=[];
+      if(attempt&&attempt.presentationVisibility){
+        document.removeEventListener('visibilitychange',attempt.presentationVisibility);
+        attempt.presentationVisibility=null;
+      }
+      if(attempt&&attempt.ceremonyRoot&&attempt.presentationAnimationCancel){
+        attempt.ceremonyRoot.removeEventListener('animationcancel',attempt.presentationAnimationCancel);
+        attempt.presentationAnimationCancel=null;
+      }
+      document.documentElement.classList.remove('ff-comb-active');
+    }
+    function scheduleFirstFlightPresentation(attempt,callback,delay){
+      var scheduler=attempt.presentationScheduler;
+      var timer;
+      try{
+        timer=scheduler&&typeof scheduler.schedule==='function'?
+          scheduler.schedule(callback,delay):window.setTimeout(callback,delay);
+      }catch(e){return false;}
+      if(timer===undefined||timer===null)return false;
+      attempt.presentationTimers.push(timer);
+      return true;
+    }
+    function decorateFirstFlightRewardSummary(summary,model,reducedMotion){
+      if(!summary)return;
+      summary.classList.add('ff-comb-register');
+      summary.classList.add(model.unlocked?'ff-comb-register-awakened':'ff-comb-register-no-unlock');
+      if(reducedMotion)summary.classList.add('ff-comb-reduced');
+    }
+    function firstFlightCombMotionPathSupported(){
+      try{
+        return !!(window.CSS&&typeof window.CSS.supports==='function'&&
+          window.CSS.supports('offset-path','path("M 0 0 L 1 1")'));
+      }catch(e){return false;}
+    }
+    function focusFirstFlightRewardSummary(summary){
+      var heading=summary&&summary.querySelector('#ff-reward-title');
+      if(heading&&heading.focus)heading.focus();
+      else if(summary&&summary.focus)summary.focus();
+    }
+    function mountPreparedFirstFlightRewardSummary(attempt,model,html,reducedMotion){
+      if(!todayEl||!html||activeFirstFlightAttempt!==attempt||attempt.disposed)return false;
+      todayEl.innerHTML=html;
+      var summaries=todayEl.querySelectorAll('.ff-reward-summary[data-first-flight-reward]');
+      if(summaries.length!==1)return false;
+      decorateFirstFlightRewardSummary(summaries[0],model,reducedMotion);
+      attempt.phase='summary';
+      focusFirstFlightRewardSummary(summaries[0]);
+      return true;
+    }
+    function finalizeFirstFlightCeremony(attempt,reason){
+      var ceremony,summary,summaries;
+      if(activeFirstFlightAttempt!==attempt||attempt.disposed)return false;
+      if(attempt.phase==='summary')return true;
+      if(attempt.phase!=='ceremony')return false;
+      ceremony=attempt.ceremonyRoot;
+      summary=ceremony&&ceremony.querySelector('.ff-reward-summary[data-first-flight-reward]');
+      clearFirstFlightPresentation(attempt);
+      if(summary&&summary.parentNode)summary.parentNode.removeChild(summary);
+      todayEl.textContent='';
+      if(summary)todayEl.appendChild(summary);
+      else if(attempt.summaryHTML)todayEl.innerHTML=attempt.summaryHTML;
+      summaries=todayEl.querySelectorAll('.ff-reward-summary[data-first-flight-reward]');
+      if(summaries.length!==1){
+        attempt.ceremonyRoot=null;
+        disposeFirstFlightAttempt(attempt);
+        renderCompletedFirstFlightBase();
+        announceFirstFlightCompleted();
+        return false;
+      }
+      attempt.ceremonyRoot=null;
+      attempt.phase='summary';
+      decorateFirstFlightRewardSummary(summaries[0],attempt.rewardModel,false);
+      summaries[0].setAttribute('data-comb-finalized',reason||'complete');
+      focusFirstFlightRewardSummary(summaries[0]);
+      return true;
+    }
     function disposeFirstFlightAttempt(attempt){
       if(!attempt)return;
+      clearFirstFlightPresentation(attempt);
       attempt.phase='dismissed';
       attempt.disposed=true;
+      attempt.ceremonyRoot=null;
+      attempt.finalize=null;
       if(activeFirstFlightAttempt===attempt)activeFirstFlightAttempt=null;
     }
     function mountFirstFlightRewardSummary(attempt,model){
@@ -3405,16 +3749,69 @@
         var html=B.experimentUI.renderFirstFlightRewardSummary(model);
         if(activeFirstFlightAttempt!==attempt||attempt.disposed)return null;
         if(!html||!todayEl)return false;
-        todayEl.innerHTML=html;
-        var summaries=todayEl.querySelectorAll('.ff-reward-summary[data-first-flight-reward]');
-        if(summaries.length!==1)return false;
-        attempt.phase='summary';
-        var heading=summaries[0].querySelector('#ff-reward-title');
-        if(heading&&heading.focus)heading.focus();
-        else summaries[0].focus();
+        attempt.summaryHTML=html;
+        if(reduce)return mountPreparedFirstFlightRewardSummary(attempt,model,html,true);
+        if(typeof B.experimentUI.renderFirstFlightCombCeremony!=='function'||
+           typeof B.experimentUI.firstFlightCombTimeline!=='function'||
+           !firstFlightCombMotionPathSupported()){
+          return mountPreparedFirstFlightRewardSummary(attempt,model,html,false);
+        }
+        var geometry=firstFlightCombGeometry(model);
+        var ceremonyHTML=geometry&&B.experimentUI.renderFirstFlightCombCeremony(
+          model,geometry,html);
+        if(activeFirstFlightAttempt!==attempt||attempt.disposed)return null;
+        if(!ceremonyHTML)return mountPreparedFirstFlightRewardSummary(attempt,model,html,false);
+        todayEl.innerHTML=ceremonyHTML;
+        var ceremonies=todayEl.querySelectorAll('[data-first-flight-comb]');
+        var previewSummaries=todayEl.querySelectorAll(
+          '[data-first-flight-comb] .ff-reward-summary[data-first-flight-reward]');
+        if(ceremonies.length!==1||previewSummaries.length!==1){
+          return mountPreparedFirstFlightRewardSummary(attempt,model,html,false);
+        }
+        attempt.ceremonyRoot=ceremonies[0];
+        attempt.phase='ceremony';
+        attempt.presentationScheduler=window.__BHIVE_FIRST_FLIGHT_SCHEDULER__&&
+          typeof window.__BHIVE_FIRST_FLIGHT_SCHEDULER__.schedule==='function'&&
+          typeof window.__BHIVE_FIRST_FLIGHT_SCHEDULER__.cancel==='function'?
+          window.__BHIVE_FIRST_FLIGHT_SCHEDULER__:null;
+        attempt.finalize=function(reason){return finalizeFirstFlightCeremony(attempt,reason);};
+        document.documentElement.classList.add('ff-comb-active');
+        attempt.ceremonyRoot.classList.add('ff-comb-has-hush');
+        attempt.presentationVisibility=function(){
+          if(document.hidden||document.visibilityState==='hidden'||
+             window.__BHIVE_FIRST_FLIGHT_TEST_HIDDEN__===true)attempt.finalize('background');
+        };
+        document.addEventListener('visibilitychange',attempt.presentationVisibility);
+        attempt.presentationAnimationCancel=function(){attempt.finalize('animation-failure');};
+        attempt.ceremonyRoot.addEventListener(
+          'animationcancel',attempt.presentationAnimationCancel);
+        var timeline=B.experimentUI.firstFlightCombTimeline(!!model.unlocked);
+        if(!timeline||!Array.isArray(timeline.events)||
+           typeof timeline.watchdog!=='number')return attempt.finalize('timeline-failure');
+        var scheduled=true;
+        timeline.events.forEach(function(event){
+          if(!scheduled||event.phase==='hush')return;
+          scheduled=scheduleFirstFlightPresentation(attempt,function(){
+            if(activeFirstFlightAttempt!==attempt||attempt.disposed||attempt.phase!=='ceremony')return;
+            if(event.phase==='settled'){attempt.finalize('normal');return;}
+            attempt.ceremonyRoot.setAttribute('data-comb-phase',event.phase);
+            attempt.ceremonyRoot.classList.add('ff-comb-has-'+event.phase);
+          },event.at);
+        });
+        if(scheduled)scheduled=scheduleFirstFlightPresentation(attempt,function(){
+          if(activeFirstFlightAttempt===attempt&&!attempt.disposed&&attempt.phase==='ceremony'){
+            attempt.finalize('watchdog');
+          }
+        },timeline.watchdog);
+        if(!scheduled)return attempt.finalize('schedule-failure');
         return true;
       }catch(e){
         console.warn('hive:',e);
+        clearFirstFlightPresentation(attempt);
+        if(activeFirstFlightAttempt===attempt&&!attempt.disposed&&attempt.summaryHTML){
+          try{return mountPreparedFirstFlightRewardSummary(
+            attempt,model,attempt.summaryHTML,false);}catch(ignore){}
+        }
         return false;
       }
     }
@@ -3635,6 +4032,14 @@
       submitFirstFlightAnswer(form);
     });
     if(todayEl)todayEl.addEventListener('click',function(ev){
+      var skipComb=ev.target&&ev.target.closest?
+        ev.target.closest('.ff-comb-skip'):null;
+      if(skipComb){
+        var skipAttempt=activeFirstFlightAttempt;
+        if(skipAttempt&&!skipAttempt.disposed&&skipAttempt.phase==='ceremony'&&
+           typeof skipAttempt.finalize==='function')skipAttempt.finalize('skip');
+        return;
+      }
       var enterHive=ev.target&&ev.target.closest?
         ev.target.closest('.ff-enter-hive'):null;
       if(enterHive){
@@ -3819,8 +4224,34 @@
         if(!isNaN(idx))select(idx);
       }
     });
+    var firstFlightCombResizeTimer=null;
+    function refreshVisibleFirstFlightCombResting(){
+      var energy=document.getElementById('energy');
+      if(energy&&energy.classList.contains('screen-on'))renderFirstFlightCombResting();
+    }
+    function scheduleFirstFlightCombRestingRefresh(){
+      if(firstFlightCombResizeTimer!==null)window.clearTimeout(firstFlightCombResizeTimer);
+      firstFlightCombResizeTimer=window.setTimeout(function(){
+        firstFlightCombResizeTimer=null;
+        refreshVisibleFirstFlightCombResting();
+      },60);
+    }
+    document.addEventListener('bhive:screen-shown',function(ev){
+      if(ev.detail&&ev.detail.id==='energy')refreshVisibleFirstFlightCombResting();
+    });
+    window.addEventListener('resize',scheduleFirstFlightCombRestingRefresh);
+    window.addEventListener('orientationchange',scheduleFirstFlightCombRestingRefresh);
     window.addEventListener('pagehide',function(){
-      if(activeFirstFlightAttempt)disposeFirstFlightAttempt(activeFirstFlightAttempt);
+      if(firstFlightCombResizeTimer!==null){
+        window.clearTimeout(firstFlightCombResizeTimer);firstFlightCombResizeTimer=null;
+      }
+      if(!activeFirstFlightAttempt)return;
+      if(activeFirstFlightAttempt.phase==='ceremony'&&
+         typeof activeFirstFlightAttempt.finalize==='function'){
+        activeFirstFlightAttempt.finalize('pagehide');
+      }else if(activeFirstFlightAttempt.phase!=='summary'){
+        disposeFirstFlightAttempt(activeFirstFlightAttempt);
+      }
     });
     var mlk=document.getElementById('hive-manual-link');
     if(mlk)mlk.addEventListener('click',function(){
