@@ -1,9 +1,9 @@
-/* Test-only legacy beta worker used to verify the v94-to-Step-3E-A upgrade. */
-var LEGACY_CACHE = 'brainmap-v94-beta10c-first-flight-step3d-predeploy1';
+/* Test-only legacy beta worker used to verify the v95-to-First-Honey upgrade. */
+var LEGACY_CACHE = 'brainmap-v95-beta10c-first-flight-step3e-a-predeploy1';
 var LEGACY_ASSETS = [
-  '../css/app.css?v=beta10c-first-flight-step3d-predeploy1',
-  '../js/ui-experiments.js?v=beta10c-first-flight-step3d-predeploy1',
-  '../js/app-main.js?v=beta10c-first-flight-step3d-predeploy1'
+  '../css/app.css?v=beta10c-first-flight-step3e-a-predeploy1',
+  '../js/ui-experiments.js?v=beta10c-first-flight-step3e-a-predeploy1',
+  '../js/app-main.js?v=beta10c-first-flight-step3e-a-predeploy1'
 ];
 
 self.addEventListener('install', function (event) {
@@ -11,7 +11,7 @@ self.addEventListener('install', function (event) {
     caches.open(LEGACY_CACHE).then(function (cache) {
       return Promise.all(LEGACY_ASSETS.map(function (asset) {
         var url = new URL(asset, self.location.href).href;
-        return cache.put(url, new Response('v94-stale:' + asset, {
+        return cache.put(url, new Response('v95-stale:' + asset, {
           headers: {'Content-Type': 'text/plain'}
         }));
       }));

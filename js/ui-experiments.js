@@ -56,24 +56,24 @@
     Object.freeze(FIRST_FLIGHT_COMB_DOMAIN_MAP);
   }
   var FIRST_FLIGHT_COMB_TIMELINES={
-    awakened:{stable:3200,watchdog:3900,events:[
-      {phase:'hush',at:0},{phase:'skip',at:100},{phase:'target',at:260},
-      {phase:'launch',at:320},{phase:'flight',at:420},{phase:'impact',at:940},
-      {phase:'impact-label',at:1040},{phase:'supply',at:1160},
-      {phase:'register',at:2820},{phase:'construct',at:1340},
-      {phase:'impact-clear',at:1460},{phase:'lock',at:1720},
-      {phase:'delivery',at:1860},{phase:'memory-one',at:2020},
-      {phase:'memory-two',at:2280},{phase:'crest',at:2520},
-      {phase:'signature',at:2720},{phase:'enter',at:3020},
-      {phase:'settled',at:3200}
+    awakened:{stable:5200,watchdog:6200,events:[
+      {phase:'hush',at:0},{phase:'skip',at:100},{phase:'target',at:220},
+      {phase:'launch',at:280},{phase:'flight',at:350},{phase:'impact',at:1050},
+      {phase:'impact-label',at:1130},{phase:'supply',at:1330},
+      {phase:'impact-clear',at:1500},{phase:'construct',at:1750},
+      {phase:'lock',at:3030},{phase:'delivery',at:3120},
+      {phase:'memory-one',at:3210},{phase:'memory-two',at:3630},
+      {phase:'crest',at:4050},{phase:'signature',at:4320},
+      {phase:'register',at:4700},{phase:'enter',at:5010},
+      {phase:'settled',at:5200}
     ]},
-    no_unlock:{stable:2620,watchdog:3200,events:[
-      {phase:'hush',at:0},{phase:'skip',at:100},{phase:'target',at:260},
-      {phase:'launch',at:320},{phase:'flight',at:420},{phase:'impact',at:940},
-      {phase:'impact-label',at:1040},{phase:'register',at:1300},
-      {phase:'impact-clear',at:1460},{phase:'receipts',at:1580},
-      {phase:'memory-one',at:1740},{phase:'memory-two',at:2080},
-      {phase:'enter',at:2420},{phase:'settled',at:2620}
+    no_unlock:{stable:3500,watchdog:4300,events:[
+      {phase:'hush',at:0},{phase:'skip',at:100},{phase:'target',at:220},
+      {phase:'launch',at:280},{phase:'flight',at:350},{phase:'impact',at:1050},
+      {phase:'impact-label',at:1130},{phase:'register',at:1330},
+      {phase:'impact-clear',at:1500},{phase:'receipts',at:1700},
+      {phase:'memory-one',at:2100},{phase:'memory-two',at:2520},
+      {phase:'enter',at:3000},{phase:'settled',at:3500}
     ]}
   };
 

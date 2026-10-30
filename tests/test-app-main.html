@@ -144,6 +144,39 @@
     var cac=combAnimationCancel.firstFlightComb,crf=combRenderFailure.firstFlightComb;
     var cph=combPagehide.firstFlightComb;
     var crm=combReduced.firstFlightComb,ce=combEnter.firstFlightComb;
+    function combMilestone(comb,phase){
+      return comb.milestones.filter(function(milestone){return milestone.phase===phase;})[0]||{};
+    }
+    function heldCombScene(comb){
+      return comb.overlayCount===1&&comb.summaryCount===0&&comb.allSummaryCount===1&&
+        comb.scenePhase==='settled'&&comb.sceneSettled&&comb.headingFocused&&
+        comb.focusAfterFinalize&&comb.summaryRole==='dialog'&&
+        comb.summaryAriaModal==='true'&&comb.summaryLabelledBy==='ff-reward-title'&&
+        comb.titleTabIndex===-1&&
+        comb.liveText==='First Flight complete. Two learnings kept.'&&
+        comb.liveRole==='status'&&comb.livePoliteness==='polite'&&comb.enterPresent&&
+        comb.registerSummary&&comb.finalPreviewAriaHidden===null&&!comb.finalPreviewInert&&
+        comb.finalPreviewPointerEvents==='auto'&&comb.finalSkipHidden&&
+        comb.activeMotionCount===0&&comb.perpetualMotionCount===0&&comb.focusContained&&
+        comb.overlayActive&&comb.finalPageScrollLocked;
+    }
+    function heldCombFacts(comb){
+      return {
+        overlay:comb.overlayCount,directSummary:comb.summaryCount,allSummary:comb.allSummaryCount,
+        phase:comb.scenePhase,settled:comb.sceneSettled,heading:comb.headingFocused,
+        focus:comb.focusAfterFinalize,focusContained:comb.focusContained,
+        role:comb.summaryRole,modal:comb.summaryAriaModal,label:comb.summaryLabelledBy,
+        tabIndex:comb.titleTabIndex,live:comb.liveText,liveRole:comb.liveRole,
+        politeness:comb.livePoliteness,enter:comb.enterPresent,register:comb.registerSummary,
+        ariaHidden:comb.finalPreviewAriaHidden,inert:comb.finalPreviewInert,
+        pointer:comb.finalPreviewPointerEvents,skipHidden:comb.finalSkipHidden,
+        motion:comb.activeMotionCount,maxMotion:comb.maxActiveMotionDuration,
+        perpetual:comb.perpetualMotionCount,active:comb.overlayActive,locked:comb.finalPageScrollLocked
+      };
+    }
+    var caFlight=combMilestone(ca,'impact'),caSupply=combMilestone(ca,'supply');
+    var caConstruct=combMilestone(ca,'construct'),caLock=combMilestone(ca,'lock');
+    var caMemory=combMilestone(ca,'memory-one'),caCrest=combMilestone(ca,'crest');
     test('app-main loads without an uncaught JavaScript error',
       uncaught.length === 0 && allReports.every(function(report){return report.errors.length===0;}),
       uncaught.concat.apply(uncaught,allReports.map(function(report){return report.errors;})).join('; '));
@@ -644,17 +677,26 @@
         completionPrivateCopy.firstFlightFlow.dismissedWithoutMutation);
     test('First Honey exposes the exact awakened and no-unlock canonical timelines',
       ca.timelinePhases.join('|')===
-        'hush|skip|target|launch|flight|impact|impact-label|supply|construct|impact-clear|lock|delivery|memory-one|memory-two|crest|signature|register|enter|settled'&&
-        ca.stableMs===3200&&ca.watchdogMs===3900&&
+        'hush|skip|target|launch|flight|impact|impact-label|supply|impact-clear|construct|lock|delivery|memory-one|memory-two|crest|signature|register|enter|settled'&&
+        ca.stableMs===5200&&ca.watchdogMs===6200&&
         cn.timelinePhases.join('|')===
         'hush|skip|target|launch|flight|impact|impact-label|register|impact-clear|receipts|memory-one|memory-two|enter|settled'&&
-        cn.stableMs===2620&&cn.watchdogMs===3200);
+        cn.stableMs===3500&&cn.watchdogMs===4300&&
+        caFlight.workerAnimationDuration==='0.7s, 0.81s'&&
+        caFlight.workerPoseAnimationDuration==='0.81s'&&
+        caFlight.flightTrailTransitionDuration==='0.7s'&&
+        caSupply.supplyTransitionDuration==='0.42s'&&
+        caConstruct.wallTransitionDuration==='0.24s'&&
+        caConstruct.wallTransitionDelays.join('|')==='0s|0.2s|0.4s|0.6s|0.8s|1s'&&
+        caLock.lockAnimationDuration==='0.25s'&&
+        caMemory.memoryFillTransitionDuration==='0.32s'&&
+        caCrest.crestTransitionDuration==='0.28s');
     test('awakened First Honey sequences impact before supply, construction, memories and register',
       ca.phaseOrder.join('|')===
-        'hush|skip|impact|supply|construct|lock|delivery|memory-one|memory-two|crest|signature|register|enter|summary'&&
+        'hush|skip|impact|supply|construct|lock|delivery|memory-one|memory-two|crest|signature|register|enter|settled'&&
         ca.ceremonyVariant==='awakened'&&ca.ceremonyPhase==='hush'&&
         ca.initialTargetInactive&&ca.initialTargetCount===1&&ca.initialSupplyCount===2&&
-        ca.initialBuildCount===6);
+        ca.initialBuildCount===6,JSON.stringify(ca.phaseOrder));
     test('First Honey geometry launches from the Core edge with a clockwise bow and no actor overlap',
       [ca,cas,cn].every(function(comb){
         return !comb.actorsOverlap&&comb.actorCentersCanonical&&
@@ -711,54 +753,80 @@
         overlap:ca.actorsOverlap,stage:ca.stageFitsViewport,stageMetrics:ca.stageMetrics,locked:ca.pageScrollLocked,
         summary:ca.summaryFitsWidth,enter:ca.enterInViewport,height:ca.registerHeightBounded,
         scroll:ca.registerScrollContained}}));
-    test('normal awakened and no-unlock completion leave one exact manual register focused',
+    test('normal awakened and no-unlock completion hold the complete final scene and manual register',
       [ca,cn].every(function(comb){
-        return comb.overlayCount===0&&comb.summaryCount===1&&comb.allSummaryCount===1&&
-          comb.finalizedReason==='normal'&&comb.headingFocused&&comb.focusAfterFinalize&&
-          comb.summaryRole==='dialog'&&comb.summaryLabelledBy==='ff-reward-title'&&
-          comb.titleTabIndex===-1&&comb.liveText==='First Flight complete. Two learnings kept.'&&
-          comb.liveRole==='status'&&comb.livePoliteness==='polite'&&comb.enterPresent&&
-          comb.registerSummary;
-      })&&ca.rewardCardCount===3&&cn.rewardCardCount===2);
+        return heldCombScene(comb)&&comb.finalizedReason==='normal';
+      })&&ca.rewardCardCount===3&&cn.rewardCardCount===2&&
+        ca.finalTargetCount===1&&ca.finalSupplyCount===2&&ca.finalWallCount===6&&
+        ca.finalMemoryCount===2&&ca.finalCrestCount===1&&ca.finalSignatureCount===1&&
+        cn.finalTargetCount===0&&cn.finalSupplyCount===0&&cn.finalWallCount===0&&
+        cn.finalMemoryCount===0&&cn.finalCrestCount===0&&cn.finalSignatureCount===0,
+      JSON.stringify({awakened:heldCombFacts(ca),noUnlock:heldCombFacts(cn)}));
+    test('settled scenes survive beyond the former watchdog with no timers or active motion',
+      [ca,cn,cs,csi,csb,cb,cw,cac,cph].every(function(comb){
+        return comb.heldPastWatchdog&&comb.schedulerPendingAfter.length===0&&
+          comb.activeMotionCount===0;
+      }));
     test('temporary ceremony visuals stay decorative, private-copy free and keyboard-skippable',
       [ca,cn].every(function(comb){
         return comb.stageAriaHidden==='true'&&comb.previewAriaHidden==='true'&&comb.previewInert&&
           !comb.stageHasPrivateCopy&&comb.stageCardCount===0&&comb.skipPresent&&
           comb.skipWidth>=44&&comb.skipHeight>=44;
-      }));
+      }),JSON.stringify({awakened:{stage:ca.stageAriaHidden,preview:ca.previewAriaHidden,
+        inert:ca.previewInert,privateCopy:ca.stageHasPrivateCopy,cards:ca.stageCardCount,
+        skip:ca.skipPresent,size:[ca.skipWidth,ca.skipHeight]},
+        noUnlock:{stage:cn.stageAriaHidden,preview:cn.previewAriaHidden,inert:cn.previewInert,
+          privateCopy:cn.stageHasPrivateCopy,cards:cn.stageCardCount,skip:cn.skipPresent,
+          size:[cn.skipWidth,cn.skipHeight]}}));
     test('skip is safe during hush, impact and construction and repeated activation is harmless',
       [[cs,'hush'],[csi,'impact'],[csb,'build']].every(function(pair){
         var comb=pair[0];
         return comb.skipStage===pair[1]&&comb.finalizedReason==='skip'&&
-          comb.overlayCount===0&&comb.summaryCount===1&&comb.summaryNotDismissed&&
+          heldCombScene(comb)&&comb.summaryNotDismissed&&
           comb.skipRepeatedHarmless&&comb.schedulerPendingAfter.length===0&&
           comb.stateStableAfterDomain&&comb.storedStableAfterDomain;
-      }));
+      }),JSON.stringify({hush:heldCombFacts(cs),impact:heldCombFacts(csi),
+        build:heldCombFacts(csb)}));
     test('backgrounding, watchdog and animation cancellation converge on the same safe final state',
       cb.backgroundFired&&cb.finalizedReason==='background'&&
         cw.watchdogFired&&cw.finalizedReason==='watchdog'&&
         cac.animationCancelFired&&cac.finalizedReason==='animation-failure'&&
         [cb,cw,cac].every(function(comb){
-          return comb.overlayCount===0&&comb.summaryCount===1&&comb.headingFocused&&
+          return heldCombScene(comb)&&
             comb.schedulerPendingAfter.length===0&&comb.stateStableAfterDomain&&
             comb.storedStableAfterDomain;
-        }));
+        }),JSON.stringify({background:heldCombFacts(cb),watchdog:heldCombFacts(cw),
+          animationCancel:heldCombFacts(cac)}));
     test('BFCache pagehide finalizes safely and restored ENTER remains live and presentation-only',
-      cph.pagehideFired&&cph.finalizedReason==='pagehide'&&cph.overlayCount===0&&
-        cph.summaryCount===1&&cph.headingFocused&&cph.schedulerPendingAfter.length===0&&
-        cph.pagehideEnterLive&&cph.stateStableAfterDomain&&cph.storedStableAfterDomain);
+      cph.pagehideFired&&cph.finalizedReason==='pagehide'&&heldCombScene(cph)&&
+        cph.repeatedFinalizeHarmless&&cph.schedulerPendingAfter.length===0&&
+        cph.pagehideEnterLive&&cph.stateStableAfterDomain&&cph.storedStableAfterDomain,
+      JSON.stringify(heldCombFacts(cph)));
     test('ceremony setup failure falls back to the complete plain summary without losing rewards',
       crf.plainSummaryFallback&&crf.combRenderCalls===1&&crf.overlayCount===0&&
         crf.summaryCount===1&&crf.finalizedReason===null&&crf.headingFocused&&
+        crf.summaryAriaModal==='true'&&crf.focusContained&&crf.enterPresent&&
+        crf.heldPastWatchdog&&crf.schedulerPendingAfter.length===0&&
+        crf.activeMotionCount===0&&crf.perpetualMotionCount===0&&
         crf.restCount===1&&crf.domainEffectsCommitted);
     test('reduced motion bypasses all ceremony actors and staged delays with one complete register',
       crm.reducedMotion&&!crm.normalMotion&&crm.reducedImmediate&&crm.combRenderCalls===0&&
         crm.overlayCount===0&&crm.summaryCount===1&&crm.reducedSummary&&
-        crm.schedulerDelays.length===0&&crm.schedulerPendingAfter.length===0&&
+        crm.summaryAriaModal==='true'&&crm.focusContained&&crm.enterPresent&&
+        crm.heldPastWatchdog&&crm.schedulerDelays.length===0&&
+        crm.schedulerPendingAfter.length===0&&crm.perpetualMotionCount===0&&
+        crm.activeMotionCount<=1&&crm.maxActiveMotionDuration<=160&&
         crm.restCount===1&&crm.domainEffectsCommitted);
+    test('every terminal presentation enters once and repeated entry stays presentation-only',
+      [ca,cas,caw,cn,cs,csi,csb,cb,cw,cac,cph,crf,crm,ce].every(function(comb){
+        return comb.enterDismissedWithoutMutation&&comb.repeatedEntryHarmless&&
+          comb.stateStableAfterDomain&&comb.storedStableAfterDomain;
+      }));
     test('ENTER THE HIVE stays manual and dismisses only presentation after normal animation',
-      ce.finalizedReason==='normal'&&ce.summaryCount===1&&ce.enterPresent&&
-        ce.enterDismissedWithoutMutation&&ce.stateStableAfterDomain&&ce.storedStableAfterDomain);
+      ce.finalizedReason==='normal'&&heldCombScene(ce)&&ce.enterDismissedWithoutMutation&&
+        ce.repeatedEntryHarmless&&ce.stateStableAfterDomain&&ce.storedStableAfterDomain,
+      JSON.stringify({held:heldCombFacts(ce),dismissed:ce.enterDismissedWithoutMutation,
+        repeated:ce.repeatedEntryHarmless}));
     test('ordinary experiment completion remains on the existing app-main UI path',
       normalExperiment.normalExperiment.activeRendered&&
         normalExperiment.normalExperiment.outcomeControl&&

@@ -1076,6 +1076,10 @@
         var pulseOne=ceremony&&ceremony.querySelector('.ff-comb-chosen-pulse-one');
         var pulseTwo=ceremony&&ceremony.querySelector('.ff-comb-chosen-pulse-two');
         var flightWorker=ceremony&&ceremony.querySelector('.ff-comb-worker');
+        var wallNodes=ceremony&&ceremony.querySelectorAll('.ff-comb-wall');
+        var buildSvg=build&&build.querySelector('svg');
+        var memoryFill=ceremony&&ceremony.querySelector('.ff-comb-memory-one .ff-comb-memory-fill');
+        var crest=ceremony&&ceremony.querySelector('.ff-comb-crest');
         return {
           time:time,
           phase:ceremony?ceremony.getAttribute('data-comb-phase'):
@@ -1144,8 +1148,22 @@
           pulseTwoStroke:pulseTwo?getComputedStyle(pulseTwo).strokeWidth:'',
           workerOffsetRotate:flightWorker?getComputedStyle(flightWorker).offsetRotate:'',
           workerAnimation:flightWorker?getComputedStyle(flightWorker).animationName:'',
+          workerAnimationDuration:flightWorker?getComputedStyle(flightWorker).animationDuration:'',
           workerPoseAnimation:flightWorker&&flightWorker.querySelector('svg')?
             getComputedStyle(flightWorker.querySelector('svg')).animationName:'',
+          workerPoseAnimationDuration:flightWorker&&flightWorker.querySelector('svg')?
+            getComputedStyle(flightWorker.querySelector('svg')).animationDuration:'',
+          flightTrailTransitionDuration:flightPath?getComputedStyle(flightPath).transitionDuration:'',
+          supplyTransitionDuration:supplyPath?getComputedStyle(supplyPath).transitionDuration:'',
+          wallTransitionDuration:wallNodes&&wallNodes.length?
+            getComputedStyle(wallNodes[0]).transitionDuration:'',
+          wallTransitionDelays:wallNodes?Array.prototype.map.call(wallNodes,function(wall){
+            return getComputedStyle(wall).transitionDelay;
+          }):[],
+          lockAnimationDuration:buildSvg?getComputedStyle(buildSvg).animationDuration:'',
+          memoryFillTransitionDuration:memoryFill?
+            getComputedStyle(memoryFill).transitionDuration:'',
+          crestTransitionDuration:crest?getComputedStyle(crest).transitionDuration:'',
           viewportWidth:document.documentElement.clientWidth,
           viewportHeight:document.documentElement.clientHeight,
           stageFitsViewport:!!stageRect&&getComputedStyle(stage).position==='fixed'&&
@@ -1157,9 +1175,39 @@
         };
       }
       function ffCombFinalSnapshot(){
-        var summary=document.querySelector('#hive-today > .ff-reward-summary[data-first-flight-reward]');
+        var ceremony=document.querySelector('#hive-today [data-first-flight-comb]');
+        var preview=ceremony&&ceremony.querySelector('.ff-comb-register-preview');
+        var summary=document.querySelector('#hive-today .ff-reward-summary[data-first-flight-reward]');
         var live=summary&&summary.querySelector('.ff-reward-live');
         var title=summary&&summary.querySelector('#ff-reward-title');
+        var skip=ceremony&&ceremony.querySelector('.ff-comb-skip');
+        var variant=ceremony&&ceremony.getAttribute('data-comb-variant');
+        var finalPhases=variant==='awakened'?
+          ['hush','skip','target','launch','flight','impact','impact-label','supply',
+            'impact-clear','construct','lock','delivery','memory-one','memory-two','crest',
+            'signature','register','enter','settled']:
+          ['hush','skip','target','launch','flight','impact','impact-label','register',
+            'impact-clear','receipts','memory-one','memory-two','enter','settled'];
+        var activeMotions=[],activeMotionDurations=[],perpetualMotionCount=0;
+        var motionRoot=ceremony||summary;
+        var motionNodes=motionRoot?[motionRoot].concat(Array.prototype.slice.call(
+          motionRoot.querySelectorAll('*'))):[];
+        motionNodes.forEach(function(node){
+          var animations=[];
+          try{
+            if(typeof node.getAnimations==='function')animations=node.getAnimations();
+          }catch(ignore){}
+          animations.forEach(function(animation){
+            if(animation.playState==='running'||animation.playState==='pending'){
+              activeMotions.push(animation);
+              var timing=animation.effect&&typeof animation.effect.getTiming==='function'?
+                animation.effect.getTiming():{};
+              var duration=Number(timing.duration);
+              activeMotionDurations.push(isFinite(duration)?duration:0);
+              if(timing.iterations===Infinity)perpetualMotionCount++;
+            }
+          });
+        });
         var rest=document.querySelector('#hivesvg .ff-comb-rest');
         var restFrame=rest&&rest.parentNode&&rest.parentNode.querySelector('.hive-frame');
         var restFrameRect=restFrame&&restFrame.getBoundingClientRect();
@@ -1191,12 +1239,36 @@
             document.activeElement===summary||document.activeElement===summary.querySelector('#ff-reward-title')),
           headingFocused:!!summary&&document.activeElement===summary.querySelector('#ff-reward-title'),
           summaryRole:summary&&summary.getAttribute('role'),
+          summaryAriaModal:summary&&summary.getAttribute('aria-modal'),
           summaryLabelledBy:summary&&summary.getAttribute('aria-labelledby'),
           titleTabIndex:title&&title.tabIndex,
           liveText:live&&live.textContent||'',
           liveRole:live&&live.getAttribute('role'),
           livePoliteness:live&&live.getAttribute('aria-live'),
           enterPresent:!!(summary&&summary.querySelector('.ff-enter-hive')),
+          scenePhase:ceremony&&ceremony.getAttribute('data-comb-phase'),
+          sceneSettled:!!ceremony&&ceremony.classList.contains('ff-comb-is-settled')&&
+            finalPhases.every(function(phase){
+              return ceremony.classList.contains('ff-comb-has-'+phase);
+            }),
+          finalTargetCount:ceremony?ceremony.querySelectorAll('.ff-comb-build').length:0,
+          finalSupplyCount:ceremony?ceremony.querySelectorAll(
+            '.ff-comb-supply-line,.ff-comb-supply-bead').length:0,
+          finalWallCount:ceremony?ceremony.querySelectorAll('.ff-comb-wall').length:0,
+          finalMemoryCount:ceremony?ceremony.querySelectorAll('.ff-comb-memory').length:0,
+          finalCrestCount:ceremony?ceremony.querySelectorAll('.ff-comb-crest').length:0,
+          finalSignatureCount:ceremony?ceremony.querySelectorAll('[data-comb-signature]').length:0,
+          finalPreviewAriaHidden:preview&&preview.getAttribute('aria-hidden'),
+          finalPreviewInert:!!preview&&preview.hasAttribute('inert'),
+          finalPreviewPointerEvents:preview&&getComputedStyle(preview).pointerEvents,
+          finalSkipHidden:!!skip&&skip.hidden&&skip.disabled&&skip.tabIndex===-1,
+          activeMotionCount:activeMotions.length,
+          maxActiveMotionDuration:activeMotionDurations.length?
+            Math.max.apply(Math,activeMotionDurations):0,
+          perpetualMotionCount:perpetualMotionCount,
+          overlayActive:document.documentElement.classList.contains('ff-comb-active'),
+          finalPageScrollLocked:getComputedStyle(document.documentElement).overflow==='hidden'&&
+            getComputedStyle(document.body).overflow==='hidden',
           reducedSummary:!!summary&&summary.classList.contains('ff-comb-reduced'),
           registerSummary:!!summary&&summary.classList.contains('ff-comb-register'),
           rewardCardCount:summary?summary.querySelectorAll('.ff-reward-card').length:0,
@@ -2218,6 +2290,7 @@
         var combMilestones=[combInitial];
         var combSkipRepeatedHarmless=null,combSkipStage=null,combBackgroundFired=false;
         var combWatchdogFired=false,combAnimationCancelFired=false,combPagehideFired=false;
+        var combRepeatedFinalizeHarmless=null;
         function combAdvance(times){
           times.forEach(function(time){
             if(combScheduler)combScheduler.advanceTo(time);
@@ -2226,25 +2299,35 @@
         }
         if(scenario==='comb-awakened'||scenario==='comb-awakened-small'||
            scenario==='comb-awakened-wide'||scenario==='comb-enter'){
-          combAdvance([100,940,1160,1340,1720,1860,2020,2280,2520,2720,2820,3020,3200]);
+          combAdvance([100,1050,1330,1750,3030,3120,3210,3630,4050,4320,4700,5010,5200]);
         }else if(scenario==='comb-no-unlock'){
-          combAdvance([100,260,320,420,940,1040,1300,1460,1580,1740,2080,2420,2620]);
+          combAdvance([100,220,280,350,1050,1130,1330,1500,1700,2100,2520,3000,3500]);
         }else if(scenario==='comb-skip'||scenario==='comb-skip-impact'||
                  scenario==='comb-skip-build'){
           if(scenario==='comb-skip-impact'){
             combSkipStage='impact';
-            combAdvance([940]);
+            combAdvance([1050]);
           }else if(scenario==='comb-skip-build'){
             combSkipStage='build';
-            combAdvance([1720]);
+            combAdvance([2250]);
           }else{
             combSkipStage='hush';
           }
           var combSkipButton=document.querySelector('#hive-today .ff-comb-skip');
-          if(combSkipButton)combSkipButton.click();
+          if(combSkipButton)combSkipButton.dispatchEvent(new MouseEvent('click',{
+            bubbles:true,cancelable:true,detail:0
+          }));
           var combAfterFirstSkip=ffCompletionSnapshot();
-          if(combSkipButton)combSkipButton.click();
-          combSkipRepeatedHarmless=combAfterFirstSkip===ffCompletionSnapshot();
+          var combRootAfterFirstSkip=document.querySelector('#hive-today [data-first-flight-comb]');
+          var combSummaryAfterFirstSkip=document.querySelector(
+            '#hive-today .ff-reward-summary[data-first-flight-reward]');
+          if(combSkipButton)combSkipButton.dispatchEvent(new MouseEvent('click',{
+            bubbles:true,cancelable:true,detail:0
+          }));
+          combSkipRepeatedHarmless=combAfterFirstSkip===ffCompletionSnapshot()&&
+            combRootAfterFirstSkip===document.querySelector('#hive-today [data-first-flight-comb]')&&
+            combSummaryAfterFirstSkip===document.querySelector(
+              '#hive-today .ff-reward-summary[data-first-flight-reward]');
           combMilestones.push(ffCombMilestone('skip'));
         }else if(scenario==='comb-background'){
           window.__BHIVE_FIRST_FLIGHT_TEST_HIDDEN__=true;
@@ -2263,42 +2346,89 @@
           }
           combMilestones.push(ffCombMilestone('animationcancel'));
         }else if(scenario==='comb-pagehide'){
-          combAdvance([940]);
+          combAdvance([1050]);
           var combPagehideEvent=new Event('pagehide');
           try{Object.defineProperty(combPagehideEvent,'persisted',{value:true});}catch(ignore){}
           window.dispatchEvent(combPagehideEvent);
           window.dispatchEvent(new Event('pageshow'));
           combPagehideFired=true;
+          var combRootAfterPagehide=document.querySelector('#hive-today [data-first-flight-comb]');
+          var combSummaryAfterPagehide=document.querySelector(
+            '#hive-today .ff-reward-summary[data-first-flight-reward]');
+          var combStateAfterPagehide=ffCompletionSnapshot();
+          var combStoredAfterPagehide=localStorage.getItem(storageKey);
+          window.dispatchEvent(combPagehideEvent);
+          window.dispatchEvent(new Event('pageshow'));
+          combRepeatedFinalizeHarmless=
+            combRootAfterPagehide===document.querySelector('#hive-today [data-first-flight-comb]')&&
+            combSummaryAfterPagehide===document.querySelector(
+              '#hive-today .ff-reward-summary[data-first-flight-reward]')&&
+            combStateAfterPagehide===ffCompletionSnapshot()&&
+            combStoredAfterPagehide===localStorage.getItem(storageKey);
           combMilestones.push(ffCombMilestone('pagehide'));
         }
         var combFinal=ffCombFinalSnapshot();
-        var combEnterDismissed=null;
-        if(scenario==='comb-enter'){
-          var combBeforeEnterState=ffCompletionSnapshot();
-          var combBeforeEnterStored=localStorage.getItem(storageKey);
-          var combEnterButton=document.querySelector('#hive-today .ff-enter-hive');
-          if(combEnterButton)combEnterButton.click();
-          combEnterDismissed=!!combEnterButton&&
-            document.querySelectorAll('#hive-today [data-first-flight-comb],'+
-              '#hive-today [data-first-flight-reward]').length===0&&
-            combBeforeEnterState===ffCompletionSnapshot()&&
-            combBeforeEnterStored===localStorage.getItem(storageKey)&&
-            document.activeElement&&document.activeElement.getAttribute('data-cell-key')==='lw'&&
-            document.querySelectorAll('#hivesvg .ff-comb-rest').length===1;
+        var combHeldRoot=document.querySelector('#hive-today [data-first-flight-comb]');
+        var combHeldSummary=document.querySelector(
+          '#hive-today .ff-reward-summary[data-first-flight-reward]');
+        var combBeforeHoldState=ffCompletionSnapshot();
+        var combBeforeHoldStored=localStorage.getItem(storageKey);
+        if(combScheduler){
+          combScheduler.advanceTo(Math.max(combTimeline.watchdog+1,combScheduler.now()+1));
         }
-        var combPagehideEnterLive=null;
-        if(scenario==='comb-pagehide'){
-          var combPagehideBeforeState=ffCompletionSnapshot();
-          var combPagehideBeforeStored=localStorage.getItem(storageKey);
-          var combPagehideEnter=document.querySelector('#hive-today .ff-enter-hive');
-          if(combPagehideEnter)combPagehideEnter.click();
-          combPagehideEnterLive=!!combPagehideEnter&&
-            document.querySelectorAll('#hive-today [data-first-flight-comb],'+
-              '#hive-today [data-first-flight-reward]').length===0&&
-            combPagehideBeforeState===ffCompletionSnapshot()&&
-            combPagehideBeforeStored===localStorage.getItem(storageKey)&&
-            document.activeElement&&document.activeElement.getAttribute('data-cell-key')==='lw';
+        var combAfterTimeout=ffCombFinalSnapshot();
+        var combHeldPastWatchdog=!!combHeldSummary&&combHeldSummary===document.querySelector(
+          '#hive-today .ff-reward-summary[data-first-flight-reward]')&&
+          combHeldRoot===document.querySelector('#hive-today [data-first-flight-comb]')&&
+          combFinal.overlayCount===combAfterTimeout.overlayCount&&
+          combFinal.allSummaryCount===combAfterTimeout.allSummaryCount&&
+          combAfterTimeout.allSummaryCount===1&&combAfterTimeout.enterPresent&&
+          combAfterTimeout.summaryAriaModal==='true'&&
+          combAfterTimeout.perpetualMotionCount===0&&
+          (!combHeldRoot||(combAfterTimeout.scenePhase==='settled'&&
+            combAfterTimeout.sceneSettled&&combAfterTimeout.finalPreviewAriaHidden===null&&
+            !combAfterTimeout.finalPreviewInert&&
+            combAfterTimeout.finalPreviewPointerEvents==='auto'&&
+            combAfterTimeout.finalSkipHidden&&combAfterTimeout.activeMotionCount===0&&
+            combAfterTimeout.overlayActive&&combAfterTimeout.finalPageScrollLocked))&&
+          combBeforeHoldState===ffCompletionSnapshot()&&
+          combBeforeHoldStored===localStorage.getItem(storageKey);
+        var combBeforeEnterState=ffCompletionSnapshot();
+        var combBeforeEnterStored=localStorage.getItem(storageKey);
+        var combBeforeEnterCalls=window.__HARNESS_COMPLETE_CALLS;
+        var combBeforeEnterSaves=window.__HARNESS_SAVE_CALLS;
+        var combEnterButton=document.querySelector('#hive-today .ff-enter-hive');
+        var combFocusContained=false;
+        if(combEnterButton){
+          combEnterButton.focus();
+          var combTabEvent=new KeyboardEvent('keydown',{
+            key:'Tab',code:'Tab',bubbles:true,cancelable:true
+          });
+          combEnterButton.dispatchEvent(combTabEvent);
+          combFocusContained=combTabEvent.defaultPrevented&&
+            document.activeElement===combEnterButton;
+          combEnterButton.click();
         }
+        var combEnterDismissed=!!combEnterButton&&
+          document.querySelectorAll('#hive-today [data-first-flight-comb],'+
+            '#hive-today [data-first-flight-reward]').length===0&&
+          combBeforeEnterState===ffCompletionSnapshot()&&
+          combBeforeEnterStored===localStorage.getItem(storageKey)&&
+          document.activeElement&&document.activeElement.getAttribute('data-cell-key')==='lw'&&
+          !document.documentElement.classList.contains('ff-comb-active')&&
+          getComputedStyle(document.documentElement).overflow!=='hidden'&&
+          getComputedStyle(document.body).overflow!=='hidden';
+        if(combEnterButton)combEnterButton.dispatchEvent(new MouseEvent('click',{
+          bubbles:true,cancelable:true,detail:0
+        }));
+        var combRepeatedEntryHarmless=combEnterDismissed&&
+          combBeforeEnterState===ffCompletionSnapshot()&&
+          combBeforeEnterStored===localStorage.getItem(storageKey)&&
+          window.__HARNESS_COMPLETE_CALLS===combBeforeEnterCalls&&
+          window.__HARNESS_SAVE_CALLS===combBeforeEnterSaves&&
+          document.querySelectorAll('#hive-today [data-first-flight-comb],'+
+            '#hive-today [data-first-flight-reward]').length===0;
+        var combPagehideEnterLive=scenario==='comb-pagehide'?combEnterDismissed:null;
         var combCompletedState=ffState();
         var combCompletionResult=window.__HARNESS_COMPLETE_RESULTS[
           window.__HARNESS_COMPLETE_RESULTS.length-1]||null;
@@ -2371,12 +2501,32 @@
           focusAfterFinalize:combFinal.focusAfterFinalize,
           headingFocused:combFinal.headingFocused,
           summaryRole:combFinal.summaryRole,
+          summaryAriaModal:combFinal.summaryAriaModal,
           summaryLabelledBy:combFinal.summaryLabelledBy,
           titleTabIndex:combFinal.titleTabIndex,
           liveText:combFinal.liveText,
           liveRole:combFinal.liveRole,
           livePoliteness:combFinal.livePoliteness,
           enterPresent:combFinal.enterPresent,
+          scenePhase:combFinal.scenePhase,
+          sceneSettled:combFinal.sceneSettled,
+          finalTargetCount:combFinal.finalTargetCount,
+          finalSupplyCount:combFinal.finalSupplyCount,
+          finalWallCount:combFinal.finalWallCount,
+          finalMemoryCount:combFinal.finalMemoryCount,
+          finalCrestCount:combFinal.finalCrestCount,
+          finalSignatureCount:combFinal.finalSignatureCount,
+          finalPreviewAriaHidden:combFinal.finalPreviewAriaHidden,
+          finalPreviewInert:combFinal.finalPreviewInert,
+          finalPreviewPointerEvents:combFinal.finalPreviewPointerEvents,
+          finalSkipHidden:combFinal.finalSkipHidden,
+          activeMotionCount:combFinal.activeMotionCount,
+          maxActiveMotionDuration:combFinal.maxActiveMotionDuration,
+          perpetualMotionCount:combFinal.perpetualMotionCount,
+          overlayActive:combFinal.overlayActive,
+          finalPageScrollLocked:combFinal.finalPageScrollLocked,
+          heldPastWatchdog:combHeldPastWatchdog,
+          focusContained:combFocusContained,
           finalizedReason:combFinal.finalizedReason,
           reducedSummary:combFinal.reducedSummary,
           registerSummary:combFinal.registerSummary,
@@ -2419,11 +2569,12 @@
           storedStableAfterDomain:combDomainStored===localStorage.getItem(storageKey),
           skipRepeatedHarmless:combSkipRepeatedHarmless,
           skipStage:combSkipStage,
-          summaryNotDismissed:scenario.indexOf('comb-skip')!==0||combFinal.summaryCount===1,
+          summaryNotDismissed:scenario.indexOf('comb-skip')!==0||combFinal.allSummaryCount===1,
           backgroundFired:combBackgroundFired,
           watchdogFired:combWatchdogFired,
           animationCancelFired:combAnimationCancelFired,
           pagehideFired:combPagehideFired,
+          repeatedFinalizeHarmless:combRepeatedFinalizeHarmless,
           pagehideEnterLive:combPagehideEnterLive,
           plainSummaryFallback:scenario!=='comb-render-failure'||
             (combFinal.overlayCount===0&&combFinal.summaryCount===1&&
@@ -2431,6 +2582,7 @@
           reducedImmediate:scenario!=='comb-reduced'||
             (combInitial.overlayCount===0&&combFinal.summaryCount===1&&combFinal.reducedSummary),
           enterDismissedWithoutMutation:combEnterDismissed,
+          repeatedEntryHarmless:combRepeatedEntryHarmless,
           domainEffectsCommitted:combCompletedState&&combCompletedState.status==='mission_completed'&&
             (window.BHIVE.swarms.lw||[]).length===combBeforeWorkers+1&&
             window.BHIVE.learning.events.filter(function(event){

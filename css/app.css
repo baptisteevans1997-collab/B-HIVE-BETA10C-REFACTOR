@@ -2733,6 +2733,8 @@ textarea:focus-visible{
 html.ff-comb-active,
 html.ff-comb-active body{overflow:hidden}
 html.ff-comb-active .hive-mote{animation-play-state:paused}
+/* The section isolates its children; lift it above the sticky mobile rail. */
+html.ff-comb-active .section.screen-on{z-index:60;animation:none}
 .ff-comb-ceremony{
   --ff-comb-ease-out:cubic-bezier(.16,.84,.28,1);
   --ff-comb-ease-dive:cubic-bezier(.55,.04,.85,.5);
@@ -2764,19 +2766,19 @@ html.ff-comb-active .hive-mote{animation-play-state:paused}
 .ff-comb-flight-trail{stroke:rgba(226,200,144,.35);stroke-width:2}
 .ff-comb-supply-line{stroke:rgba(226,200,144,.72);stroke-width:2.5}
 .ff-comb-has-flight .ff-comb-flight-trail{
-  stroke-dashoffset:0;transition:stroke-dashoffset .52s var(--ff-comb-ease-out);
+  stroke-dashoffset:0;transition:stroke-dashoffset .70s var(--ff-comb-ease-out);
 }
 .ff-comb-has-impact-clear .ff-comb-flight-trail{
   opacity:0;transition:opacity .14s var(--ff-comb-ease-out);
 }
 .ff-comb-has-supply .ff-comb-supply-line{
-  stroke-dashoffset:0;transition:stroke-dashoffset .18s ease-in;
+  stroke-dashoffset:0;transition:stroke-dashoffset .42s ease-in;
 }
 .ff-comb-supply-bead{
   fill:var(--gold-2);opacity:0;transform-box:view-box;transform-origin:center;
 }
 .ff-comb-has-supply .ff-comb-supply-bead{
-  opacity:1;animation:ffCombSupplyBead .18s ease-in both;
+  opacity:1;animation:ffCombSupplyBead .42s ease-in both;
 }
 @keyframes ffCombSupplyBead{
   from{transform:translate(0,0) scale(.65)}
@@ -2837,10 +2839,10 @@ html.ff-comb-active .hive-mote{animation-play-state:paused}
 .ff-comb-chosen-pulse-one{stroke-width:2}
 .ff-comb-chosen-pulse-two{stroke-width:1}
 .ff-comb-has-impact .ff-comb-chosen-pulse-one{
-  animation:ffCombImpactPulseOne .40s .06s var(--ff-comb-ease-out) both;
+  animation:ffCombImpactPulseOne .21s .03s var(--ff-comb-ease-out) both;
 }
 .ff-comb-has-impact .ff-comb-chosen-pulse-two{
-  animation:ffCombImpactPulseTwo .45s .17s var(--ff-comb-ease-out) both;
+  animation:ffCombImpactPulseTwo .22s .06s var(--ff-comb-ease-out) both;
 }
 @keyframes ffCombImpactPulseOne{
   0%{opacity:.82;transform:scale(1)}
@@ -2860,7 +2862,7 @@ html.ff-comb-active .hive-mote{animation-play-state:paused}
   100%{transform:translate(-50%,-50%) scale(1)}
 }
 .ff-comb-has-impact .ff-comb-chosen-cell{
-  animation:ffCombChosenFlash .40s linear both;
+  animation:ffCombChosenFlash .28s linear both;
 }
 @keyframes ffCombChosenFlash{
   0%{fill-opacity:0}17.5%{fill-opacity:.7}17.5001%,100%{fill-opacity:.18}
@@ -2887,7 +2889,7 @@ html.ff-comb-active .hive-mote{animation-play-state:paused}
   transform:translate(-50%,-50%) scale(1) rotate(-8deg);
 }
 .ff-comb-has-flight .ff-comb-worker{
-  animation:ffCombWorkerFlight .60s var(--ff-comb-ease-dive) both;
+  animation:ffCombWorkerFlight .81s var(--ff-comb-ease-dive) both;
 }
 @keyframes ffCombWorkerFlight{
   0%{opacity:1;transform:translate(-50%,-50%)}
@@ -2895,7 +2897,7 @@ html.ff-comb-active .hive-mote{animation-play-state:paused}
   100%{opacity:0;transform:translate(calc(-50% + var(--ff-comb-flight-x)),calc(-50% + var(--ff-comb-flight-y)))}
 }
 .ff-comb-has-flight .ff-comb-worker svg{
-  animation:ffCombWorkerPose .60s linear both;
+  animation:ffCombWorkerPose .81s linear both;
 }
 @keyframes ffCombWorkerPose{
   0%{transform:scale(1) rotate(-8deg)}
@@ -2911,8 +2913,8 @@ html.ff-comb-active .hive-mote{animation-play-state:paused}
   }
   .ff-comb-has-launch .ff-comb-worker{transform:scale(1) rotate(-8deg)}
   .ff-comb-has-flight .ff-comb-worker{
-    animation:ffCombWorkerPathTravel .52s var(--ff-comb-ease-dive) both,
-      ffCombWorkerPathShell .60s linear both;
+    animation:ffCombWorkerPathTravel .70s var(--ff-comb-ease-dive) both,
+      ffCombWorkerPathShell .81s linear both;
   }
   @keyframes ffCombWorkerPathTravel{
     from{offset-distance:0%}
@@ -2981,11 +2983,11 @@ html.ff-comb-active .hive-mote{animation-play-state:paused}
 }
 .ff-comb-has-construct .ff-comb-build{opacity:1}
 .ff-comb-has-construct .ff-comb-wax{
-  stroke-opacity:.92;transition:stroke-opacity .10s var(--ff-comb-ease-out);
+  stroke-opacity:.92;transition:stroke-opacity .20s var(--ff-comb-ease-out);
 }
 .ff-comb-has-construct .ff-comb-wall{
-  stroke-dashoffset:0;transition:stroke-dashoffset .07s var(--ff-comb-ease-out);
-  animation:ffCombWallSeat .07s var(--ff-comb-ease-out) both;
+  stroke-dashoffset:0;transition:stroke-dashoffset .24s var(--ff-comb-ease-out);
+  animation:ffCombWallSeat .24s var(--ff-comb-ease-out) both;
 }
 @keyframes ffCombWallSeat{
   0%{transform:translate(var(--ff-comb-wall-x),var(--ff-comb-wall-y)) scale(1.06)}
@@ -2993,20 +2995,20 @@ html.ff-comb-active .hive-mote{animation-play-state:paused}
   100%{transform:translate(0,0) scale(1)}
 }
 .ff-comb-has-construct .ff-comb-wall-1{transition-delay:0s;animation-delay:0s}
-.ff-comb-has-construct .ff-comb-wall-2{transition-delay:.055s;animation-delay:.055s}
-.ff-comb-has-construct .ff-comb-wall-3{transition-delay:.11s;animation-delay:.11s}
-.ff-comb-has-construct .ff-comb-wall-4{transition-delay:.165s;animation-delay:.165s}
-.ff-comb-has-construct .ff-comb-wall-5{transition-delay:.22s;animation-delay:.22s}
-.ff-comb-has-construct .ff-comb-wall-6{transition-delay:.275s;animation-delay:.275s}
+.ff-comb-has-construct .ff-comb-wall-2{transition-delay:.20s;animation-delay:.20s}
+.ff-comb-has-construct .ff-comb-wall-3{transition-delay:.40s;animation-delay:.40s}
+.ff-comb-has-construct .ff-comb-wall-4{transition-delay:.60s;animation-delay:.60s}
+.ff-comb-has-construct .ff-comb-wall-5{transition-delay:.80s;animation-delay:.80s}
+.ff-comb-has-construct .ff-comb-wall-6{transition-delay:1s;animation-delay:1s}
 .ff-comb-build>svg{transform-box:fill-box;transform-origin:center;will-change:transform}
 .ff-comb-has-lock .ff-comb-build>svg{
-  animation:ffCombChamberLock .14s var(--ff-comb-ease-out) both;
+  animation:ffCombChamberLock .25s var(--ff-comb-ease-out) both;
 }
 @keyframes ffCombChamberLock{
   0%{transform:scale(.96)}55%{transform:scale(1.03)}100%{transform:scale(1)}
 }
 .ff-comb-has-lock .ff-comb-lock-ring{
-  animation:ffCombLockRing .26s var(--ff-comb-ease-out) both;
+  animation:ffCombLockRing .25s var(--ff-comb-ease-out) both;
 }
 @keyframes ffCombLockRing{
   0%{opacity:.7;stroke-dashoffset:0;transform:scale(1)}
@@ -3020,7 +3022,7 @@ html.ff-comb-active .hive-mote{animation-play-state:paused}
 }
 .ff-comb-build-label{color:var(--gold-2);opacity:0}
 .ff-comb-has-lock .ff-comb-build-label{
-  opacity:1;transition:opacity .14s var(--ff-comb-ease-out);
+  opacity:1;transition:opacity .18s var(--ff-comb-ease-out);
 }
 .ff-comb-delivery-worker{
   left:calc(50% + var(--ff-comb-dock-x));top:calc(var(--ff-comb-build-mid-y) + var(--ff-comb-dock-y));
@@ -3033,10 +3035,10 @@ html.ff-comb-active .hive-mote{animation-play-state:paused}
   background:var(--gold-2);opacity:0;transform:translate(-50%,-50%) rotate(-45deg) scale(.35);
 }
 .ff-comb-has-delivery .ff-comb-delivery-worker{
-  animation:ffCombDeliveryDash .14s linear both;
+  animation:ffCombDeliveryDash .20s linear both;
 }
 .ff-comb-has-delivery .ff-comb-drop{
-  animation:ffCombHoneyDrop .06s .10s ease-in both;
+  animation:ffCombHoneyDrop .08s .12s ease-in both;
 }
 @keyframes ffCombDeliveryDash{
   0%{opacity:1;transform:translate(calc(-50% - var(--ff-comb-delivery-x)),calc(-50% - var(--ff-comb-delivery-y))) scale(.82)}
@@ -3061,15 +3063,15 @@ html.ff-comb-active .hive-mote{animation-play-state:paused}
 .ff-comb-has-memory-one .ff-comb-memory-one,
 .ff-comb-has-memory-two .ff-comb-memory-two{
   opacity:1;transform:translateY(0);
-  transition:opacity .22s var(--ff-comb-ease-out),transform .22s var(--ff-comb-ease-out);
+  transition:opacity .34s var(--ff-comb-ease-out),transform .34s var(--ff-comb-ease-out);
 }
 .ff-comb-has-memory-one .ff-comb-memory-one .ff-comb-memory-seal,
 .ff-comb-has-memory-two .ff-comb-memory-two .ff-comb-memory-seal{
-  stroke-dashoffset:0;transition:stroke-dashoffset .08s .14s var(--ff-comb-ease-out);
+  stroke-dashoffset:0;transition:stroke-dashoffset .10s .30s var(--ff-comb-ease-out);
 }
 .ff-comb-has-memory-one .ff-comb-memory-one .ff-comb-memory-fill,
 .ff-comb-has-memory-two .ff-comb-memory-two .ff-comb-memory-fill{
-  transform:scaleY(1);transition:transform .14s var(--ff-comb-ease-out);
+  transform:scaleY(1);transition:transform .32s var(--ff-comb-ease-out);
 }
 .ff-comb-crest{opacity:0}
 .ff-comb-crest-stroke{
@@ -3079,22 +3081,22 @@ html.ff-comb-active .hive-mote{animation-play-state:paused}
 .ff-comb-crest-secondary{stroke:rgba(237,228,210,.72);stroke-width:1.2}
 .ff-comb-crest-bridge{stroke:var(--gold)}
 .ff-comb-has-crest .ff-comb-crest{
-  opacity:1;transition:opacity .20s var(--ff-comb-ease-out);
+  opacity:1;transition:opacity .28s var(--ff-comb-ease-out);
 }
 .ff-comb-has-crest .ff-comb-crest-stroke{
   stroke-dashoffset:0;transform:scale(1);
-  transition:stroke-dashoffset .20s var(--ff-comb-ease-out),transform .20s var(--ff-comb-ease-out);
+  transition:stroke-dashoffset .28s var(--ff-comb-ease-out),transform .28s var(--ff-comb-ease-out);
 }
 .ff-comb-has-signature .ff-comb-crest-primary{
-  stroke:var(--ink);stroke-width:1.9;transition:stroke .18s linear,stroke-width .18s var(--ff-comb-ease-out);
+  stroke:var(--ink);stroke-width:1.9;transition:stroke .28s linear,stroke-width .28s var(--ff-comb-ease-out);
 }
 .ff-comb-has-signature .ff-comb-crest-secondary,
 .ff-comb-has-signature .ff-comb-crest-bridge{
   stroke:var(--gold-2);stroke-width:1.45;
-  transition:stroke .18s linear,stroke-width .18s var(--ff-comb-ease-out);
+  transition:stroke .28s linear,stroke-width .28s var(--ff-comb-ease-out);
 }
 .ff-comb-has-signature.ff-comb-signature-keystone .ff-comb-wall-6{
-  stroke-width:3.2;animation:ffCombSigKeystoneWall .18s var(--ff-comb-ease-out) both;
+  stroke-width:3.2;animation:ffCombSigKeystoneWall .28s var(--ff-comb-ease-out) both;
 }
 @keyframes ffCombSigKeystoneWall{
   0%{transform:translateY(-4px) scale(1.02)}
@@ -3103,48 +3105,48 @@ html.ff-comb-active .hive-mote{animation-play-state:paused}
 }
 .ff-comb-has-signature.ff-comb-signature-open-gate .ff-comb-wall-1{
   stroke-linecap:butt;stroke-dashoffset:0;
-  animation:ffCombSigOpenGate .16s var(--ff-comb-ease-out) both;
+  animation:ffCombSigOpenGate .28s var(--ff-comb-ease-out) both;
 }
 @keyframes ffCombSigOpenGate{
   0%{stroke-dasharray:20 0 20}
   100%{stroke-dasharray:16 8 16}
 }
 .ff-comb-has-signature.ff-comb-signature-facet-snap .ff-comb-crest-primary{
-  animation:ffCombSigFacetOne .10s var(--ff-comb-ease-out) both;
+  animation:ffCombSigFacetOne .18s var(--ff-comb-ease-out) both;
 }
 .ff-comb-has-signature.ff-comb-signature-facet-snap .ff-comb-crest-secondary{
-  animation:ffCombSigFacetTwo .10s .04s var(--ff-comb-ease-out) both;
+  animation:ffCombSigFacetTwo .18s .06s var(--ff-comb-ease-out) both;
 }
 .ff-comb-has-signature.ff-comb-signature-facet-snap .ff-comb-crest-bridge{
-  animation:ffCombSigFacetThree .10s .08s var(--ff-comb-ease-out) both;
+  animation:ffCombSigFacetThree .18s .12s var(--ff-comb-ease-out) both;
 }
 @keyframes ffCombSigFacetOne{from{transform:translateY(-3px) rotate(-8deg)}to{transform:translateY(0) rotate(0)}}
 @keyframes ffCombSigFacetTwo{from{transform:translate(3px,2px) rotate(8deg)}to{transform:translate(0,0) rotate(0)}}
 @keyframes ffCombSigFacetThree{from{transform:translate(-3px,2px) rotate(-8deg)}to{transform:translate(0,0) rotate(0)}}
 .ff-comb-has-signature.ff-comb-signature-store-caps .ff-comb-crest-primary{
-  animation:ffCombSigStoreLeft .10s var(--ff-comb-ease-out) both;
+  animation:ffCombSigStoreLeft .18s var(--ff-comb-ease-out) both;
 }
 .ff-comb-has-signature.ff-comb-signature-store-caps .ff-comb-crest-secondary{
-  animation:ffCombSigStoreRight .10s .08s var(--ff-comb-ease-out) both;
+  animation:ffCombSigStoreRight .18s .12s var(--ff-comb-ease-out) both;
 }
 @keyframes ffCombSigStoreLeft{0%{transform:translateY(-4px)}70%{transform:translateY(1px)}100%{transform:translateY(0)}}
 @keyframes ffCombSigStoreRight{0%{transform:translateY(-4px)}70%{transform:translateY(1px)}100%{transform:translateY(0)}}
 .ff-comb-has-signature.ff-comb-signature-level-course .ff-comb-crest-primary{
   stroke-linecap:square;transform-origin:center;
-  animation:ffCombSigLevelCourse .18s var(--ff-comb-ease-out) both;
+  animation:ffCombSigLevelCourse .28s var(--ff-comb-ease-out) both;
 }
 @keyframes ffCombSigLevelCourse{from{transform:rotate(-8deg)}to{transform:rotate(0)}}
 .ff-comb-has-signature.ff-comb-signature-inner-ring .ff-comb-crest-secondary{
-  animation:ffCombSigInnerRing .20s var(--ff-comb-ease-out) both;
+  animation:ffCombSigInnerRing .30s var(--ff-comb-ease-out) both;
 }
 @keyframes ffCombSigInnerRing{from{transform:scale(.35)}to{transform:scale(1)}}
 .ff-comb-has-signature.ff-comb-signature-fork-choice .ff-comb-crest-primary{
   stroke-linecap:square;stroke-dasharray:18;
-  animation:ffCombSigForkStem .18s var(--ff-comb-ease-out) both;
+  animation:ffCombSigForkStem .28s var(--ff-comb-ease-out) both;
 }
 .ff-comb-has-signature.ff-comb-signature-fork-choice .ff-comb-crest-secondary{
   stroke-linecap:square;stroke-dasharray:18;
-  animation:ffCombSigForkBranch .18s var(--ff-comb-ease-out) both;
+  animation:ffCombSigForkBranch .28s var(--ff-comb-ease-out) both;
 }
 @keyframes ffCombSigForkStem{
   from{stroke-dashoffset:18}to{stroke-dashoffset:0}
@@ -3156,54 +3158,54 @@ html.ff-comb-active .hive-mote{animation-play-state:paused}
 }
 .ff-comb-has-signature.ff-comb-signature-living-pulse .ff-comb-wax{
   transform-box:fill-box;transform-origin:center;
-  animation:ffCombSigLivingPulse .30s var(--ff-comb-ease-out) both;
+  animation:ffCombSigLivingPulse .32s var(--ff-comb-ease-out) both;
 }
 @keyframes ffCombSigLivingPulse{
   0%,100%{transform:scale(1)}55%{transform:scale(1.015)}
 }
 .ff-comb-has-signature.ff-comb-signature-linked-points .ff-comb-crest-primary{
-  animation:ffCombSigLinkedNode .18s var(--ff-comb-ease-out) both;
+  animation:ffCombSigLinkedNode .28s var(--ff-comb-ease-out) both;
 }
 .ff-comb-has-signature.ff-comb-signature-linked-points .ff-comb-crest-secondary{
-  animation:ffCombSigLinkedNode .18s var(--ff-comb-ease-out) both;
+  animation:ffCombSigLinkedNode .28s var(--ff-comb-ease-out) both;
 }
 .ff-comb-has-signature.ff-comb-signature-linked-points .ff-comb-crest-bridge{
-  animation:ffCombSigLinkedBridge .16s .02s var(--ff-comb-ease-out) both;
+  animation:ffCombSigLinkedBridge .26s .03s var(--ff-comb-ease-out) both;
 }
 @keyframes ffCombSigLinkedNode{0%{opacity:.3}65%{opacity:1}100%{opacity:.82}}
 @keyframes ffCombSigLinkedBridge{from{transform:scaleX(0)}to{transform:scaleX(1)}}
 .ff-comb-has-signature.ff-comb-signature-mirror-axis .ff-comb-crest-primary{
-  transform-origin:center bottom;animation:ffCombSigMirrorAxis .18s var(--ff-comb-ease-out) both;
+  transform-origin:center bottom;animation:ffCombSigMirrorAxis .28s var(--ff-comb-ease-out) both;
 }
 .ff-comb-has-signature.ff-comb-signature-mirror-axis .ff-comb-crest-secondary{
-  animation:ffCombSigMirrorDot .16s .02s var(--ff-comb-ease-out) both;
+  animation:ffCombSigMirrorDot .26s .03s var(--ff-comb-ease-out) both;
 }
 @keyframes ffCombSigMirrorAxis{from{transform:scaleY(.25)}to{transform:scaleY(1)}}
 @keyframes ffCombSigMirrorDot{from{transform:translateY(5px) scale(.2)}to{transform:translateY(0) scale(1)}}
 .ff-comb-has-signature.ff-comb-signature-handoff .ff-comb-crest-primary{
-  animation:ffCombSigHandoff .18s var(--ff-comb-ease-out) both;
+  animation:ffCombSigHandoff .28s var(--ff-comb-ease-out) both;
 }
 .ff-comb-has-signature.ff-comb-signature-handoff .ff-comb-crest-secondary{
-  transform-origin:center bottom;animation:ffCombSigHandoffWall .18s var(--ff-comb-ease-out) both;
+  transform-origin:center bottom;animation:ffCombSigHandoffWall .28s var(--ff-comb-ease-out) both;
 }
 @keyframes ffCombSigHandoff{0%{transform:scaleX(1.25)}65%{transform:scaleX(.92)}100%{transform:scaleX(1)}}
 @keyframes ffCombSigHandoffWall{from{transform:scaleY(0)}to{transform:scaleY(1)}}
 .ff-comb-has-signature.ff-comb-signature-loose-loop .ff-comb-crest-primary{
   stroke-linecap:round;stroke-dasharray:64;
-  animation:ffCombSigLooseLoop .12s var(--ff-comb-ease-out) both;
+  animation:ffCombSigLooseLoop .24s var(--ff-comb-ease-out) both;
 }
 @keyframes ffCombSigLooseLoop{from{stroke-dashoffset:64}to{stroke-dashoffset:0}}
 .ff-comb-has-signature.ff-comb-signature-annex-dock .ff-comb-crest-secondary{
-  animation:ffCombSigAnnexDock .18s var(--ff-comb-ease-out) both;
+  animation:ffCombSigAnnexDock .28s var(--ff-comb-ease-out) both;
 }
 @keyframes ffCombSigAnnexDock{from{transform:translateX(7px)}to{transform:translateX(0)}}
 .ff-comb-has-signature.ff-comb-signature-bench-row .ff-comb-crest-primary{
   transform-origin:left center;stroke-dasharray:8 4;
-  animation:ffCombSigBenchRow .18s steps(3,end) both;
+  animation:ffCombSigBenchRow .28s steps(3,end) both;
 }
 @keyframes ffCombSigBenchRow{from{transform:scaleX(.18);opacity:.35}to{transform:scaleX(1);opacity:1}}
 .ff-comb-notch{stroke:var(--gold-2);stroke-width:1.4;opacity:0}
-.ff-comb-has-lock .ff-comb-notch{opacity:1;transition:opacity .14s var(--ff-comb-ease-out)}
+.ff-comb-has-lock .ff-comb-notch{opacity:1;transition:opacity .18s var(--ff-comb-ease-out)}
 
 /* The register is the unchanged reward summary restyled as a calm comb ledger. */
 .ff-comb-register-preview{
@@ -3215,6 +3217,7 @@ html.ff-comb-active .hive-mote{animation-play-state:paused}
 .ff-comb-has-register .ff-comb-register-preview{
   opacity:1;transform:translate(-50%,-50%);
 }
+.ff-comb-is-settled .ff-comb-register-preview{top:50vh;pointer-events:auto}
 .ff-comb-has-register .ff-comb-stage{opacity:.18}
 .ff-comb-register-preview .ff-reward-summary,
 .ff-reward-summary.ff-comb-register{
@@ -3279,11 +3282,11 @@ html.ff-comb-active .hive-mote{animation-play-state:paused}
 .ff-comb-has-memory-one .ff-comb-register-preview .ff-reward-excerpt:nth-child(1)::before,
 .ff-comb-has-memory-two .ff-comb-register-preview .ff-reward-excerpt:nth-child(2)::before{
   transform:translateY(-50%) scaleY(1);
-  transition:transform .08s var(--ff-comb-ease-out);
+  transition:transform .30s var(--ff-comb-ease-out);
 }
 .ff-comb-has-memory-one .ff-comb-register-preview .ff-reward-excerpt:nth-child(1)::after,
 .ff-comb-has-memory-two .ff-comb-register-preview .ff-reward-excerpt:nth-child(2)::after{
-  transform:scaleX(1);transition:transform .04s .08s var(--ff-comb-ease-out);
+  transform:scaleX(1);transition:transform .10s .28s var(--ff-comb-ease-out);
 }
 .ff-reward-summary.ff-comb-register .ff-reward-excerpt::before{
   transform:translateY(-50%) scaleY(1);
@@ -3320,7 +3323,7 @@ html.ff-comb-active .hive-mote{animation-play-state:paused}
 .ff-comb-has-memory-one .ff-comb-register-preview .ff-reward-excerpt:nth-child(1),
 .ff-comb-has-memory-two .ff-comb-register-preview .ff-reward-excerpt:nth-child(2){
   opacity:1;clip-path:inset(0 0 0 0);transform:scale(1);
-  transition:opacity .20s var(--ff-comb-ease-out),clip-path .20s var(--ff-comb-ease-out),transform .20s var(--ff-comb-ease-out);
+  transition:opacity .32s var(--ff-comb-ease-out),clip-path .32s var(--ff-comb-ease-out),transform .32s var(--ff-comb-ease-out);
 }
 .ff-comb-skip{
   position:absolute;top:max(14px,env(safe-area-inset-top));right:max(14px,env(safe-area-inset-right));

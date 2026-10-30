@@ -734,10 +734,10 @@
           markup.indexOf(domain.crest)>=0;
       });
   });
-  test('First Honey awakened timeline is exact, ordered and stable at 3.20 seconds',function(){
+  test('First Honey awakened timeline is exact, ordered and stable at 5.20 seconds',function(){
     var timeline=U.firstFlightCombTimeline({cellKey:'craft'});
-    var expected='hush@0|skip@100|target@260|launch@320|flight@420|impact@940|impact-label@1040|supply@1160|construct@1340|impact-clear@1460|lock@1720|delivery@1860|memory-one@2020|memory-two@2280|crest@2520|signature@2720|register@2820|enter@3020|settled@3200';
-    return timeline.variant==='awakened'&&timeline.stable===3200&&timeline.watchdog===3900&&
+    var expected='hush@0|skip@100|target@220|launch@280|flight@350|impact@1050|impact-label@1130|supply@1330|impact-clear@1500|construct@1750|lock@3030|delivery@3120|memory-one@3210|memory-two@3630|crest@4050|signature@4320|register@4700|enter@5010|settled@5200';
+    return timeline.variant==='awakened'&&timeline.stable===5200&&timeline.watchdog===6200&&
       timeline.events.map(function(event){return event.phase+'@'+event.at;}).join('|')===expected&&
       timeline.events.every(function(event,index,events){
         return index===0||event.at>=events[index-1].at;
@@ -745,9 +745,9 @@
   });
   test('First Honey no-unlock timeline is exact and contains no invented build sequence',function(){
     var timeline=U.firstFlightCombTimeline(null);
-    var expected='hush@0|skip@100|target@260|launch@320|flight@420|impact@940|impact-label@1040|register@1300|impact-clear@1460|receipts@1580|memory-one@1740|memory-two@2080|enter@2420|settled@2620';
+    var expected='hush@0|skip@100|target@220|launch@280|flight@350|impact@1050|impact-label@1130|register@1330|impact-clear@1500|receipts@1700|memory-one@2100|memory-two@2520|enter@3000|settled@3500';
     var forbidden=['supply','construct','lock','delivery','crest','signature'];
-    return timeline.variant==='no-unlock'&&timeline.stable===2620&&timeline.watchdog===3200&&
+    return timeline.variant==='no-unlock'&&timeline.stable===3500&&timeline.watchdog===4300&&
       timeline.events.map(function(event){return event.phase+'@'+event.at;}).join('|')===expected&&
       timeline.events.every(function(event,index,events){
         return (index===0||event.at>=events[index-1].at)&&forbidden.indexOf(event.phase)<0;

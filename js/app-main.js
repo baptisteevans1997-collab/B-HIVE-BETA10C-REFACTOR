@@ -3046,9 +3046,7 @@
         if(activeFirstFlightAttempt.phase==='ceremony'&&
            typeof activeFirstFlightAttempt.finalize==='function'&&
            activeFirstFlightAttempt.finalize('rerender'))return;
-        activeFirstFlightAttempt.phase='dismissed';
-        activeFirstFlightAttempt.disposed=true;
-        activeFirstFlightAttempt=null;
+        disposeFirstFlightAttempt(activeFirstFlightAttempt);
       }
       var now=Date.now(),events=(BHIVE.learning&&BHIVE.learning.events)||[];
       var firstFlight=currentFirstFlightState();
@@ -3645,7 +3643,7 @@
         }
       }
     }
-    function clearFirstFlightPresentation(attempt){
+    function clearFirstFlightPresentation(attempt,keepScene){
       var scheduler=attempt&&attempt.presentationScheduler;
       var timers=attempt&&attempt.presentationTimers||[],i;
       for(i=0;i<timers.length;i++){
@@ -3663,7 +3661,11 @@
         attempt.ceremonyRoot.removeEventListener('animationcancel',attempt.presentationAnimationCancel);
         attempt.presentationAnimationCancel=null;
       }
-      document.documentElement.classList.remove('ff-comb-active');
+      if(attempt&&attempt.presentationKeydown){
+        document.removeEventListener('keydown',attempt.presentationKeydown,true);
+        attempt.presentationKeydown=null;
+      }
+      if(!keepScene)document.documentElement.classList.remove('ff-comb-active');
     }
     function scheduleFirstFlightPresentation(attempt,callback,delay){
       var scheduler=attempt.presentationScheduler;
@@ -3693,6 +3695,44 @@
       if(heading&&heading.focus)heading.focus();
       else if(summary&&summary.focus)summary.focus();
     }
+    function containFirstFlightRewardFocus(attempt,summary){
+      if(!attempt||!summary)return;
+      if(attempt.presentationKeydown){
+        document.removeEventListener('keydown',attempt.presentationKeydown,true);
+      }
+      summary.setAttribute('aria-modal','true');
+      attempt.presentationKeydown=function(ev){
+        if(ev.key!=='Tab'||activeFirstFlightAttempt!==attempt||attempt.disposed||
+           attempt.phase!=='summary'||!document.documentElement.contains(summary))return;
+        var controls=Array.prototype.filter.call(summary.querySelectorAll(
+          'button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),'+
+          'textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'),function(control){
+            return !control.hidden&&control.getAttribute('aria-hidden')!=='true';
+          });
+        var heading=summary.querySelector('#ff-reward-title');
+        var first=controls[0]||summary,last=controls[controls.length-1]||summary;
+        var active=document.activeElement;
+        if(ev.shiftKey&&(active===first||active===heading||!summary.contains(active))){
+          ev.preventDefault();last.focus();
+        }else if(!ev.shiftKey&&(active===last||!summary.contains(active))){
+          ev.preventDefault();first.focus();
+        }
+      };
+      document.addEventListener('keydown',attempt.presentationKeydown,true);
+    }
+    function finishFirstFlightCeremonyMotion(ceremony){
+      var nodes=ceremony?[ceremony].concat(Array.prototype.slice.call(
+        ceremony.querySelectorAll('*'))):[];
+      nodes.forEach(function(node){
+        var animations=[];
+        try{
+          if(typeof node.getAnimations==='function')animations=node.getAnimations();
+        }catch(e){}
+        animations.forEach(function(animation){
+          try{animation.finish();}catch(e){}
+        });
+      });
+    }
     function mountPreparedFirstFlightRewardSummary(attempt,model,html,reducedMotion){
       if(!todayEl||!html||activeFirstFlightAttempt!==attempt||attempt.disposed)return false;
       todayEl.innerHTML=html;
@@ -3700,16 +3740,46 @@
       if(summaries.length!==1)return false;
       decorateFirstFlightRewardSummary(summaries[0],model,reducedMotion);
       attempt.phase='summary';
+      containFirstFlightRewardFocus(attempt,summaries[0]);
       focusFirstFlightRewardSummary(summaries[0]);
       return true;
     }
     function finalizeFirstFlightCeremony(attempt,reason){
-      var ceremony,summary,summaries;
+      var ceremony,preview,summary,summaries,skip,timeline;
       if(activeFirstFlightAttempt!==attempt||attempt.disposed)return false;
       if(attempt.phase==='summary')return true;
       if(attempt.phase!=='ceremony')return false;
       ceremony=attempt.ceremonyRoot;
       summary=ceremony&&ceremony.querySelector('.ff-reward-summary[data-first-flight-reward]');
+      preview=ceremony&&ceremony.querySelector('.ff-comb-register-preview');
+      timeline=attempt.presentationTimeline;
+      if(ceremony&&preview&&summary&&todayEl&&todayEl.contains(ceremony)&&timeline&&
+         Array.isArray(timeline.events)){
+        clearFirstFlightPresentation(attempt,true);
+        timeline.events.forEach(function(event){
+          if(event&&typeof event.phase==='string'&&event.phase){
+            ceremony.classList.add('ff-comb-has-'+event.phase);
+          }
+        });
+        ceremony.setAttribute('data-comb-phase','settled');
+        ceremony.classList.add('ff-comb-is-settled');
+        preview.removeAttribute('aria-hidden');
+        preview.removeAttribute('inert');
+        skip=ceremony.querySelector('.ff-comb-skip');
+        if(skip){
+          skip.hidden=true;
+          skip.disabled=true;
+          skip.tabIndex=-1;
+          skip.setAttribute('aria-hidden','true');
+        }
+        finishFirstFlightCeremonyMotion(ceremony);
+        attempt.phase='summary';
+        decorateFirstFlightRewardSummary(summary,attempt.rewardModel,false);
+        summary.setAttribute('data-comb-finalized',reason||'complete');
+        containFirstFlightRewardFocus(attempt,summary);
+        focusFirstFlightRewardSummary(summary);
+        return true;
+      }
       clearFirstFlightPresentation(attempt);
       if(summary&&summary.parentNode)summary.parentNode.removeChild(summary);
       todayEl.textContent='';
@@ -3727,6 +3797,7 @@
       attempt.phase='summary';
       decorateFirstFlightRewardSummary(summaries[0],attempt.rewardModel,false);
       summaries[0].setAttribute('data-comb-finalized',reason||'complete');
+      containFirstFlightRewardFocus(attempt,summaries[0]);
       focusFirstFlightRewardSummary(summaries[0]);
       return true;
     }
@@ -3774,6 +3845,13 @@
           typeof window.__BHIVE_FIRST_FLIGHT_SCHEDULER__.schedule==='function'&&
           typeof window.__BHIVE_FIRST_FLIGHT_SCHEDULER__.cancel==='function'?
           window.__BHIVE_FIRST_FLIGHT_SCHEDULER__:null;
+        var timeline=B.experimentUI.firstFlightCombTimeline(!!model.unlocked);
+        if(!timeline||!Array.isArray(timeline.events)||
+           typeof timeline.watchdog!=='number'){
+          attempt.ceremonyRoot=null;
+          return mountPreparedFirstFlightRewardSummary(attempt,model,html,false);
+        }
+        attempt.presentationTimeline=timeline;
         attempt.finalize=function(reason){return finalizeFirstFlightCeremony(attempt,reason);};
         document.documentElement.classList.add('ff-comb-active');
         attempt.ceremonyRoot.classList.add('ff-comb-has-hush');
@@ -3785,9 +3863,6 @@
         attempt.presentationAnimationCancel=function(){attempt.finalize('animation-failure');};
         attempt.ceremonyRoot.addEventListener(
           'animationcancel',attempt.presentationAnimationCancel);
-        var timeline=B.experimentUI.firstFlightCombTimeline(!!model.unlocked);
-        if(!timeline||!Array.isArray(timeline.events)||
-           typeof timeline.watchdog!=='number')return attempt.finalize('timeline-failure');
         var scheduled=true;
         timeline.events.forEach(function(event){
           if(!scheduled||event.phase==='hush')return;
@@ -4246,7 +4321,8 @@
         window.clearTimeout(firstFlightCombResizeTimer);firstFlightCombResizeTimer=null;
       }
       if(!activeFirstFlightAttempt)return;
-      if(activeFirstFlightAttempt.phase==='ceremony'&&
+      if((activeFirstFlightAttempt.phase==='ceremony'||
+          activeFirstFlightAttempt.phase==='summary')&&
          typeof activeFirstFlightAttempt.finalize==='function'){
         activeFirstFlightAttempt.finalize('pagehide');
       }else if(activeFirstFlightAttempt.phase!=='summary'){
