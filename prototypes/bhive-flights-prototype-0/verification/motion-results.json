@@ -1,0 +1,10 @@
+{
+  "passed": 5,
+  "results": [
+    "Send without a note omits the typed draft",
+    "Plain mode interrupts send-off and leaves an empty perch",
+    "Reset during sealing stays empty after animation callbacks settle",
+    "Keyboard send-off works with an instant state change",
+    "Keyboard homecoming records the chosen outcome"
+  ]
+}

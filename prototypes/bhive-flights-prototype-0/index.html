@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0b0d12">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>B-HIVE · Flights · Prototype 0</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 50 50'%3E%3Cpath fill='%23c9ae78' d='M25 2 45 14v22L25 48 5 36V14Z'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.mjs"></script>
+</head>
+<body>
+  <header class="masthead">
+    <a class="wordmark" href="./" aria-label="B-HIVE Flights home"><span aria-hidden="true">⬡</span> B-HIVE <small>FLIGHTS</small></a>
+    <div class="tools"><label class="plain-toggle"><input id="plain" type="checkbox"><span class="switch" aria-hidden="true"></span>Plain mode</label><button id="reset" class="text-button">Reset</button></div>
+  </header>
+  <div class="prototype-bar"><span><i></i> LOCAL PROTOTYPE 0</span><span>ONE CHAMBER. ONE FORAGER.</span></div>
+  <main>
+    <section class="hive-region" aria-labelledby="chamber-title">
+      <div class="chamber-heading"><div><p class="eyebrow">YOUR HIVE / 01</p><h1 id="chamber-title">Health</h1><p class="chamber-subtitle">A place for the things that care for you.</p></div><span class="chamber-mark" aria-hidden="true">✳</span></div>
+      <div class="board" id="board">
+        <svg class="architecture" viewBox="0 0 600 540" aria-hidden="true">
+          <defs><radialGradient id="chamberGlow"><stop stop-color="#c9ae78" stop-opacity=".13"/><stop offset="1" stop-color="#c9ae78" stop-opacity="0"/></radialGradient></defs>
+          <circle cx="300" cy="265" r="265" fill="url(#chamberGlow)"/>
+          <path class="chamber-shadow" d="M300 22 515 146 515 394 300 518 85 394 85 146Z"/>
+          <path class="chamber-frame" d="M300 34 504 152 504 388 300 506 96 388 96 152Z"/>
+          <path class="chamber-inner" d="M300 47 493 159 493 381 300 493 107 381 107 159Z"/>
+          <path class="frame-facets" d="m300 34 0 13m204 105-11 7m11 229-11-7M300 506v-13M96 388l11-7M96 152l11 7"/>
+          <path class="flight-trail" d="M482 397c-25 39-80 21-61-13s87-12 115-65 17-130 52-160"/>
+          <path class="perch" d="M453 398h64m-50 7h36"/>
+          <path class="compass" d="M300 7v10m0 506v10M62 269h12m452 0h12"/>
+        </svg>
+        <div id="comb" class="comb" aria-label="Your completed flights"></div>
+        <button id="forager" class="forager" aria-label="Your Forager is home. Choose a flight."><span id="bee-art"></span><span class="bee-label">YOUR FORAGER <span id="bee-status">HOME</span></span></button>
+        <div id="cargo" aria-hidden="true"></div>
+      </div>
+      <div class="comb-footer"><p id="record-count">Your first cell is waiting.</p><nav id="comb-pages" aria-label="Comb pages"></nav></div>
+      <p class="board-caption">A flight leaves a trace.<br><span>Each homecoming becomes a cell you can return to.</span></p>
+    </section>
+    <section class="interaction" aria-label="Your flight">
+      <div id="error" class="error" role="alert" hidden></div>
+      <div id="panel"></div>
+    </section>
+  </main>
+  <footer class="page-footer"><span>SEND OFF <b>·</b> COME HOME <b>·</b> KEEP A TRACE</span><span>Saved in this browser · A small, separate hive</span></footer>
+  <p id="announcement" class="sr-only" role="status" aria-live="polite"></p>
+  <dialog id="reset-dialog" aria-labelledby="reset-title"><h2 id="reset-title">Begin a fresh prototype?</h2><p>This clears the flights and cells in this small hive.</p><p>Your original B-HIVE is separate.</p><div class="dialog-actions"><button id="cancel-reset" class="secondary">Keep my hive</button><button id="confirm-reset" class="primary">Reset prototype</button></div></dialog>
+  <noscript>This local prototype needs JavaScript to send and record flights.</noscript>
+</body>
+</html>

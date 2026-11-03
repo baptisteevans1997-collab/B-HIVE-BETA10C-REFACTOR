@@ -1,0 +1,124 @@
+async page => {
+  const browser=page.context().browser(), origin='http://127.0.0.1:8198';
+  const out='/Users/bap/.codex/visualizations/2026/10/30/01a18d1b-9132-7852-9bfe-a736af52265f/bhive-flights-prototype-0/verification/';
+  const key='bhive-proto-flights-0', results=[], errors=[], remote=[];
+  const ctx=await browser.newContext({viewport:{width:1440,height:1050},serviceWorkers:'block'});
+  await ctx.route('**/*',route=>{const url=route.request().url();if(!url.startsWith(origin+'/')){remote.push(url);return route.abort();}return route.continue();});
+  const attach=p=>{p.on('pageerror',e=>errors.push(String(e)));p.on('console',m=>{if(m.type()==='error')errors.push(m.text());});};
+  const p=await ctx.newPage();attach(p);await p.goto(origin);
+  const check=(condition,label)=>{if(!condition)throw new Error('FAIL: '+label);results.push(label);};
+  const state=()=>p.evaluate(key=>JSON.parse(localStorage.getItem(key)),key);
+  const count=()=>p.evaluate(key=>JSON.parse(localStorage.getItem(key)).records.length,key);
+  const waitSaved=n=>p.waitForFunction(({key,n})=>JSON.parse(localStorage.getItem(key)).records.length===n,{key,n});
+  const choose=async(kind,intention='')=>{
+    if(await p.locator('[data-action=return]').count())await p.locator('[data-action=return]').click();
+    await p.locator('[data-action=choose]').click();await p.locator(`[data-kind=${kind}]`).click();
+    await p.locator('#intention').fill(intention);
+    await p.locator('#send-form button[type=submit]').click();
+    await p.waitForFunction(key=>JSON.parse(localStorage.getItem(key))?.active?.status==='out',key);
+  };
+  const arrive=async()=>{await p.locator('[data-action=arrive]').click();await p.locator('#homecoming-form').waitFor();};
+  const complete=async(outcome,n,note='')=>{
+    await p.locator(`input[value=${outcome}]`).check();await p.locator('#homecoming-note').fill(note);
+    await p.locator('#homecoming-form button[type=submit]').click();await waitSaved(n);
+  };
+  await p.screenshot({path:out+'desktop-first.png',fullPage:true});
+  await p.locator('#forager').click();
+  await p.screenshot({path:out+'desktop-choices.png',fullPage:true});
+  await p.locator('[data-kind=rest]').click();
+  const intention='Leave the phone outside the bedroom. 🌙\n<small & kind>',note='I managed a quiet half hour.\nThat was enough for today.';
+  await p.locator('#intention').fill(intention);
+  await p.locator('#send-form button[type=submit]').click();
+  await p.waitForFunction(key=>JSON.parse(localStorage.getItem(key))?.active?.status==='out',key);
+  check((await state()).active.status==='out','Send stores one active flight');
+  check(await p.evaluate(()=>document.getAnimations().some(a=>a.playState==='running')),'Send-off animation runs');
+  await p.reload();await p.locator('#homecoming-form').waitFor();
+  check((await state()).active.intention===intention,'Reload preserves intention and brings the Forager home');
+  await p.waitForTimeout(1050);
+  await p.screenshot({path:out+'desktop-homecoming.png',fullPage:true});
+  await complete('partly',1,note);
+  check(await p.evaluate(()=>document.getAnimations().some(a=>a.playState==='running')),'Homecoming plays cargo placement and sealing');
+  await p.reload();
+  await p.locator('[data-record]').click();
+  check((await state()).records[0].note===note && (await state()).records[0].intention===intention,'Reload during sealing preserves one complete record and exact notes');
+  check(await p.locator('.record-section').innerText().then(t=>t.includes('<small & kind>')),'Notes render as text, including markup-like characters');
+  const firstId=(await state()).records[0].id;
+  const duplicate=await p.evaluate(async({key,id})=>{
+    const {createStore}=await import('/model.mjs');const store=createStore(localStorage);
+    await Promise.all(Array.from({length:20},()=>store.complete(id,'done','attempted overwrite')));
+    return JSON.parse(localStorage.getItem(key));
+  },{key,id:firstId});
+  check(duplicate.records.length===1&&duplicate.records[0].outcome==='partly'&&duplicate.records[0].note===note,'20 repeated completions keep exactly one original cell');
+  await p.locator('#plain').check();await p.waitForFunction(key=>JSON.parse(localStorage.getItem(key)).plain,key);
+  check(await p.evaluate(()=>document.getAnimations().filter(a=>a.playState==='running').length===0),'Plain mode settles all motion');
+  await p.reload();check(await p.locator('#plain').isChecked(),'Plain mode persists after reload');
+  await choose('gather','A short walk');await arrive();
+  // Keep the old form reference and dispatch two submits synchronously.
+  await p.locator('input[value=not_this_time]').check();
+  await p.locator('#homecoming-note').fill('Rain. Stayed in.');
+  await p.locator('#homecoming-form').evaluate(form=>{form.requestSubmit();form.requestSubmit();});
+  await waitSaved(2);
+  check(await count()===2,'Two immediate submits create one additional cell');
+  check(await p.evaluate(()=>document.getAnimations().filter(a=>a.playState==='running').length===0),'Plain homecoming has no animation');
+  await p.setViewportSize({width:390,height:844});
+  await p.screenshot({path:out+'phone-finished-cell.png',fullPage:true});
+  check(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'390px phone layout has no horizontal overflow');
+  const combos=[['look','plans_changed'],['rest','done'],['gather','partly'],['look','not_this_time'],['rest','plans_changed'],['gather','done'],['look','done'],['rest','not_this_time'],['gather','plans_changed'],['look','partly']];
+  for(let i=0;i<combos.length;i++) {await choose(combos[i][0]);await arrive();await complete(combos[i][1],i+3);}
+  check(await count()===12,'All 12 kind/outcome combinations complete through the UI');
+  check(await p.locator('[data-record]').count()===5,'The second comb page contains cells eight through twelve');
+  await p.locator('[data-page="-1"]').click();check(await p.locator('[data-record]').count()===7,'The first seven records remain accessible');
+  await p.locator(`[data-record="${firstId}"]`).click();
+  check(await p.locator('.record-section').innerText().then(t=>t.includes(note)),'First record can still be opened after twelve flights');
+  await p.setViewportSize({width:1440,height:1050});
+  await p.screenshot({path:out+'desktop-comb.png',fullPage:true});
+  await p.setViewportSize({width:320,height:568});
+  check(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'320px phone layout has no horizontal overflow');
+  await p.screenshot({path:out+'phone-small.png',fullPage:true});
+  // Simultaneous requests in two tabs use the same Web Lock and storage namespace.
+  await choose('rest','Concurrent test');await arrive();
+  const activeId=(await state()).active.id;
+  const other=await ctx.newPage();attach(other);await other.goto(origin);
+  const submit=(target)=>target.evaluate(async(id)=>{const {createStore}=await import('/model.mjs');return (await createStore(localStorage).complete(id,'plans_changed','Two tabs')).result.id;},activeId);
+  await Promise.all([submit(p),submit(other)]);
+  check(await count()===13,'Concurrent completions in two browser tabs create one cell');
+  await other.close();
+  await p.reload();
+  // Reset must preserve every unrelated storage entry.
+  await p.evaluate(()=>localStorage.setItem('unrelated-save','keep me'));
+  await p.locator('#reset').click();await p.locator('#cancel-reset').click();check(await count()===13,'Cancelling Reset preserves all records');
+  await p.locator('#reset').click();await p.locator('#confirm-reset').click();
+  await p.locator('#reset-dialog').waitFor({state:'hidden'});
+  check(await p.evaluate(key=>localStorage.getItem(key)===null&&localStorage.getItem('unrelated-save')==='keep me',key),'Reset removes only its own save key');
+  check(await p.locator('[data-record]').count()===0,'Reset shows an empty comb');
+  await p.setViewportSize({width:390,height:844});
+  await p.emulateMedia({reducedMotion:'reduce'});
+  await choose('rest','Reduced motion test');
+  check(await p.evaluate(()=>document.getAnimations().filter(a=>a.playState==='running').length===0),'Reduced-motion preference skips send-off animation');
+  await arrive();await complete('done',1);
+  check(await p.evaluate(()=>document.getAnimations().filter(a=>a.playState==='running').length===0),'Reduced-motion preference skips homecoming animation');
+  // Simulate a full storage device only after the draft has been entered.
+  await choose('look','Preserve this draft');await arrive();
+  await p.locator('input[value=partly]').check();await p.locator('#homecoming-note').fill('Do not lose this note.');
+  await p.evaluate(()=>{window.testOriginalSetItem=Storage.prototype.setItem;Storage.prototype.setItem=function(){throw new DOMException('Full','QuotaExceededError');};});
+  await p.locator('#homecoming-form button[type=submit]').click();await p.locator('#error').waitFor();
+  check(await count()===1 && await p.locator('#homecoming-note').inputValue()==='Do not lose this note.','Failed storage write awards no cell and preserves draft note');
+  await p.evaluate(()=>{Storage.prototype.setItem=window.testOriginalSetItem;delete window.testOriginalSetItem;});
+  await p.locator('#homecoming-form button[type=submit]').click();await waitSaved(2);
+  check(await p.locator('#error').isHidden(),'Retry after storage recovery saves the cell');
+  await p.evaluate(key=>localStorage.setItem(key,'broken JSON'),key);await p.reload();
+  check(await p.locator('#error').isVisible()&&await p.evaluate(key=>localStorage.getItem(key)==='broken JSON',key),'Corrupt save is reported without overwriting it');
+  await p.locator('#reset').click();await p.locator('#confirm-reset').click();
+  await p.locator('#reset-dialog').waitFor({state:'hidden'});
+  check(await p.locator('#error').isHidden(),'Reset recovers a corrupt prototype save');
+  // Closing and reopening a page in the same browser context preserves its own save.
+  await choose('rest','Close and reopen');await arrive();await complete('done',1,'Kept across a closed page.');
+  await p.close();
+  const reopened=await ctx.newPage();attach(reopened);await reopened.goto(origin);await reopened.locator('[data-record]').waitFor();
+  check(await reopened.evaluate(key=>JSON.parse(localStorage.getItem(key)).records[0].note==='Kept across a closed page.',key),'Closing and reopening the tab retains the record');
+  check((await ctx.serviceWorkers()).length===0,'No service worker registered');
+  check(remote.length===0,'No outside network requests attempted');
+  check(errors.length===0,'No browser console or runtime errors');
+  await ctx.close();
+  return {passed:results.length,results,errors,remote};
+}
